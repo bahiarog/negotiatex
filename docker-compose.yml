@@ -1,0 +1,75 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: negotiatex-db
+    environment:
+      POSTGRES_DB: negotiatex
+      POSTGRES_USER: negotiatex
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U negotiatex"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: negotiatex-redis
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    networks:
+      - internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  backend:
+    build: .
+    container_name: negotiatex-backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://negotiatex:${DB_PASSWORD}@negotiatex-db:5432/negotiatex
+      UPLOAD_DIR: /app/uploads/offers
+      REDIS_URL: redis://negotiatex-redis:6379/0
+    volumes:
+      - uploads:/app/uploads
+    networks:
+      - internal
+      - iffiu-default
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: negotiatex-pg-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://negotiatex:${DB_PASSWORD}@negotiatex-db:5432/negotiatex?sslmode=disable"
+    networks:
+      - internal
+      - iffiu-default
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  uploads:
+
+networks:
+  internal:
+    name: negotiatex-internal
+  iffiu-default:
+    external: true
+    name: iffiu-default

@@ -1,0 +1,46 @@
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from database import engine, Base
+from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public
+
+limiter = Limiter(key_func=get_remote_address)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    from services.autonomous_agent import start_scheduler
+    scheduler = start_scheduler()
+    yield
+    scheduler.shutdown(wait=False)
+
+app = FastAPI(title="NegotiateX.ai API", version="3.0.0", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+from prometheus_fastapi_instrumentator import Instrumentator
+Instrumentator().instrument(app).expose(app, endpoint="/api/metrics", include_in_schema=False)
+app.include_router(benchmark.router, prefix="/api/benchmark", tags=["Benchmark"])
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+app.include_router(audit.router, prefix="/api/audit", tags=["Audit"])
+app.include_router(purchase_orders.router, prefix="/api/po", tags=["Purchase Orders"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(export.router, prefix="/api/export", tags=["Export"])
+app.include_router(ws.router, prefix="/api", tags=["WebSocket"])
+app.include_router(apikeys.router, prefix="/api", tags=["API Keys"])
+
+app.include_router(webhooks.router, prefix="/api/webhooks", tags=["Webhooks"])
+app.include_router(public.router, prefix="/api/public", tags=["Supplier Portal"])
+
+@app.get("/health")
+async def health_root():
+    return {"status": "ok", "service": "NegotiateX.ai", "version": "3.0.0"}
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok", "service": "NegotiateX.ai", "version": "3.0.0"}
