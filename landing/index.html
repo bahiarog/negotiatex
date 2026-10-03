@@ -174,12 +174,6 @@
   .pricing-features li { font-size: 14px; color: var(--text-muted); display: flex; align-items: flex-start; gap: 12px; }
   .pricing-features li::before { content: '✓'; color: var(--gold); font-weight: 500; flex-shrink: 0; }
 
-  .trust-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; margin-top: 60px; }
-  .trust-card { padding: 36px 32px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
-  .trust-quote { font-family: 'Playfair Display', serif; font-size: 16px; font-style: italic; line-height: 1.6; margin-bottom: 24px; }
-  .trust-source { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.5px; font-family: 'DM Mono', monospace; }
-  .trust-savings { font-family: 'DM Mono', monospace; font-size: 28px; font-weight: 500; color: var(--gold); margin-bottom: 8px; display: block; }
-
   .impressum-block { display: none; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 48px; max-width: 720px; margin: 0 auto; }
   .impressum-block.visible { display: block; }
   .impressum-block h2 { font-family: 'Playfair Display', serif; font-size: 28px; font-weight: 600; margin-bottom: 28px; }
@@ -215,7 +209,7 @@
     .nav-links { display: none; }
     .steps-grid, .benchmark-grid { grid-template-columns: 1fr; }
     .industries-grid { grid-template-columns: 1fr 1fr; }
-    .pricing-grid, .trust-grid { grid-template-columns: 1fr; }
+    .pricing-grid { grid-template-columns: 1fr; }
     .hero-stat-bar { gap: 32px; flex-wrap: wrap; }
     .cookie-banner { padding: 16px 24px; }
   }
@@ -241,6 +235,7 @@
   <div class="logo">Negotiate<span>X</span>.ai</div>
   <ul class="nav-links">
     <li><a href="#wie-es-funktioniert" id="nl1">So funktioniert's</a></li>
+    <li><a href="#architektur" id="nl5">Der KI-Agent</a></li>
     <li><a href="#branchen" id="nl2">Branchen</a></li>
     <li><a href="#preise" id="nl3">Preise</a></li>
     <li><a href="#" onclick="showImpressum();return false;" id="nl4">Impressum</a></li>
@@ -260,7 +255,7 @@
     <div class="hero-copy">
       <span class="hero-eyebrow" id="heroEyebrow">Marketing-Procurement · 15 Jahre Expertise</span>
       <h1 id="heroH1">Wir verhandeln Ihre<br>Marketing- &amp; Agenturkosten.<br><em>Sie zahlen nur bei Erfolg.</em></h1>
-      <p class="hero-sub" id="heroSub">15 Jahre Erfahrung im Marketing-Procurement, unterstützt durch KI. Sie laden Ihr Angebot hoch &#8211; unser Agent prüft, vergleicht und verhandelt. Sie bestätigen am Ende nur noch die Bestellung.</p>
+      <p class="hero-sub" id="heroSub">15 Jahre Erfahrung im Marketing-Procurement, unterstützt durch KI. Nach einem kurzen Kennenlerngespräch übernimmt unser Agent jeden weiteren Vorgang eigenständig &#8211; Sie bestätigen am Ende nur noch die Bestellung.</p>
       <div class="hero-actions">
         <a href="mailto:info@negotiatex.ai?subject=Demo-Anfrage%20NegotiateX" class="btn-primary" id="heroCta1">Demo anfordern</a>
         <a href="mailto:info@negotiatex.ai?subject=Erstgespr%C3%A4ch%20NegotiateX" class="btn-ghost" id="heroCta2">Kostenloses Erstgespräch</a>
@@ -275,7 +270,7 @@
     </div>
 
     <div class="demo-wrap fade-in visible">
-      <div class="demo-label" id="demoLabel">Live-Demo &#8211; so arbeitet der Agent</div>
+      <div class="demo-label" id="demoLabel">Interaktive Demo (Simulation) &#8211; so arbeitet der Agent</div>
       <div class="stepper" id="stepper">
         <div class="stepper-item" data-step="0"><div class="stepper-dot"></div><div class="stepper-text" id="st0">Intake</div></div>
         <div class="stepper-line" data-line="0"></div>
@@ -305,39 +300,39 @@
 <section class="steps-section" id="wie-es-funktioniert">
   <div class="container">
     <span class="section-eyebrow">Der Ablauf</span>
-    <h2 class="section-title">Vertrauen vor Upload</h2>
-    <p class="section-sub">Sensible Kalkulationen und Agenturangebote teilen Sie erst, wenn Sie wissen, mit wem Sie es zu tun haben. Deshalb steht das Gespr&#228;ch vor dem Upload.</p>
+    <h2 class="section-title">Einmal einrichten.<br>Danach läuft der Agent.</h2>
+    <p class="section-sub">Sensible Kalkulationen und Agenturangebote teilen Sie erst, wenn Sie wissen, mit wem Sie es zu tun haben. Deshalb steht ein einmaliges Kennenlerngespr&#228;ch am Anfang &#8211; jeder weitere Vorgang danach l&#228;uft direkt &#252;ber den KI-Agenten, ohne erneuten Abstimmungsaufwand.</p>
     <div class="steps-grid" style="grid-template-columns:repeat(3,1fr);margin-top:48px">
       <div class="step">
         <span class="step-num">01</span>
         <div class="step-icon">&#128197;</div>
         <h3>Termin buchen</h3>
         <p>&#220;ber den Button &#8222;Erstgespr&#228;ch vereinbaren&#8220; buchen Sie einen kostenlosen 30-min-Termin &#8211; unverbindlich und vertraulich.</p>
-        <span class="step-badge">KOSTENLOS</span>
+        <span class="step-badge">EINMALIG &#183; KOSTENLOS</span>
         <span class="step-connector">&#8594;</span>
       </div>
       <div class="step">
         <span class="step-num">02</span>
         <div class="step-icon">&#129309;</div>
         <h3>Kennenlernen & NDA</h3>
-        <p>Wir kl&#228;ren Ihren Bedarf, erkl&#228;ren unsere Methodik und unterzeichnen eine Geheimhaltungsvereinbarung &#8211; bevor irgendein Dokument den Besitzer wechselt.</p>
-        <span class="step-badge">VERTRAULICH</span>
+        <p>Wir kl&#228;ren Ihren Bedarf, erkl&#228;ren unsere Methodik und unterzeichnen eine Geheimhaltungsvereinbarung &#8211; einmalig, bevor irgendein Dokument den Besitzer wechselt.</p>
+        <span class="step-badge">EINMALIG &#183; VERTRAULICH</span>
         <span class="step-connector">&#8594;</span>
       </div>
       <div class="step">
         <span class="step-num">03</span>
         <div class="step-icon">&#128202;</div>
-        <h3>Analyse & Verhandlung</h3>
-        <p>Jetzt erst laden Sie Ihre Angebote hoch. Wir pr&#252;fen Preise, Benchmarks und Kostenstrukturen &#8211; und verhandeln in Ihrem Auftrag nach.</p>
-        <span class="step-badge">KI + EXPERTISE</span>
+        <h3>Agent übernimmt</h3>
+        <p>Ab jetzt läuft jeder weitere Vorgang direkt über den KI-Agenten: Angebote hochladen oder weiterleiten genügt &#8211; Prüfung, Benchmark und Verhandlung laufen automatisch, siehe Produktarchitektur unten.</p>
+        <span class="step-badge">AB SOFORT AUTOMATISCH</span>
         <span class="step-connector">&#8594;</span>
       </div>
       <div class="step" style="grid-column:span 1">
         <span class="step-num">04</span>
         <div class="step-icon">&#127942;</div>
         <h3>Nur bei Erfolg zahlen</h3>
-        <p>Unsere Verg&#252;tung ist ein Anteil der tats&#228;chlich realisierten Einsparung. Kein Erfolg &#8211; keine Kosten f&#252;r Sie.</p>
-        <span class="step-badge">15&#8211;25 % DER EINSPARUNG</span>
+        <p>Unsere Verg&#252;tung ist ein Anteil der tats&#228;chlich realisierten Einsparung &#8211; gestaffelt nach Einsparvolumen: 25 % bei kleineren, 15 % bei gr&#246;&#223;eren Summen. Kein Erfolg &#8211; keine Kosten f&#252;r Sie.</p>
+        <span class="step-badge">15&#8211;25 % DER EINSPARUNG, GESTAFFELT</span>
       </div>
       <div class="step" style="grid-column:span 2;background:rgba(79,201,166,0.04);border:1px solid rgba(79,201,166,0.15);border-radius:10px;padding:32px">
         <span class="step-num">RECHENBEISPIEL</span>
@@ -347,16 +342,16 @@
             <div style="font-family:'DM Mono',monospace;font-size:22px;color:var(--text-muted);text-decoration:line-through">100.000 &#8364;</div>
           </div>
           <div>
-            <div style="font-size:11px;color:var(--text-dim);font-family:'DM Mono',monospace;letter-spacing:1px;margin-bottom:4px">VERHANDELTER PREIS</div>
-            <div style="font-family:'DM Mono',monospace;font-size:22px;color:var(--gold)">85.000 &#8364;</div>
+            <div style="font-size:11px;color:var(--text-dim);font-family:'DM Mono',monospace;letter-spacing:1px;margin-bottom:4px">VERHANDELTER PREIS (-20 %)</div>
+            <div style="font-family:'DM Mono',monospace;font-size:22px;color:var(--gold)">80.000 &#8364;</div>
           </div>
           <div>
-            <div style="font-size:11px;color:var(--text-dim);font-family:'DM Mono',monospace;letter-spacing:1px;margin-bottom:4px">NEGOTIATEX-PROVISION (20 %)</div>
-            <div style="font-family:'DM Mono',monospace;font-size:22px;color:var(--text-muted)">3.000 &#8364;</div>
+            <div style="font-size:11px;color:var(--text-dim);font-family:'DM Mono',monospace;letter-spacing:1px;margin-bottom:4px">NEGOTIATEX-PROVISION (20 % DER EINSPARUNG)</div>
+            <div style="font-family:'DM Mono',monospace;font-size:22px;color:var(--text-muted)">4.000 &#8364;</div>
           </div>
           <div>
             <div style="font-size:11px;color:#1D9E75;font-family:'DM Mono',monospace;letter-spacing:1px;margin-bottom:4px">IHRE NETTO-ERSPARNIS</div>
-            <div style="font-family:'DM Mono',monospace;font-size:28px;font-weight:500;color:#1D9E75">12.000 &#8364;</div>
+            <div style="font-family:'DM Mono',monospace;font-size:28px;font-weight:500;color:#1D9E75">16.000 &#8364;</div>
           </div>
         </div>
       </div>
@@ -457,10 +452,10 @@
       <h2 class="section-title">Vereinbaren Sie Ihr<br>kostenloses Erstgespr&#228;ch</h2>
       <p>Im 30-min&#252;tigen Gespr&#228;ch kl&#228;ren wir Ihr Einsparpotenzial &#8211; unverbindlich, vertraulich und ohne Upload. Sie zahlen nur, wenn wir nachweisbare Einsparungen erzielen.</p>
       <div class="cta-actions">
-        <a href="mailto:info@negotiatex.ai?subject=Erstgespr%C3%A4ch%20NegotiateX&body=Hallo%20NegotiateX-Team%2C%0A%0Aich%20m%C3%B6chte%20ein%20kostenloses%20Erstgespr%C3%A4ch%20vereinbaren.%0A%0AMein%20Name%3A%20%0AMein%20Unternehmen%3A%20%0AMein%20Budget%3A%20%0A%0ABitte%20schlagen%20Sie%20mir%20einen%20Termin%20vor." class="btn-cta-main">Erstgespr&#228;ch vereinbaren</a>
-        <a href="#wie-es-funktioniert" class="btn-cta-ghost">So funktioniert es</a>
+        <a href="mailto:info@negotiatex.ai?subject=Demo-Anfrage%20NegotiateX" class="btn-cta-main">Demo anfordern</a>
+        <a href="mailto:info@negotiatex.ai?subject=Erstgespr%C3%A4ch%20NegotiateX&body=Hallo%20NegotiateX-Team%2C%0A%0Aich%20m%C3%B6chte%20ein%20kostenloses%20Erstgespr%C3%A4ch%20vereinbaren.%0A%0AMein%20Name%3A%20%0AMein%20Unternehmen%3A%20%0AMein%20Budget%3A%20%0A%0ABitte%20schlagen%20Sie%20mir%20einen%20Termin%20vor." class="btn-cta-ghost">Erstgespr&#228;ch vereinbaren</a>
       </div>
-      <p style="font-size:12px;color:var(--text-dim);margin-top:20px;font-family:'DM Mono',monospace">info@negotiatex.ai &nbsp;&#183;&nbsp; +49 163 7148 289</p>
+      <p style="font-size:12px;color:var(--text-dim);margin-top:20px;font-family:'DM Mono',monospace">info@negotiatex.ai</p>
     </div>
   </div>
 </section>
@@ -487,7 +482,7 @@
         <span class="pricing-badge">ERFOLGSMODELL</span>
         <span class="pricing-model">Erfolgsprovision</span>
         <div class="pricing-amount">15&#8211;25 %<span> der Einsparung</span></div>
-        <p class="pricing-desc">Wir vergüten uns ausschließlich aus der tatsächlich realisierten Einsparung. Kein Erfolg &#8211; keine Rechnung.</p>
+        <p class="pricing-desc">Wir vergüten uns ausschließlich aus der tatsächlich realisierten Einsparung &#8211; gestaffelt nach Volumen: 25 % bis 10.000 € Einsparung, 20 % bis 50.000 €, 15 % darüber. Kein Erfolg &#8211; keine Rechnung.</p>
         <ul class="pricing-features">
           <li>NDA vor jedem Dokumenten-Upload</li>
           <li>KI-gestützte Preisanalyse & Benchmarking</li>
@@ -518,6 +513,11 @@
         <div style="font-family:'DM Mono',monospace;font-size:32px;color:var(--gold);font-weight:500">0 &#8364;</div>
         <div style="font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-top:4px">Risiko f&#252;r Sie</div>
       </div>
+    </div>
+    <div style="display:flex;gap:28px;flex-wrap:wrap;margin-top:40px;padding-top:28px;border-top:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-muted)"><span>&#128274;</span> Server in Deutschland/EU</div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-muted)"><span>&#128196;</span> NDA vor jedem Dokumenten-Upload</div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-muted)"><span>&#9989;</span> DSGVO-konform</div>
     </div>
   </div>
 </section>
@@ -564,13 +564,13 @@ const T = {
     title:'NegotiateX.ai — Hören Sie auf, Ihre Lieferanten zu überbezahlen',
     heroEyebrow:'KI-gestützte Beschaffungsintelligenz',
     heroH1:'Hören Sie auf, Ihre<br>Lieferanten zu <em>überbezahlen.</em>',
-    heroSub:'Wir analysieren Ihre Lieferantenverträge, decken verborgene Einsparpotenziale auf — und unsere KI-Agenten verhandeln gemeinsam mit einem menschlichen Experten das beste Ergebnis für Sie.',
+    heroSub:'15 Jahre Erfahrung im Marketing-Procurement, unterstützt durch KI. Nach einem kurzen Kennenlerngespräch übernimmt unser Agent jeden weiteren Vorgang eigenständig — Sie bestätigen am Ende nur noch die Bestellung.',
     heroCta1:'Demo anfordern', heroCta2:'Kostenloses Erstgespräch',
-    demoLabel:'Live-Demo — so arbeitet der Agent',
+    demoLabel:'Interaktive Demo (Simulation) — so arbeitet der Agent',
     st0:'Intake', st1:'Richtlinien-Check', st2:'Sourcing', st3:'Verhandlung', st4:'Bestellung',
     stat1:'Ø Kostensenkung', stat2:'Bearbeitungszeit', stat3:'Vorabkosten',
     navLogin:'Anmelden', navCta:'Kostenlos starten',
-    nl1:"So funktioniert's", nl2:'Branchen', nl3:'Preise', nl4:'Impressum',
+    nl1:"So funktioniert's", nl5:'Der KI-Agent', nl2:'Branchen', nl3:'Preise', nl4:'Impressum',
     stepsEyebrow:'Prozess', stepsTitle:'Von der Analyse zum<br>besseren Angebot.',
     stepsSub:'Kein Beratungssprech. Kein 12-Wochen-Projekt. Klare Analyse, echte Verhandlung, messbares Ergebnis.',
     s1h:'Hochladen', s1p:'Lieferantenverträge, Rechnungen oder Angebote. PDF oder Excel — wir verarbeiten beides.',
@@ -614,13 +614,6 @@ const T = {
     pm2b:'Beliebteste Option', pm2:'Festpreis', pm2s:' – 10.000 €',
     pm2d:'Fester Preis je nach Umfang. Ideal für volle Ergebnishoheit ohne Umsatzbeteiligung.',
     pm2f:['Alles aus dem Erfolgsmodell','Unbegrenzte Dokumenten-Uploads','Mehrlieferanten-Analyse','Umsetzungsbegleitung inklusive','Einspargarantie oder Rückerstattung'],
-    trustEyebrow:'Ergebnisse', trustTitle:'Echte Einsparungen.<br>Echte Unternehmen.',
-    tq1:'„Wir arbeiteten seit 6 Jahren mit demselben IT-Dienstleister. NegotiateX stellte fest, dass die Stundensätze 35 % über Marktniveau lagen — die Nachverhandlung dauerte drei Gespräche."',
-    ts1:'Einkaufsleiter · Technologieunternehmen',
-    tq2:'„Die KI-Agenten haben die Verhandlung geführt, ein menschlicher Experte hat jeden Schritt begleitet. Bestes Lead-Einkauf-Angebot in einem einzigen Meeting."',
-    ts2:'CMO · E-Commerce Scale-up',
-    tq3:'„Über acht Lieferantenkategorien — von Marketing bis Logistik — identifizierte NegotiateX über 390.000 € jährliche Einsparungen."',
-    ts3:'Operations Director · Handelsgruppe',
     fl1:"So funktioniert's", fl2:'Branchen', fl3:'Preise', fl4:'Anmelden', fl5:'Kontakt', fl6:'Impressum',
     cookieText:'Wir verwenden Cookies, um Ihnen die bestmögliche Nutzererfahrung zu bieten. Mit Klick auf „Akzeptieren" stimmen Sie zu.',
     cookieBtnDecline:'Nur notwendige', cookieBtnAccept:'Akzeptieren',
@@ -629,13 +622,13 @@ const T = {
     title:'NegotiateX.ai — Stop Overpaying Your Suppliers',
     heroEyebrow:'AI-Powered Procurement Intelligence',
     heroH1:'Stop <em>Overpaying</em><br>Your Suppliers.',
-    heroSub:'We analyze your supplier contracts, uncover hidden savings — and our AI agents negotiate the best result alongside a human expert.',
+    heroSub:'15 years of marketing procurement expertise, powered by AI. After a short intro call, our agent runs every further case on its own — you only confirm the purchase order at the end.',
     heroCta1:'Request a demo', heroCta2:'Free intro call',
-    demoLabel:'Live demo — how the agent works',
+    demoLabel:'Interactive demo (simulation) — how the agent works',
     st0:'Intake', st1:'Policy check', st2:'Sourcing', st3:'Negotiation', st4:'Purchase order',
     stat1:'Avg. cost reduction', stat2:'Turnaround time', stat3:'Upfront cost',
     navLogin:'Sign in', navCta:'Get started free',
-    nl1:'How it works', nl2:'Industries', nl3:'Pricing', nl4:'Imprint',
+    nl1:'How it works', nl5:'The AI Agent', nl2:'Industries', nl3:'Pricing', nl4:'Imprint',
     stepsEyebrow:'Process', stepsTitle:'From analysis to<br>a better deal.',
     stepsSub:'No consulting jargon. No 12-week projects. Clear analysis, real negotiation, measurable results.',
     s1h:'Upload', s1p:'Supplier contracts, invoices or quotes. PDF or Excel — we handle both.',
@@ -679,13 +672,6 @@ const T = {
     pm2b:'Most Popular', pm2:'Fixed Price', pm2s:' – €10,000',
     pm2d:'Fixed price based on scope. Full ownership of results without revenue sharing.',
     pm2f:['Everything in success model','Unlimited document uploads','Multi-supplier analysis','Implementation support included','Savings guarantee or refund'],
-    trustEyebrow:'Results', trustTitle:'Real savings.<br>Real companies.',
-    tq1:'"We\'d worked with the same IT vendor for 6 years. NegotiateX found their rates were 35% above market — renegotiation took three calls."',
-    ts1:'Head of Procurement · Tech Company',
-    tq2:'"The AI agents led the negotiation, a human expert guided every step. Best lead procurement deal closed in a single meeting."',
-    ts2:'CMO · E-commerce Scale-up',
-    tq3:'"Across eight supplier categories — from marketing to logistics — NegotiateX identified over €390,000 in annual savings."',
-    ts3:'Operations Director · Retail Group',
     fl1:'How it works', fl2:'Industries', fl3:'Pricing', fl4:'Sign in', fl5:'Contact', fl6:'Imprint',
     cookieText:'We use cookies to provide the best experience. By clicking "Accept" you agree.',
     cookieBtnDecline:'Essential only', cookieBtnAccept:'Accept',
@@ -706,7 +692,7 @@ function setLang(l) {
   document.title = t.title;
   document.documentElement.lang = l;
   const simple = ['heroEyebrow','heroSub','heroCta1','heroCta2','stat1','stat2','stat3',
-    'navLogin','navCta','nl1','nl2','nl3','nl4',
+    'navLogin','navCta','nl1','nl5','nl2','nl3','nl4',
     'stepsEyebrow','stepsSub','s1h','s1p','s2h','s2p','s3h','s3p','s4h','s4p','s4badge',
     'benchEyebrow','benchSub','ba1','ba2','bb1','bb2','bc1','bc2','bvTitle',
     'archEyebrow','archSub','a1h','a1p','a2h','a2p','a3h','a3p','a4h','a4p','a4badge','a5h','a5p',
@@ -714,11 +700,10 @@ function setLang(l) {
     'indEyebrow','indSub','i1h','i1p','i2h','i2p','i3h','i3p','i4h','i4p','i5h','i5p','i6h','i6p',
     'ctaEyebrow','ctaSub','ctaBtn1','ctaBtn2',
     'pricingEyebrow','pricingSub','pm1','pm1s','pm1d','pm2b','pm2','pm2s','pm2d',
-    'trustEyebrow','tq1','ts1','tq2','ts2','tq3','ts3',
     'fl1','fl2','fl3','fl4','fl5','fl6','cookieText','cookieBtnDecline','cookieBtnAccept',
     'demoLabel','st0','st1','st2','st3','st4'];
   simple.forEach(id => { const el = document.getElementById(id); if (el && t[id]!==undefined) el.innerHTML = t[id]; });
-  ['heroH1','stepsTitle','benchTitle','archTitle','indTitle','ctaTitle','pricingTitle','trustTitle'].forEach(id => { const el = document.getElementById(id); if (el && t[id]) el.innerHTML = t[id]; });
+  ['heroH1','stepsTitle','benchTitle','archTitle','indTitle','ctaTitle','pricingTitle'].forEach(id => { const el = document.getElementById(id); if (el && t[id]) el.innerHTML = t[id]; });
   ['pm1f','pm2f'].forEach((id,i) => { const el = document.getElementById(id); const key = i===0?'pm1f':'pm2f'; if (el && t[key]) el.innerHTML = t[key].map(f=>`<li>${f}</li>`).join(''); });
   if (demoTimerStarted) startDemoLoop();
 }
