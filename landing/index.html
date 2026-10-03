@@ -29,44 +29,80 @@
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --gold: #4FC9A6; --gold-light: #8FE3C8; --gold-dim: rgba(79,201,166,0.15);
-    --gold-border: rgba(79,201,166,0.3); --bg: #070f0c; --bg-card: #0e1512;
-    --bg-card2: #121c17; --text: #f0ede6; --text-muted: #7a786f;
-    --text-dim: #4a4843; --border: rgba(255,255,255,0.07); --radius: 12px;
+    --gold: #1E8A6E; --gold-light: #27A382; --gold-dim: rgba(30,138,110,0.08);
+    --gold-border: rgba(30,138,110,0.28); --on-accent: #ffffff;
+    --bg: #f7f6f1; --bg-card: #ffffff;
+    --bg-card2: #f0f3ef; --text: #16201c; --text-muted: #5b6a63;
+    --text-dim: #8b958f; --border: rgba(22,32,28,0.09); --radius: 12px;
   }
   html { scroll-behavior: smooth; }
   body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; font-weight: 300; overflow-x: hidden; }
 
-  nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; padding: 20px 48px; display: flex; align-items: center; justify-content: space-between; background: rgba(7,7,10,0.85); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); gap: 16px; }
+  nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; padding: 20px 48px; display: flex; align-items: center; justify-content: space-between; background: rgba(247,246,241,0.88); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); gap: 16px; }
   .logo { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; letter-spacing: -0.5px; color: var(--text); flex-shrink: 0; }
   .logo span { color: var(--gold); }
   .nav-links { display: flex; gap: 28px; list-style: none; }
   .nav-links a { font-size: 13px; color: var(--text-muted); text-decoration: none; letter-spacing: 0.5px; text-transform: uppercase; transition: color 0.2s; }
   .nav-links a:hover { color: var(--text); }
   .nav-right { display: flex; align-items: center; gap: 12px; }
-  .lang-switch { display: flex; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .lang-switch { display: flex; background: rgba(22,32,28,0.05); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
   .lang-btn { font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500; color: var(--text-muted); background: transparent; border: none; padding: 6px 12px; cursor: pointer; letter-spacing: 1px; transition: background 0.2s, color 0.2s; }
-  .lang-btn.active { background: var(--gold); color: var(--bg); }
+  .lang-btn.active { background: var(--gold); color: var(--on-accent); }
   .nav-login { font-size: 13px; font-weight: 400; color: var(--text-muted); text-decoration: none; padding: 10px 18px; border: 1px solid var(--border); border-radius: 6px; transition: border-color 0.2s, color 0.2s; white-space: nowrap; }
   .nav-login:hover { border-color: var(--gold-border); color: var(--text); }
-  .nav-cta { font-size: 13px; font-weight: 500; color: var(--bg); background: var(--gold); padding: 10px 22px; border-radius: 6px; text-decoration: none; transition: background 0.2s; white-space: nowrap; }
+  .nav-cta { font-size: 13px; font-weight: 500; color: var(--on-accent); background: var(--gold); padding: 10px 22px; border-radius: 6px; text-decoration: none; transition: background 0.2s; white-space: nowrap; }
   .nav-cta:hover { background: var(--gold-light); }
 
-  .hero { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 120px 24px 80px; position: relative; overflow: hidden; }
-  .hero::before { content: ''; position: absolute; top: -200px; left: 50%; transform: translateX(-50%); width: 900px; height: 700px; background: radial-gradient(ellipse at center, rgba(79,201,166,0.08) 0%, transparent 70%); pointer-events: none; }
-  .hero-eyebrow { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--gold); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 32px; opacity: 0; animation: fadeUp 0.8s 0.2s ease forwards; }
-  .hero h1 { font-family: 'Playfair Display', serif; font-size: clamp(44px, 7vw, 88px); font-weight: 700; line-height: 1.05; letter-spacing: -2px; max-width: 860px; margin-bottom: 28px; opacity: 0; animation: fadeUp 0.8s 0.35s ease forwards; }
+  .hero { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 140px 24px 80px; position: relative; overflow: hidden; }
+  .hero::before { content: ''; position: absolute; top: -200px; left: 50%; transform: translateX(-50%); width: 1100px; height: 700px; background: radial-gradient(ellipse at center, rgba(30,138,110,0.10) 0%, transparent 70%); pointer-events: none; }
+  .hero-grid { max-width: 1180px; width: 100%; display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 56px; align-items: center; }
+  .hero-copy { text-align: left; }
+  .hero-eyebrow { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--gold); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 28px; display:inline-block; opacity: 0; animation: fadeUp 0.8s 0.2s ease forwards; }
+  .hero h1 { font-family: 'Playfair Display', serif; font-size: clamp(38px, 4.6vw, 62px); font-weight: 700; line-height: 1.08; letter-spacing: -1.5px; margin-bottom: 24px; opacity: 0; animation: fadeUp 0.8s 0.35s ease forwards; }
   .hero h1 em { font-style: italic; color: var(--gold); }
-  .hero-sub { font-size: 17px; color: var(--text-muted); max-width: 580px; margin-bottom: 52px; opacity: 0; animation: fadeUp 0.8s 0.5s ease forwards; }
-  .hero-actions { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: center; opacity: 0; animation: fadeUp 0.8s 0.65s ease forwards; }
-  .btn-primary { font-size: 14px; font-weight: 500; color: var(--bg); background: var(--gold); padding: 16px 36px; border-radius: 8px; text-decoration: none; transition: background 0.2s, transform 0.15s, box-shadow 0.2s; }
-  .btn-primary:hover { background: var(--gold-light); transform: translateY(-2px); box-shadow: 0 12px 40px rgba(79,201,166,0.25); }
+  .hero-sub { font-size: 17px; color: var(--text-muted); max-width: 520px; margin-bottom: 40px; opacity: 0; animation: fadeUp 0.8s 0.5s ease forwards; }
+  .hero-actions { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; opacity: 0; animation: fadeUp 0.8s 0.65s ease forwards; }
+  .btn-primary { font-size: 14px; font-weight: 500; color: var(--on-accent); background: var(--gold); padding: 16px 32px; border-radius: 8px; text-decoration: none; transition: background 0.2s, transform 0.15s, box-shadow 0.2s; }
+  .btn-primary:hover { background: var(--gold-light); transform: translateY(-2px); box-shadow: 0 12px 32px rgba(30,138,110,0.22); }
   .btn-ghost { font-size: 14px; color: var(--text-muted); text-decoration: none; padding: 16px 24px; border: 1px solid var(--border); border-radius: 8px; transition: border-color 0.2s, color 0.2s; }
   .btn-ghost:hover { border-color: var(--gold-border); color: var(--text); }
-  .hero-stat-bar { margin-top: 80px; display: flex; gap: 64px; align-items: center; opacity: 0; animation: fadeUp 0.8s 0.85s ease forwards; }
-  .hero-stat-num { font-family: 'DM Mono', monospace; font-size: 36px; font-weight: 500; color: var(--gold); display: block; line-height: 1; }
+  .hero-stat-bar { margin-top: 56px; display: flex; gap: 48px; align-items: center; opacity: 0; animation: fadeUp 0.8s 0.85s ease forwards; }
+  .hero-stat-num { font-family: 'DM Mono', monospace; font-size: 32px; font-weight: 500; color: var(--gold); display: block; line-height: 1; }
   .hero-stat-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.5px; margin-top: 8px; display: block; }
-  .stat-divider { width: 1px; height: 52px; background: var(--border); }
+  .stat-divider { width: 1px; height: 48px; background: var(--border); }
+
+  /* --- Live demo widget --- */
+  .demo-wrap { display: flex; flex-direction: column; gap: 22px; }
+  .demo-label { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-dim); letter-spacing: 2px; text-transform: uppercase; }
+  .stepper { display: flex; align-items: center; }
+  .stepper-item { display: flex; flex-direction: column; align-items: center; gap: 10px; flex-shrink: 0; }
+  .stepper-dot { width: 13px; height: 13px; border-radius: 50%; background: var(--bg-card2); border: 2px solid var(--border); transition: background .4s ease, border-color .4s ease, box-shadow .4s ease; }
+  .stepper-item.active .stepper-dot { background: var(--gold); border-color: var(--gold); box-shadow: 0 0 0 4px var(--gold-dim); }
+  .stepper-item.done .stepper-dot { background: var(--gold-light); border-color: var(--gold-light); }
+  .stepper-text { font-size: 11px; color: var(--text-dim); white-space: nowrap; transition: color .4s ease; font-weight: 500; }
+  .stepper-item.active .stepper-text { color: var(--text); font-weight: 700; }
+  .stepper-item.done .stepper-text { color: var(--text-muted); }
+  .stepper-line { flex: 1; height: 2px; background: var(--border); margin: 0 6px 24px; position: relative; top: -11px; }
+  .stepper-line.done { background: var(--gold-light); }
+  .demo-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px; padding: 24px; box-shadow: 0 20px 48px rgba(22,32,28,0.06); }
+  .demo-card-head { display: flex; align-items: center; gap: 12px; padding-bottom: 18px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .demo-avatar { width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, var(--gold), var(--gold-light)); color: var(--on-accent); display: flex; align-items: center; justify-content: center; font-family: 'Playfair Display', serif; font-weight: 700; font-size: 16px; flex-shrink: 0; }
+  .demo-agent-meta { flex: 1; }
+  .demo-agent-name { font-size: 14px; font-weight: 600; transition: opacity .25s ease; }
+  .demo-agent-sub { font-size: 12px; color: var(--text-dim); }
+  .demo-status { font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1px; color: var(--gold); background: var(--gold-dim); border: 1px solid var(--gold-border); border-radius: 999px; padding: 5px 11px; white-space: nowrap; transition: opacity .25s ease; }
+  .demo-log { display: flex; flex-direction: column; gap: 10px; min-height: 148px; }
+  .demo-log-line { font-size: 13px; color: var(--text-muted); line-height: 1.6; opacity: 0; transform: translateY(6px); transition: opacity .35s ease, transform .35s ease; display: flex; gap: 8px; }
+  .demo-log-line.show { opacity: 1; transform: translateY(0); }
+  .demo-log-line b { color: var(--text); font-weight: 600; }
+  .demo-log-line .tick { color: var(--gold); flex-shrink: 0; }
+
+  @media (max-width: 980px) {
+    .hero-grid { grid-template-columns: 1fr; }
+    .hero-copy { text-align: center; }
+    .hero-actions, .hero-stat-bar { justify-content: center; }
+    .stepper-text { font-size: 9.5px; }
+  }
 
   section { padding: 100px 24px; }
   .container { max-width: 1080px; margin: 0 auto; }
@@ -95,7 +131,7 @@
   .bench-label { display: flex; justify-content: space-between; align-items: center; }
   .bench-name { font-size: 13px; color: var(--text-muted); }
   .bench-meta { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-dim); }
-  .bench-bar-track { height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
+  .bench-bar-track { height: 6px; background: rgba(22,32,28,0.07); border-radius: 3px; overflow: hidden; }
   .bench-bar-fill { height: 100%; border-radius: 3px; transition: width 1.2s cubic-bezier(0.4,0,0.2,1); width: 0; }
   .bench-bar-fill.over { background: #D85A30; }
   .bench-bar-fill.fair { background: var(--gold); }
@@ -113,14 +149,14 @@
   .industry-card h3 { font-family: 'Playfair Display', serif; font-size: 17px; font-weight: 600; margin-bottom: 8px; }
   .industry-card p { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
   .industry-examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
-  .industry-tag { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; }
+  .industry-tag { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-dim); background: rgba(22,32,28,0.045); border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; }
 
   /* CTA Section statt Formular */
   .cta-section { background: var(--bg-card); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); text-align: center; }
   .cta-box { max-width: 640px; margin: 0 auto; }
   .cta-box p { font-size: 16px; color: var(--text-muted); margin-bottom: 36px; line-height: 1.75; }
   .cta-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
-  .btn-cta-main { font-size: 15px; font-weight: 500; color: var(--bg); background: var(--gold); padding: 18px 44px; border-radius: 8px; text-decoration: none; transition: background 0.2s, transform 0.15s, box-shadow 0.2s; }
+  .btn-cta-main { font-size: 15px; font-weight: 500; color: var(--on-accent); background: var(--gold); padding: 18px 44px; border-radius: 8px; text-decoration: none; transition: background 0.2s, transform 0.15s, box-shadow 0.2s; }
   .btn-cta-main:hover { background: var(--gold-light); transform: translateY(-2px); box-shadow: 0 12px 40px rgba(79,201,166,0.25); }
   .btn-cta-ghost { font-size: 15px; color: var(--text-muted); text-decoration: none; padding: 18px 32px; border: 1px solid var(--border); border-radius: 8px; transition: border-color 0.2s, color 0.2s; }
   .btn-cta-ghost:hover { border-color: var(--gold-border); color: var(--text); }
@@ -128,8 +164,8 @@
   .pricing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 64px; }
   .pricing-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 48px 40px; position: relative; transition: border-color 0.25s, transform 0.25s; }
   .pricing-card:hover { border-color: var(--gold-border); transform: translateY(-4px); }
-  .pricing-card.featured { border-color: var(--gold-border); background: linear-gradient(135deg, #0e0e13 0%, #13120a 100%); }
-  .pricing-badge { position: absolute; top: -12px; left: 32px; font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500; color: var(--bg); background: var(--gold); padding: 4px 12px; border-radius: 4px; letter-spacing: 1.5px; text-transform: uppercase; }
+  .pricing-card.featured { border-color: var(--gold-border); background: linear-gradient(135deg, #ffffff 0%, #eef6f2 100%); }
+  .pricing-badge { position: absolute; top: -12px; left: 32px; font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500; color: var(--on-accent); background: var(--gold); padding: 4px 12px; border-radius: 4px; letter-spacing: 1.5px; text-transform: uppercase; }
   .pricing-model { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--gold); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 16px; display: block; }
   .pricing-amount { font-family: 'Playfair Display', serif; font-size: 48px; font-weight: 700; line-height: 1; margin-bottom: 8px; }
   .pricing-amount span { font-size: 20px; font-weight: 400; color: var(--text-muted); }
@@ -151,12 +187,12 @@
   .impressum-block p { font-size: 14px; color: var(--text-muted); line-height: 1.7; }
   .impressum-block a { color: var(--gold); text-decoration: none; }
 
-  .cookie-banner { position: fixed; bottom: 0; left: 0; right: 0; z-index: 999; background: rgba(14,14,19,0.97); border-top: 1px solid var(--gold-border); padding: 20px 48px; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; backdrop-filter: blur(12px); transition: transform 0.4s ease; }
+  .cookie-banner { position: fixed; bottom: 0; left: 0; right: 0; z-index: 999; background: rgba(255,255,255,0.97); border-top: 1px solid var(--gold-border); padding: 20px 48px; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; backdrop-filter: blur(12px); transition: transform 0.4s ease; }
   .cookie-banner.hidden { transform: translateY(120%); }
   .cookie-text { font-size: 13px; color: var(--text-muted); max-width: 700px; line-height: 1.6; }
   .cookie-text a { color: var(--gold); text-decoration: none; }
   .cookie-actions { display: flex; gap: 12px; flex-shrink: 0; }
-  .cookie-btn-accept { background: var(--gold); color: var(--bg); border: none; padding: 10px 24px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; }
+  .cookie-btn-accept { background: var(--gold); color: var(--on-accent); border: none; padding: 10px 24px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; }
   .cookie-btn-accept:hover { background: var(--gold-light); }
   .cookie-btn-decline { background: transparent; color: var(--text-muted); border: 1px solid var(--border); padding: 10px 20px; border-radius: 6px; font-size: 13px; cursor: pointer; font-family: 'DM Sans', sans-serif; }
 
@@ -220,19 +256,49 @@
 </nav>
 
 <section class="hero" id="home">
-  <span class="hero-eyebrow" id="heroEyebrow">Marketing-Procurement · 15 Jahre Expertise</span>
-  <h1 id="heroH1">Wir verhandeln Ihre<br>Marketing- &amp; Agenturkosten.<br><em>Sie zahlen nur bei Erfolg.</em></h1>
-  <p class="hero-sub" id="heroSub">15 Jahre Erfahrung im Marketing-Procurement, unterstützt durch KI. Wir prüfen Ihre Angebote, decken überhöhte Kosten auf und verhandeln nach – ohne Risiko für Sie.</p>
-  <div class="hero-actions">
-    <a href="mailto:info@negotiatex.ai?subject=Erstgespr%C3%A4ch%20NegotiateX" class="btn-primary" id="heroCta1">Kostenloses Erstgespräch vereinbaren</a>
-    <a href="#wie-es-funktioniert" class="btn-ghost" id="heroCta2">So funktioniert es →</a>
-  </div>
-  <div class="hero-stat-bar">
-    <div class="hero-stat"><span class="hero-stat-num">20%</span><span class="hero-stat-label" id="stat1">Ø Kostensenkung</span></div>
-    <div class="stat-divider"></div>
-    <div class="hero-stat"><span class="hero-stat-num">48h</span><span class="hero-stat-label" id="stat2">bis Erste Analyse</span></div>
-    <div class="stat-divider"></div>
-    <div class="hero-stat"><span class="hero-stat-num">€0</span><span class="hero-stat-label" id="stat3">Vorabkosten</span></div>
+  <div class="hero-grid">
+    <div class="hero-copy">
+      <span class="hero-eyebrow" id="heroEyebrow">Marketing-Procurement · 15 Jahre Expertise</span>
+      <h1 id="heroH1">Wir verhandeln Ihre<br>Marketing- &amp; Agenturkosten.<br><em>Sie zahlen nur bei Erfolg.</em></h1>
+      <p class="hero-sub" id="heroSub">15 Jahre Erfahrung im Marketing-Procurement, unterstützt durch KI. Sie laden Ihr Angebot hoch &#8211; unser Agent prüft, vergleicht und verhandelt. Sie bestätigen am Ende nur noch die Bestellung.</p>
+      <div class="hero-actions">
+        <a href="mailto:info@negotiatex.ai?subject=Demo-Anfrage%20NegotiateX" class="btn-primary" id="heroCta1">Demo anfordern</a>
+        <a href="mailto:info@negotiatex.ai?subject=Erstgespr%C3%A4ch%20NegotiateX" class="btn-ghost" id="heroCta2">Kostenloses Erstgespräch</a>
+      </div>
+      <div class="hero-stat-bar">
+        <div class="hero-stat"><span class="hero-stat-num">20%</span><span class="hero-stat-label" id="stat1">Ø Kostensenkung</span></div>
+        <div class="stat-divider"></div>
+        <div class="hero-stat"><span class="hero-stat-num">48h</span><span class="hero-stat-label" id="stat2">bis Erste Analyse</span></div>
+        <div class="stat-divider"></div>
+        <div class="hero-stat"><span class="hero-stat-num">€0</span><span class="hero-stat-label" id="stat3">Vorabkosten</span></div>
+      </div>
+    </div>
+
+    <div class="demo-wrap fade-in visible">
+      <div class="demo-label" id="demoLabel">Live-Demo &#8211; so arbeitet der Agent</div>
+      <div class="stepper" id="stepper">
+        <div class="stepper-item" data-step="0"><div class="stepper-dot"></div><div class="stepper-text" id="st0">Intake</div></div>
+        <div class="stepper-line" data-line="0"></div>
+        <div class="stepper-item" data-step="1"><div class="stepper-dot"></div><div class="stepper-text" id="st1">Richtlinien-Check</div></div>
+        <div class="stepper-line" data-line="1"></div>
+        <div class="stepper-item" data-step="2"><div class="stepper-dot"></div><div class="stepper-text" id="st2">Sourcing</div></div>
+        <div class="stepper-line" data-line="2"></div>
+        <div class="stepper-item" data-step="3"><div class="stepper-dot"></div><div class="stepper-text" id="st3">Verhandlung</div></div>
+        <div class="stepper-line" data-line="3"></div>
+        <div class="stepper-item" data-step="4"><div class="stepper-dot"></div><div class="stepper-text" id="st4">Bestellung</div></div>
+      </div>
+      <div class="demo-card">
+        <div class="demo-card-head">
+          <div class="demo-avatar">N</div>
+          <div class="demo-agent-meta">
+            <div class="demo-agent-name" id="demoAgentName">Intake-Agent</div>
+            <div class="demo-agent-sub" id="demoAgentSub">Digitaler Mitarbeiter</div>
+          </div>
+          <span class="demo-status" id="demoStatus">HÖRT ZU</span>
+        </div>
+        <div class="demo-log" id="demoLog"></div>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -444,9 +510,9 @@
         <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:600;margin-bottom:4px">Rafael G&#246;pfert</div>
         <div style="font-size:12px;color:var(--text-muted);font-family:'DM Mono',monospace;letter-spacing:1px;margin-bottom:20px">PROCUREMENT EXPERT</div>
         <div style="display:flex;flex-direction:column;gap:8px">
-          <div style="font-size:12px;color:var(--text-dim);padding:6px 12px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid var(--border)">15 Jahre Expertise</div>
-          <div style="font-size:12px;color:var(--text-dim);padding:6px 12px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid var(--border)">Marketing-Procurement</div>
-          <div style="font-size:12px;color:var(--text-dim);padding:6px 12px;background:rgba(255,255,255,0.03);border-radius:6px;border:1px solid var(--border)">Medienproduktion</div>
+          <div style="font-size:12px;color:var(--text-dim);padding:6px 12px;background:rgba(22,32,28,0.035);border-radius:6px;border:1px solid var(--border)">15 Jahre Expertise</div>
+          <div style="font-size:12px;color:var(--text-dim);padding:6px 12px;background:rgba(22,32,28,0.035);border-radius:6px;border:1px solid var(--border)">Marketing-Procurement</div>
+          <div style="font-size:12px;color:var(--text-dim);padding:6px 12px;background:rgba(22,32,28,0.035);border-radius:6px;border:1px solid var(--border)">Medienproduktion</div>
         </div>
       </div>
       <div>
@@ -518,7 +584,9 @@ const T = {
     heroEyebrow:'KI-gestützte Beschaffungsintelligenz',
     heroH1:'Hören Sie auf, Ihre<br>Lieferanten zu <em>überbezahlen.</em>',
     heroSub:'Wir analysieren Ihre Lieferantenverträge, decken verborgene Einsparpotenziale auf — und unsere KI-Agenten verhandeln gemeinsam mit einem menschlichen Experten das beste Ergebnis für Sie.',
-    heroCta1:'Kostenlos starten', heroCta2:"So funktioniert's",
+    heroCta1:'Demo anfordern', heroCta2:'Kostenloses Erstgespräch',
+    demoLabel:'Live-Demo — so arbeitet der Agent',
+    st0:'Intake', st1:'Richtlinien-Check', st2:'Sourcing', st3:'Verhandlung', st4:'Bestellung',
     stat1:'Ø Kostensenkung', stat2:'Bearbeitungszeit', stat3:'Vorabkosten',
     navLogin:'Anmelden', navCta:'Kostenlos starten',
     nl1:"So funktioniert's", nl2:'Branchen', nl3:'Preise', nl4:'Impressum',
@@ -581,7 +649,9 @@ const T = {
     heroEyebrow:'AI-Powered Procurement Intelligence',
     heroH1:'Stop <em>Overpaying</em><br>Your Suppliers.',
     heroSub:'We analyze your supplier contracts, uncover hidden savings — and our AI agents negotiate the best result alongside a human expert.',
-    heroCta1:'Get started free', heroCta2:'How it works',
+    heroCta1:'Request a demo', heroCta2:'Free intro call',
+    demoLabel:'Live demo — how the agent works',
+    st0:'Intake', st1:'Policy check', st2:'Sourcing', st3:'Negotiation', st4:'Purchase order',
     stat1:'Avg. cost reduction', stat2:'Turnaround time', stat3:'Upfront cost',
     navLogin:'Sign in', navCta:'Get started free',
     nl1:'How it works', nl2:'Industries', nl3:'Pricing', nl4:'Imprint',
@@ -642,6 +712,7 @@ const T = {
 };
 
 let lang = localStorage.getItem('nx_lang') || 'de';
+let demoTimerStarted = false;
 
 function setLang(l) {
   lang = l;
@@ -661,16 +732,92 @@ function setLang(l) {
     'ctaEyebrow','ctaSub','ctaBtn1','ctaBtn2',
     'pricingEyebrow','pricingSub','pm1','pm1s','pm1d','pm2b','pm2','pm2s','pm2d',
     'trustEyebrow','tq1','ts1','tq2','ts2','tq3','ts3',
-    'fl1','fl2','fl3','fl4','fl5','fl6','cookieText','cookieBtnDecline','cookieBtnAccept'];
+    'fl1','fl2','fl3','fl4','fl5','fl6','cookieText','cookieBtnDecline','cookieBtnAccept',
+    'demoLabel','st0','st1','st2','st3','st4'];
   simple.forEach(id => { const el = document.getElementById(id); if (el && t[id]!==undefined) el.innerHTML = t[id]; });
   ['heroH1','stepsTitle','benchTitle','archTitle','indTitle','ctaTitle','pricingTitle','trustTitle'].forEach(id => { const el = document.getElementById(id); if (el && t[id]) el.innerHTML = t[id]; });
   ['pm1f','pm2f'].forEach((id,i) => { const el = document.getElementById(id); const key = i===0?'pm1f':'pm2f'; if (el && t[key]) el.innerHTML = t[key].map(f=>`<li>${f}</li>`).join(''); });
-  const loginHref = l==='en' ? '/login?action=register' : '/login?action=register';
-  document.getElementById('navCta').href = loginHref;
-  document.getElementById('heroCta1').href = loginHref;
-  document.getElementById('ctaBtn1').href = loginHref;
+  if (demoTimerStarted) startDemoLoop();
 }
 setLang(lang);
+
+/* --- Live demo animation (illustrative simulation, not live production data) --- */
+const DEMO_STEPS = {
+  de: [
+    { agent:'Intake-Agent', status:'HÖRT ZU', lines:[
+        'Neue Anfrage erkannt: <b>Media-Retainer, Q3</b>',
+        'Bedarf wird strukturiert erfasst …' ] },
+    { agent:'Richtlinien-Agent', status:'PRÜFT RICHTLINIE', lines:[
+        'Budgetrahmen: <b>innerhalb</b> der Freigabestufe',
+        'Freigabepflicht ab 50.000 € — <b>nicht ausgelöst</b>' ] },
+    { agent:'Sourcing-Agent', status:'SOURCING', lines:[
+        'Angebot wird mit Marktbenchmark abgeglichen',
+        'Abweichung erkannt: <b>+18 % über Marktniveau</b>' ] },
+    { agent:'Verhandlungs-Agent', status:'VERHANDELT', lines:[
+        'Gegenangebot an Lieferant gesendet',
+        'Neue Konditionen erhalten — <b>12 % Einsparung</b>' ] },
+    { agent:'Bestell-Agent', status:'BESTELLUNG ERSTELLT', lines:[
+        'Finale Freigabe durch Sie ausstehend',
+        'Bestellung erstellt — <b>Vorgang abgeschlossen ✓</b>' ] },
+  ],
+  en: [
+    { agent:'Intake Agent', status:'LISTENING', lines:[
+        'New request detected: <b>Media retainer, Q3</b>',
+        'Structuring the request …' ] },
+    { agent:'Policy Agent', status:'CHECKING POLICY', lines:[
+        'Budget range: <b>within</b> approval threshold',
+        'Sign-off required above €50,000 — <b>not triggered</b>' ] },
+    { agent:'Sourcing Agent', status:'SOURCING', lines:[
+        'Matching offer against market benchmark',
+        'Deviation found: <b>+18% above market</b>' ] },
+    { agent:'Negotiation Agent', status:'NEGOTIATING', lines:[
+        'Counter-offer sent to supplier',
+        'New terms received — <b>12% savings</b>' ] },
+    { agent:'Order Agent', status:'PURCHASE ORDER CREATED', lines:[
+        'Awaiting your final sign-off',
+        'Purchase order created — <b>done ✓</b>' ] },
+  ]
+};
+
+let demoTimer = null;
+function runDemoStep(stepIdx) {
+  const steps = DEMO_STEPS[lang] || DEMO_STEPS.de;
+  const step = steps[stepIdx];
+  const items = document.querySelectorAll('.stepper-item');
+  const lines_ = document.querySelectorAll('.stepper-line');
+  items.forEach((el, i) => { el.classList.toggle('active', i === stepIdx); el.classList.toggle('done', i < stepIdx); });
+  lines_.forEach((el, i) => el.classList.toggle('done', i < stepIdx));
+
+  const nameEl = document.getElementById('demoAgentName');
+  const statusEl = document.getElementById('demoStatus');
+  if (nameEl) { nameEl.style.opacity = 0; setTimeout(() => { nameEl.textContent = step.agent; nameEl.style.opacity = 1; }, 180); }
+  if (statusEl) { statusEl.style.opacity = 0; setTimeout(() => { statusEl.textContent = step.status; statusEl.style.opacity = 1; }, 180); }
+
+  const log = document.getElementById('demoLog');
+  if (!log) return;
+  log.innerHTML = '';
+  step.lines.forEach((text, i) => {
+    setTimeout(() => {
+      const row = document.createElement('div');
+      row.className = 'demo-log-line';
+      row.innerHTML = `<span class="tick">&#10003;</span><span>${text}</span>`;
+      log.appendChild(row);
+      requestAnimationFrame(() => row.classList.add('show'));
+    }, 350 + i * 650);
+  });
+}
+
+function startDemoLoop() {
+  if (demoTimer) clearInterval(demoTimer);
+  let step = 0;
+  const steps = DEMO_STEPS[lang] || DEMO_STEPS.de;
+  runDemoStep(step);
+  demoTimer = setInterval(() => {
+    step = (step + 1) % steps.length;
+    runDemoStep(step);
+  }, 3400);
+}
+if (document.getElementById('stepper')) { startDemoLoop(); demoTimerStarted = true; }
 
 const observer = new IntersectionObserver(entries => entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); animateBars(); } }), { threshold: 0.1 });
 document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
