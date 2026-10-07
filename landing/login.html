@@ -6,6 +6,7 @@
 <title>NegotiateX.ai — Anmelden</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/theme.css">
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
 /* Page-specific rules for login.html. Shared tokens/base/buttons/forms live
    in /assets/theme.css — this only adjusts layout for the auth-card look. */
@@ -61,6 +62,7 @@ body::before{content:'';position:fixed;top:-200px;left:50%;transform:translateX(
     <div class="field"><label>E-Mail</label><input type="email" id="regEmail" placeholder="ihre@email.de" autocomplete="email"></div>
     <div class="field"><label>Unternehmen</label><input type="text" id="regCompany" placeholder="Mustermann GmbH"></div>
     <div class="field"><label>Passwort</label><input type="password" id="regPassword" placeholder="Min. 8 Zeichen" autocomplete="new-password"></div>
+    <div id="turnstileWrap" style="margin:4px 0 16px;display:none"><div class="cf-turnstile" id="turnstileWidget"></div></div>
     <button class="submit-btn" id="registerBtn" onclick="doRegister()">Konto erstellen</button>
     <p class="terms">Mit der Registrierung stimmen Sie unseren <a href="/">Nutzungsbedingungen</a> zu.</p>
   </div>
@@ -95,6 +97,22 @@ async function doLogin(){
     showAlert(e.message);btn.disabled=false;btn.textContent='Anmelden';
   }
 }
+let turnstileSiteKey=null;
+(async function initTurnstile(){
+  try{
+    const res=await fetch('/api/auth/config');
+    const cfg=await res.json();
+    if(cfg.turnstile_site_key){
+      turnstileSiteKey=cfg.turnstile_site_key;
+      document.getElementById('turnstileWrap').style.display='block';
+      const render=()=>{
+        if(window.turnstile){window.turnstile.render('#turnstileWidget',{sitekey:turnstileSiteKey});}
+        else setTimeout(render,200);
+      };
+      render();
+    }
+  }catch(e){/* captcha config unavailable — registration still works without it */}
+})();
 async function doRegister(){
   const name=document.getElementById('regName').value.trim();
   const email=document.getElementById('regEmail').value.trim();
@@ -102,10 +120,15 @@ async function doRegister(){
   const password=document.getElementById('regPassword').value;
   if(!name||!email||!password){showAlert('Bitte alle Pflichtfelder ausfüllen.');return;}
   if(password.length<8){showAlert('Passwort muss mindestens 8 Zeichen haben.');return;}
+  let turnstile_token=null;
+  if(turnstileSiteKey){
+    turnstile_token=window.turnstile?window.turnstile.getResponse():null;
+    if(!turnstile_token){showAlert('Bitte Captcha bestätigen.');return;}
+  }
   const btn=document.getElementById('registerBtn');
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Konto wird erstellt…';clearAlert();
   try{
-    const res=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,company_name:company,password})});
+    const res=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,company_name:company,password,turnstile_token})});
     const data=await res.json();
     if(!res.ok)throw new Error(data.detail||'Registrierung fehlgeschlagen.');
     localStorage.setItem('nx_token',data.access_token);
@@ -114,6 +137,7 @@ async function doRegister(){
     setTimeout(()=>{window.location.href='/dashboard';},800);
   }catch(e){
     showAlert(e.message);btn.disabled=false;btn.textContent='Konto erstellen';
+    if(window.turnstile&&turnstileSiteKey)window.turnstile.reset();
   }
 }
 document.addEventListener('keydown',e=>{

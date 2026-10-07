@@ -1,7 +1,7 @@
 import os, uuid, logging
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, Column, String, Boolean, DateTime
 from sqlalchemy.dialects.postgresql import UUID
@@ -15,6 +15,35 @@ router = APIRouter()
 
 ADMIN_EMAIL = "bahiarog@me.com"
 SECRET = os.getenv("SECRET_KEY", "negotiatex-secret-2025-change-in-prod")
+TURNSTILE_SITE_KEY = os.getenv("TURNSTILE_SITE_KEY", "").strip()
+TURNSTILE_SECRET_KEY = os.getenv("TURNSTILE_SECRET_KEY", "").strip()
+
+
+async def verify_turnstile(token: Optional[str], remote_ip: Optional[str] = None) -> None:
+    """Verify a Cloudflare Turnstile token. Raises HTTPException on failure.
+    If TURNSTILE_SECRET_KEY is not configured, verification is skipped (logged
+    as a warning) so registration never silently breaks before the key is set up."""
+    if not TURNSTILE_SECRET_KEY:
+        logger.warning("TURNSTILE_SECRET_KEY not configured — skipping captcha verification.")
+        return
+    if not token:
+        raise HTTPException(400, "Bitte Captcha bestätigen.")
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            data = {"secret": TURNSTILE_SECRET_KEY, "response": token}
+            if remote_ip:
+                data["remoteip"] = remote_ip
+            resp = await client.post("https://challenges.cloudflare.com/turnstile/v0/siteverify", data=data)
+            result = resp.json()
+        if not result.get("success"):
+            logger.warning(f"Turnstile verification failed: {result.get('error-codes')}")
+            raise HTTPException(400, "Captcha-Prüfung fehlgeschlagen. Bitte erneut versuchen.")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Turnstile verification request failed")
+        raise HTTPException(503, "Captcha-Dienst momentan nicht erreichbar. Bitte später erneut versuchen.")
 
 # -- User Model --
 class User(Base):
@@ -58,6 +87,7 @@ class PasswordResetToken(Base):
 
 class RegisterPayload(BaseModel):
     name: str; email: str; company_name: Optional[str] = None; password: str
+    turnstile_token: Optional[str] = None
 
 class LoginPayload(BaseModel):
     email: str; password: str
@@ -69,8 +99,16 @@ class ResetPasswordPayload(BaseModel):
     token: str; password: str
 
 # -- Endpoints --
+@router.get("/config")
+async def auth_config():
+    """Public, non-secret config the frontend needs (e.g. captcha site key)."""
+    return {"turnstile_site_key": TURNSTILE_SITE_KEY or None}
+
+
 @router.post("/register")
-async def register(payload: RegisterPayload, db: AsyncSession = Depends(get_db)):
+async def register(payload: RegisterPayload, request: Request, db: AsyncSession = Depends(get_db)):
+    await verify_turnstile(payload.turnstile_token, request.client.host if request.client else None)
+
     r = await db.execute(select(User).where(User.email == payload.email.lower()))
     if r.scalar_one_or_none():
         raise HTTPException(400, "E-Mail bereits registriert.")
@@ -86,6 +124,24 @@ async def register(payload: RegisterPayload, db: AsyncSession = Depends(get_db))
     )
     db.add(user); await db.commit(); await db.refresh(user)
     token = make_token(str(user.id), user.email, user.is_admin)
+
+    try:
+        from services.email_sender import send_negotiation_email
+        send_negotiation_email(
+            ADMIN_EMAIL,
+            f"Neue Registrierung: {user.name} ({user.email})",
+            (
+                f"Ein neuer Nutzer hat sich bei NegotiateX registriert:\n\n"
+                f"Name: {user.name}\n"
+                f"E-Mail: {user.email}\n"
+                f"Unternehmen: {user.company_name or '—'}\n"
+                f"Registriert am: {user.created_at}\n"
+            ),
+            from_name="NegotiateX System",
+        )
+    except Exception:
+        logger.exception("Registration notification email failed to send")
+
     return {"access_token": token, "user": user_to_dict(user)}
 
 @router.post("/login")
