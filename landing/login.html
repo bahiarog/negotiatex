@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NegotiateX.ai — Anmelden</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/theme.css">
+<style>
+/* Page-specific rules for login.html. Shared tokens/base/buttons/forms live
+   in /assets/theme.css — this only adjusts layout for the auth-card look. */
+body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
+body::before{content:'';position:fixed;top:-200px;left:50%;transform:translateX(-50%);width:800px;height:600px;background:radial-gradient(ellipse at center,rgba(30,138,110,0.08) 0%,transparent 70%);pointer-events:none}
+.back-link{position:fixed;top:24px;left:48px;font-size:13px;color:var(--text-muted);text-decoration:none;transition:color 0.2s}
+.back-link:hover{color:var(--text)}
+.logo{font-size:24px;text-align:center;margin-bottom:40px;display:block}
+.card{border-radius:16px;padding:48px;width:100%;max-width:420px}
+.tab-row{display:flex;background:var(--bg-card2);border:1px solid var(--border);border-radius:8px;padding:4px;margin-bottom:36px}
+.tab{flex:1;text-align:center;padding:10px;font-size:13px;font-weight:500;cursor:pointer;border-radius:6px;transition:background 0.2s,color 0.2s;color:var(--text-muted);border:none;background:transparent;font-family:'DM Sans',sans-serif}
+.tab.active{background:var(--gold);color:var(--on-accent)}
+.form-title{font-family:'Playfair Display',serif;font-size:24px;font-weight:600;margin-bottom:8px}
+.form-subtitle{font-size:14px;color:var(--text-muted);margin-bottom:32px;line-height:1.6}
+.field{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.field label{font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:0}
+.field input{width:100%}
+.submit-btn{width:100%;margin-top:8px;background:var(--gold);color:var(--on-accent);border:none;padding:15px;border-radius:8px;font-size:14px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer;transition:background 0.2s,opacity 0.2s}
+.submit-btn:hover{background:var(--gold-light)}
+.submit-btn:disabled{opacity:0.6;cursor:not-allowed}
+.alert{padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none}
+.alert.error{background:rgba(216,90,48,0.08);border:1px solid rgba(216,90,48,0.28);color:#B03E1E;display:block}
+.alert.success{background:var(--gold-dim);border:1px solid var(--gold-border);color:#1D9E75;display:block}
+.terms{font-size:12px;color:var(--text-dim);text-align:center;margin-top:20px;line-height:1.6}
+.terms a{color:var(--text-muted);text-decoration:none}
+.terms a:hover{color:var(--gold)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;display:inline-block;vertical-align:middle;margin-right:8px}
+</style>
+</head>
+<body>
+<a href="/" class="back-link">← Zurück</a>
+<a href="/" class="logo">Negotiate<span>X</span>.ai</a>
+<div class="card">
+  <div class="tab-row">
+    <button class="tab active" id="tabLogin" onclick="showTab('login')">Anmelden</button>
+    <button class="tab" id="tabRegister" onclick="showTab('register')">Registrieren</button>
+  </div>
+  <div id="alertBox" class="alert"></div>
+  <div id="formLogin">
+    <h2 class="form-title">Willkommen zurück.</h2>
+    <p class="form-subtitle">Melden Sie sich an, um Ihre Beschaffungsanalysen zu verwalten.</p>
+    <div class="field"><label>E-Mail</label><input type="email" id="loginEmail" placeholder="ihre@email.de" autocomplete="email"></div>
+    <div class="field"><label>Passwort</label><input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password"></div>
+    <p style="text-align:right;margin:-8px 0 16px"><a href="/forgot-password" style="font-size:12px;color:var(--text-muted);text-decoration:none">Passwort vergessen?</a></p>
+    <button class="submit-btn" id="loginBtn" onclick="doLogin()">Anmelden</button>
+    <p class="terms">Noch kein Konto? <a href="#" onclick="showTab('register');return false;">Kostenlos registrieren</a></p>
+  </div>
+  <div id="formRegister" style="display:none">
+    <h2 class="form-title">Konto erstellen.</h2>
+    <p class="form-subtitle">Kostenlos starten — keine Kreditkarte erforderlich.</p>
+    <div class="field"><label>Name</label><input type="text" id="regName" placeholder="Max Mustermann" autocomplete="name"></div>
+    <div class="field"><label>E-Mail</label><input type="email" id="regEmail" placeholder="ihre@email.de" autocomplete="email"></div>
+    <div class="field"><label>Unternehmen</label><input type="text" id="regCompany" placeholder="Mustermann GmbH"></div>
+    <div class="field"><label>Passwort</label><input type="password" id="regPassword" placeholder="Min. 8 Zeichen" autocomplete="new-password"></div>
+    <button class="submit-btn" id="registerBtn" onclick="doRegister()">Konto erstellen</button>
+    <p class="terms">Mit der Registrierung stimmen Sie unseren <a href="/">Nutzungsbedingungen</a> zu.</p>
+  </div>
+</div>
+<script>
+const params=new URLSearchParams(window.location.search);
+if(params.get('action')==='register')showTab('register');
+function showTab(t){
+  document.getElementById('formLogin').style.display=t==='login'?'':'none';
+  document.getElementById('formRegister').style.display=t==='register'?'':'none';
+  document.getElementById('tabLogin').classList.toggle('active',t==='login');
+  document.getElementById('tabRegister').classList.toggle('active',t==='register');
+  clearAlert();
+}
+function showAlert(msg,type='error'){const el=document.getElementById('alertBox');el.textContent=msg;el.className='alert '+type;}
+function clearAlert(){const el=document.getElementById('alertBox');el.className='alert';el.textContent='';}
+async function doLogin(){
+  const email=document.getElementById('loginEmail').value.trim();
+  const password=document.getElementById('loginPassword').value;
+  if(!email||!password){showAlert('Bitte E-Mail und Passwort eingeben.');return;}
+  const btn=document.getElementById('loginBtn');
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Anmelden…';clearAlert();
+  try{
+    const res=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.detail||'Anmeldung fehlgeschlagen.');
+    localStorage.setItem('nx_token',data.access_token);
+    localStorage.setItem('nx_user',JSON.stringify(data.user));
+    showAlert('Anmeldung erfolgreich! Weiterleitung…','success');
+    setTimeout(()=>{window.location.href=data.user.is_admin?'/admin':'/dashboard';},800);
+  }catch(e){
+    showAlert(e.message);btn.disabled=false;btn.textContent='Anmelden';
+  }
+}
+async function doRegister(){
+  const name=document.getElementById('regName').value.trim();
+  const email=document.getElementById('regEmail').value.trim();
+  const company=document.getElementById('regCompany').value.trim();
+  const password=document.getElementById('regPassword').value;
+  if(!name||!email||!password){showAlert('Bitte alle Pflichtfelder ausfüllen.');return;}
+  if(password.length<8){showAlert('Passwort muss mindestens 8 Zeichen haben.');return;}
+  const btn=document.getElementById('registerBtn');
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Konto wird erstellt…';clearAlert();
+  try{
+    const res=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,company_name:company,password})});
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.detail||'Registrierung fehlgeschlagen.');
+    localStorage.setItem('nx_token',data.access_token);
+    localStorage.setItem('nx_user',JSON.stringify(data.user));
+    showAlert('Konto erstellt! Willkommen bei NegotiateX.','success');
+    setTimeout(()=>{window.location.href='/dashboard';},800);
+  }catch(e){
+    showAlert(e.message);btn.disabled=false;btn.textContent='Konto erstellen';
+  }
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    if(document.getElementById('formLogin').style.display!=='none')doLogin();
+    else doRegister();
+  }
+});
+const token=localStorage.getItem('nx_token');
+if(token){const user=JSON.parse(localStorage.getItem('nx_user')||'{}');window.location.href=user.is_admin?'/admin':'/dashboard';}
+</script>
+</body>
+</html>

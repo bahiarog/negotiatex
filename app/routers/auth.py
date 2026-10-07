@@ -45,11 +45,28 @@ def user_to_dict(user):
             "plan": user.plan}
 
 # -- Schemas --
+# -- Password reset token --
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False)
+    token_hash = Column(String(64), nullable=False, unique=True)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class RegisterPayload(BaseModel):
     name: str; email: str; company_name: Optional[str] = None; password: str
 
 class LoginPayload(BaseModel):
     email: str; password: str
+
+class ForgotPasswordPayload(BaseModel):
+    email: str
+
+class ResetPasswordPayload(BaseModel):
+    token: str; password: str
 
 # -- Endpoints --
 @router.post("/register")
@@ -81,6 +98,66 @@ async def login(payload: LoginPayload, db: AsyncSession = Depends(get_db)):
         raise HTTPException(403, "Konto deaktiviert. Bitte kontaktieren Sie uns.")
     token = make_token(str(user.id), user.email, user.is_admin)
     return {"access_token": token, "user": user_to_dict(user)}
+
+@router.post("/forgot-password")
+async def forgot_password(payload: ForgotPasswordPayload, db: AsyncSession = Depends(get_db)):
+    """Always returns a generic success message, regardless of whether the
+    email exists, so attackers cannot enumerate registered addresses."""
+    generic_msg = {"message": "Falls ein Konto mit dieser E-Mail existiert, haben wir einen Link zum Zurücksetzen gesendet."}
+
+    r = await db.execute(select(User).where(User.email == payload.email.lower()))
+    user = r.scalar_one_or_none()
+    if not user:
+        return generic_msg
+
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    expires_at = datetime.utcnow() + timedelta(hours=1)
+
+    reset = PasswordResetToken(user_id=user.id, token_hash=token_hash, expires_at=expires_at)
+    db.add(reset)
+    await db.commit()
+
+    from services.email_sender import send_negotiation_email
+    reset_link = f"https://negotiatex.ai/reset-password?token={raw_token}"
+    body = (
+        f"Hallo {user.name or ''},\n\n"
+        f"Sie haben eine Passwort-Zurücksetzung für Ihr NegotiateX-Konto angefordert.\n"
+        f"Klicken Sie auf den folgenden Link, um ein neues Passwort zu vergeben "
+        f"(gültig für 1 Stunde):\n\n{reset_link}\n\n"
+        f"Falls Sie das nicht angefordert haben, ignorieren Sie diese E-Mail einfach."
+    )
+    try:
+        send_negotiation_email(user.email, "Passwort zurücksetzen — NegotiateX.ai", body)
+    except Exception:
+        logger.exception("Password reset email failed to send")
+
+    return generic_msg
+
+
+@router.post("/reset-password")
+async def reset_password(payload: ResetPasswordPayload, db: AsyncSession = Depends(get_db)):
+    if len(payload.password) < 8:
+        raise HTTPException(400, "Passwort muss mindestens 8 Zeichen haben.")
+
+    token_hash = hashlib.sha256(payload.token.encode()).hexdigest()
+    r = await db.execute(select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash))
+    reset = r.scalar_one_or_none()
+
+    if not reset or reset.used_at is not None or reset.expires_at < datetime.utcnow():
+        raise HTTPException(400, "Der Link ist ungültig oder abgelaufen. Bitte fordern Sie einen neuen an.")
+
+    r2 = await db.execute(select(User).where(User.id == reset.user_id))
+    user = r2.scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "Benutzer nicht gefunden.")
+
+    user.password_hash = hash_password(payload.password)
+    reset.used_at = datetime.utcnow()
+    await db.commit()
+
+    return {"message": "Passwort erfolgreich geändert. Sie können sich jetzt anmelden."}
+
 
 @router.get("/me")
 async def me(token: str, db: AsyncSession = Depends(get_db)):
