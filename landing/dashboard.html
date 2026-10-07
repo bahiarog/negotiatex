@@ -459,6 +459,21 @@ tr:hover td{background:rgba(22,32,28,.015)}
   <div class="modal" style="max-width:640px">
     <div class="modal-t">Lieferant anlegen</div>
 
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <button type="button" class="btn bgh bsm" onclick="toggleInvitePanel()">✉️ Per E-Mail anfordern</button>
+      <button type="button" class="btn bgh bsm" onclick="document.getElementById('sup-file-input').click()">📎 Datei/Screenshot hochladen (KI)</button>
+      <input type="file" id="sup-file-input" accept=".pdf,.xlsx,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg,.webp" style="display:none" onchange="extractSupplierFile(this.files[0])">
+    </div>
+    <div id="sup-invite-panel" style="display:none;background:var(--C2);border:1px solid var(--br);border-radius:8px;padding:14px;margin-bottom:16px">
+      <div class="fg2">
+        <div class="f"><label>E-Mail des Lieferanten</label><input type="email" id="inv-email" placeholder="einkauf@lieferant.de"></div>
+        <div class="f"><label>Name (optional)</label><input id="inv-name" placeholder="Ansprechpartner"></div>
+      </div>
+      <p style="font-size:11px;color:var(--mu);margin:0 0 10px">Der Lieferant erhält einen persönlichen Link, um seine Stammdaten selbst einzutragen — inkl. Bestätigungstext zur Richtigkeit der Angaben.</p>
+      <button type="button" class="btn bg bsm" id="inv-send-btn" onclick="sendSupplierInvite()">Einladung senden</button>
+    </div>
+    <div id="sup-extract-status" style="display:none;font-size:12px;color:var(--mu);margin-bottom:12px"></div>
+
     <div style="font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--mu);text-transform:uppercase;margin:0 0 8px">Firmendaten</div>
     <div class="fg2">
       <div class="f"><label>Unternehmen *</label><input id="sm-n" placeholder="ACME GmbH"></div>
@@ -876,6 +891,48 @@ async function savePo(){
   go('pos');
 }
 
+function toggleInvitePanel(){
+  const p=document.getElementById('sup-invite-panel');
+  p.style.display=p.style.display==='none'?'block':'none';
+}
+async function sendSupplierInvite(){
+  const email=document.getElementById('inv-email').value.trim();
+  const name=document.getElementById('inv-name').value.trim();
+  if(!email){toast('Bitte E-Mail-Adresse eingeben.','err');return;}
+  const btn=document.getElementById('inv-send-btn');
+  btn.disabled=true;btn.textContent='Wird gesendet…';
+  const res=await api('/api/suppliers/invite',{method:'POST',body:JSON.stringify({email,name_hint:name||null})});
+  btn.disabled=false;btn.textContent='Einladung senden';
+  if(!res||res.detail){toast(res&&res.detail?res.detail:'Fehler beim Senden.','err');return;}
+  toast(res.message,'ok');
+  document.getElementById('inv-email').value='';document.getElementById('inv-name').value='';
+  toggleInvitePanel();
+}
+const SUP_FIELD_MAP={name:'sm-n',legal_form:'sm-lf',category:'sm-c',contact_name:'sm-k',phone:'sm-ph',
+  email:'sm-e',website:'sm-web',address:'sm-a',tax_id:'sm-tax',vat_id:'sm-vat',duns_number:'sm-duns',
+  commercial_register_number:'sm-hrb',employee_count:'sm-ec',iban:'sm-iban',bic:'sm-bic',bank_name:'sm-bank'};
+async function extractSupplierFile(file){
+  if(!file)return;
+  const statusEl=document.getElementById('sup-extract-status');
+  statusEl.style.display='block';statusEl.innerHTML='<span class="sp" style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:6px"></span>KI liest Datei …';
+  const fd=new FormData();fd.append('file',file);
+  try{
+    const res=await fetch('/api/suppliers/extract',{method:'POST',headers:{'Authorization':`Bearer ${token}`},body:fd});
+    const data=await res.json();
+    if(!res.ok){statusEl.textContent='⚠️ '+(data.detail||'Extraktion fehlgeschlagen. Bitte manuell ausfüllen.');return;}
+    let filled=0;
+    for(const [k,elId] of Object.entries(SUP_FIELD_MAP)){
+      const v=data.extracted[k];
+      if(v===null||v===undefined||v==='')continue;
+      const el=document.getElementById(elId);
+      if(!el)continue;
+      el.value=v;filled++;
+    }
+    statusEl.textContent=filled?`✓ ${filled} Felder automatisch befüllt — bitte vor dem Speichern prüfen.`:'Keine Felder eindeutig erkannt — bitte manuell ausfüllen.';
+  }catch(e){
+    statusEl.textContent='⚠️ Netzwerkfehler bei der Extraktion.';
+  }
+}
 async function saveSup(){
   const n=document.getElementById('sm-n').value.trim();
   if(!n){toast('Unternehmen ist ein Pflichtfeld.','err');return;}

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NegotiateX.ai — Stammdaten hinterlegen</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/theme.css">
+<style>
+body{font-family:'DM Sans',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:48px 24px}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:40px;width:100%;max-width:640px;box-shadow:0 20px 48px rgba(22,32,28,0.06)}
+.logo{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;margin-bottom:20px}
+.logo span{color:var(--gold)}
+h1{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;margin-bottom:4px}
+.sub{font-size:13px;color:var(--text-muted);margin-bottom:28px}
+.section-label{font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--text-muted);text-transform:uppercase;margin:20px 0 10px}
+.section-label:first-of-type{margin-top:0}
+.f{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.fg2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-family:'DM Mono',monospace}
+input,select,textarea{background:#fbfbfa;border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;width:100%;outline:none;transition:border .15s;font-family:'DM Sans',sans-serif}
+input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim)}
+.compliance{background:var(--bg-card2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:20px;display:flex;gap:10px;align-items:flex-start}
+.compliance input{width:auto;margin-top:2px}
+.compliance p{font-size:12px;color:var(--text);line-height:1.6;margin:0}
+.btn{padding:14px 20px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;width:100%;margin-top:20px;background:var(--gold);color:var(--on-accent)}
+.btn:hover{background:var(--gold-light)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.msg{padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none}
+.msg.ok{background:var(--gold-dim);border:1px solid var(--gold-border);color:#1D9E75;display:block}
+.msg.err{background:rgba(216,90,48,.08);border:1px solid rgba(216,90,48,.28);color:#B03E1E;display:block}
+#wrap-invalid,#wrap-done{display:none;text-align:center}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">Negotiate<span>X</span>.ai</div>
+
+  <div id="wrap-loading"><p class="sub">Lädt …</p></div>
+
+  <div id="wrap-invalid">
+    <h1>Link ungültig</h1>
+    <p class="sub" id="invalid-reason">Dieser Link ist nicht mehr gültig. Bitte wenden Sie sich an Ihren Ansprechpartner bei NegotiateX für einen neuen Link.</p>
+  </div>
+
+  <div id="wrap-done">
+    <h1>Vielen Dank!</h1>
+    <p class="sub">Ihre Angaben wurden erfolgreich übermittelt.</p>
+  </div>
+
+  <div id="wrap-form" style="display:none">
+    <h1>Unternehmensdaten hinterlegen</h1>
+    <p class="sub">Bitte füllen Sie die folgenden Felder vollständig und korrekt aus. Das dauert etwa 5 Minuten.</p>
+    <div class="msg" id="msg"></div>
+
+    <div class="section-label">Firmendaten</div>
+    <div class="fg2">
+      <div class="f"><label>Unternehmen *</label><input id="f-name" placeholder="ACME GmbH"></div>
+      <div class="f"><label>Rechtsform</label><select id="f-lf"><option value="">—</option><option>GmbH</option><option>AG</option><option>UG (haftungsbeschränkt)</option><option>GmbH & Co. KG</option><option>KG</option><option>OHG</option><option>e.K.</option><option>Einzelunternehmen</option><option>GbR</option><option>Sonstige</option></select></div>
+    </div>
+    <div class="fg2">
+      <div class="f"><label>Branche</label><input id="f-cat" placeholder="z. B. Logistik"></div>
+      <div class="f"><label>Mitarbeiterzahl</label><input type="number" min="0" id="f-ec" placeholder="z. B. 50"></div>
+    </div>
+    <div class="f"><label>Adresse</label><textarea id="f-addr" rows="2" placeholder="Musterstr. 1, 50667 Köln"></textarea></div>
+
+    <div class="section-label">Kontakt</div>
+    <div class="fg2">
+      <div class="f"><label>Kontaktperson</label><input id="f-contact" placeholder="Max Müller"></div>
+      <div class="f"><label>E-Mail</label><input type="email" id="f-email" placeholder="max@acme.de"></div>
+    </div>
+    <div class="fg2">
+      <div class="f"><label>Telefon</label><input id="f-phone" placeholder="+49 221 1234567"></div>
+      <div class="f"><label>Website</label><input id="f-web" placeholder="https://acme.de"></div>
+    </div>
+
+    <div class="section-label">Steuerliche & rechtliche Angaben</div>
+    <div class="fg2">
+      <div class="f"><label>Steuernummer</label><input id="f-tax" placeholder="123/456/78910"></div>
+      <div class="f"><label>USt-IdNr.</label><input id="f-vat" placeholder="DE123456789"></div>
+    </div>
+    <div class="fg2">
+      <div class="f"><label>D-U-N-S-Nummer</label><input id="f-duns" placeholder="123456789"></div>
+      <div class="f"><label>Handelsregisternummer</label><input id="f-hrb" placeholder="HRB 12345"></div>
+    </div>
+    <div class="f" style="display:flex;align-items:center;gap:8px;flex-direction:row">
+      <input type="checkbox" id="f-wst" style="width:auto">
+      <label style="margin:0;text-transform:none;font-family:'DM Sans',sans-serif;font-size:13px">Quellensteuerpflichtig</label>
+    </div>
+
+    <div class="section-label">Bankverbindung</div>
+    <div class="fg2">
+      <div class="f"><label>IBAN</label><input id="f-iban" placeholder="DE02 1203 0000 0000 2020 51"></div>
+      <div class="f"><label>BIC</label><input id="f-bic" placeholder="BYLADEM1001"></div>
+    </div>
+    <div class="f"><label>Bank</label><input id="f-bank" placeholder="Deutsche Kreditbank"></div>
+
+    <div class="compliance">
+      <input type="checkbox" id="f-confirm">
+      <p id="compliance-text">Ich versichere hiermit, dass die oben gemachten Angaben korrekt und vollständig sind, und dass ich berechtigt bin, diese Angaben im Namen des genannten Unternehmens zu übermitteln.</p>
+    </div>
+    <div class="f" style="margin-top:14px"><label>Ihr Name (zur Bestätigung) *</label><input id="f-confirmname" placeholder="Vor- und Nachname"></div>
+
+    <button class="btn" id="submit-btn" onclick="submitForm()">Angaben übermitteln</button>
+  </div>
+</div>
+<script>
+const token=new URLSearchParams(location.search).get('token');
+const wrapLoading=document.getElementById('wrap-loading');
+const wrapInvalid=document.getElementById('wrap-invalid');
+const wrapForm=document.getElementById('wrap-form');
+const wrapDone=document.getElementById('wrap-done');
+
+function showMsg(text,type){const m=document.getElementById('msg');m.textContent=text;m.className='msg '+type;}
+
+(async function init(){
+  if(!token){wrapLoading.style.display='none';wrapInvalid.style.display='block';return;}
+  try{
+    const res=await fetch(`/api/suppliers/invite/status?token=${encodeURIComponent(token)}`);
+    const data=await res.json();
+    if(!res.ok){
+      document.getElementById('invalid-reason').textContent=data.detail||'Dieser Link ist nicht mehr gültig.';
+      wrapLoading.style.display='none';wrapInvalid.style.display='block';return;
+    }
+    if(data.email)document.getElementById('f-email').value=data.email;
+    if(data.name_hint)document.getElementById('f-contact').value=data.name_hint;
+    if(data.compliance_text)document.getElementById('compliance-text').textContent=data.compliance_text;
+    wrapLoading.style.display='none';wrapForm.style.display='block';
+  }catch(e){
+    wrapLoading.style.display='none';wrapInvalid.style.display='block';
+  }
+})();
+
+async function submitForm(){
+  const name=document.getElementById('f-name').value.trim();
+  const confirmed=document.getElementById('f-confirm').checked;
+  const confirmName=document.getElementById('f-confirmname').value.trim();
+  if(!name){showMsg('Unternehmen ist ein Pflichtfeld.','err');return;}
+  if(!confirmed){showMsg('Bitte bestätigen Sie die Richtigkeit der Angaben.','err');return;}
+  if(!confirmName){showMsg('Bitte Ihren Namen zur Bestätigung angeben.','err');return;}
+
+  const payload={
+    token,name,
+    legal_form:document.getElementById('f-lf').value||null,
+    category:document.getElementById('f-cat').value.trim()||null,
+    employee_count:document.getElementById('f-ec').value?parseInt(document.getElementById('f-ec').value):null,
+    address:document.getElementById('f-addr').value.trim()||null,
+    contact_name:document.getElementById('f-contact').value.trim()||null,
+    email:document.getElementById('f-email').value.trim()||null,
+    phone:document.getElementById('f-phone').value.trim()||null,
+    website:document.getElementById('f-web').value.trim()||null,
+    tax_id:document.getElementById('f-tax').value.trim()||null,
+    vat_id:document.getElementById('f-vat').value.trim()||null,
+    duns_number:document.getElementById('f-duns').value.trim()||null,
+    commercial_register_number:document.getElementById('f-hrb').value.trim()||null,
+    withholding_tax_liable:document.getElementById('f-wst').checked,
+    iban:document.getElementById('f-iban').value.trim()||null,
+    bic:document.getElementById('f-bic').value.trim()||null,
+    bank_name:document.getElementById('f-bank').value.trim()||null,
+    confirmed_accurate:confirmed,
+    confirmed_by_name:confirmName,
+  };
+  const btn=document.getElementById('submit-btn');
+  btn.disabled=true;btn.textContent='Wird übermittelt…';
+  try{
+    const res=await fetch('/api/suppliers/invite/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const data=await res.json();
+    if(!res.ok){showMsg(data.detail||'Fehler beim Übermitteln.','err');btn.disabled=false;btn.textContent='Angaben übermitteln';return;}
+    wrapForm.style.display='none';wrapDone.style.display='block';
+  }catch(e){
+    showMsg('Netzwerkfehler. Bitte erneut versuchen.','err');btn.disabled=false;btn.textContent='Angaben übermitteln';
+  }
+}
+</script>
+<div style="text-align:center;padding:16px;font-size:11px;color:var(--text-dim)"><a href="/privacy" style="color:var(--text-dim);margin-right:12px">Datenschutz</a><a href="/impressum" style="color:var(--text-dim)">Impressum</a></div>
+</body>
+</html>

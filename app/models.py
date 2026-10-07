@@ -178,6 +178,19 @@ class BenchmarkEntry(Base):
     notes = Column(Text)
     created_at = Column(DateTime, server_default=func.now())
 
+class SupplierInvite(Base):
+    __tablename__ = "supplier_invites"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    token_hash = Column(String(64), nullable=False, unique=True)
+    email = Column(String(255), nullable=False)
+    name_hint = Column(String(255))
+    status = Column(String(20), default="pending")  # pending | completed
+    supplier_id = Column(UUID(as_uuid=True), ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True)
+    confirmed_by_name = Column(String(255))
+    confirmed_at = Column(DateTime)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class APIKey(Base):
     __tablename__ = "api_keys"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
