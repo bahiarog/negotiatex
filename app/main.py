@@ -6,7 +6,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from database import engine, Base
 import models_v2  # noqa: F401 -- registers Phase 1 tables (tenants, cases, documents, ...) on Base.metadata
-from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers
+from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers, chat
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -31,6 +31,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(audit.router, prefix="/api/audit", tags=["Audit"])
 app.include_router(purchase_orders.router, prefix="/api/po", tags=["Purchase Orders"])
 app.include_router(suppliers.router, prefix="/api/suppliers", tags=["Suppliers"])
+app.include_router(chat.router, prefix="/api/chat", tags=["Public Chat"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 app.include_router(export.router, prefix="/api/export", tags=["Export"])
 app.include_router(ws.router, prefix="/api", tags=["WebSocket"])
