@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NegotiateX.ai — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  /* Shared brand palette (same light mint theme as index.html), kept
+     under this page's existing short variable names so none of the
+     hundreds of dashboard-specific rules below need to change. */
+  --gold:#1E8A6E;--gold-l:#27A382;--gd:rgba(30,138,110,.08);--gb:rgba(30,138,110,.28);
+  --bg:#f7f6f1;--C:#ffffff;--C2:#f0f3ef;--hov:#eef1ec;
+  --tx:#16201c;--mu:#5b6a63;--di:#8b958f;
+  --br:rgba(22,32,28,.09);--br2:rgba(22,32,28,.05);
+  --r:10px;--g:#1D9E75;--red:#D85A30;--am:#BA7517;--bl:#2E6EB5;
+  --sw:224px;--hh:56px;--on-accent:#ffffff;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;font-size:14px;line-height:1.5}
+
+/* ── HEADER ── */
+header{position:fixed;top:0;left:0;right:0;z-index:300;height:var(--hh);background:rgba(247,246,241,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--br);display:flex;align-items:center;padding:0 20px;gap:10px}
+.logo{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--tx);text-decoration:none;flex-shrink:0}
+.logo em{color:var(--gold);font-style:normal}
+.hdr-sep{width:1px;height:20px;background:var(--br)}
+.hdr-pg{font-size:12px;color:var(--mu)}
+.hdr-r{margin-left:auto;display:flex;align-items:center;gap:8px}
+.chip{display:flex;align-items:center;gap:7px;padding:4px 10px 4px 5px;background:var(--C);border:1px solid var(--br);border-radius:8px;cursor:pointer;transition:border-color .18s;text-decoration:none}
+.chip:hover{border-color:var(--gb)}
+.av{width:26px;height:26px;border-radius:50%;background:var(--gd);border:1px solid var(--gb);display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:10px;font-weight:500;color:var(--gold);flex-shrink:0}
+.chip-n{font-size:12px;font-weight:500;color:var(--tx)}
+.chip-p{font-size:10px;color:var(--mu)}
+.h-btn{font-size:12px;color:var(--di);background:transparent;border:1px solid var(--br);padding:5px 11px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:border-color .18s,color .18s;text-decoration:none}
+.h-btn:hover{border-color:rgba(216,90,48,.4);color:var(--red)}
+.h-btn-n{color:var(--mu)}.h-btn-n:hover{border-color:var(--gb);color:var(--tx)}
+
+/* ── SIDEBAR ── */
+nav{position:fixed;top:var(--hh);left:0;bottom:0;width:var(--sw);background:var(--C);border-right:1px solid var(--br);display:flex;flex-direction:column;z-index:200;overflow-y:auto}
+.ns{font-family:'DM Mono',monospace;font-size:9px;color:var(--di);text-transform:uppercase;letter-spacing:2px;padding:16px 16px 5px}
+.ni{display:flex;align-items:center;gap:8px;padding:7px 12px;margin:1px 8px;border-radius:7px;font-size:13px;color:var(--mu);background:transparent;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;width:calc(100% - 16px);text-align:left;transition:background .14s,color .14s;text-decoration:none}
+.ni:hover{background:var(--hov);color:var(--tx)}
+.ni.on{background:var(--gd);color:var(--gold);border:1px solid var(--gb)}
+.ni-ic{font-size:14px;width:17px;text-align:center;flex-shrink:0}
+.ni-b{margin-left:auto;font-family:'DM Mono',monospace;font-size:9px;background:var(--gd);color:var(--gold);border-radius:3px;padding:1px 5px;min-width:16px;text-align:center}
+.nfoot{margin-top:auto;padding:12px 16px;border-top:1px solid var(--br)}
+.nfoot-e{font-size:10px;color:var(--di);font-family:'DM Mono',monospace;word-break:break-all}
+
+/* ── MAIN ── */
+main{margin-left:var(--sw);margin-top:var(--hh);padding:24px;min-height:calc(100vh - var(--hh))}
+.panel{display:none}.panel.on{display:block}
+
+/* ── PAGE HEADER ── */
+.ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;gap:12px;flex-wrap:wrap}
+.ph-t{font-family:'Playfair Display',serif;font-size:21px;font-weight:600}
+.ph-s{font-size:12px;color:var(--mu);margin-top:2px}
+.ph-a{display:flex;gap:6px;align-items:center;flex-shrink:0}
+
+/* ── BUTTONS ── */
+.btn{font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif;border:none;padding:7px 14px;border-radius:7px;cursor:pointer;transition:background .18s,opacity .18s;display:inline-flex;align-items:center;gap:5px;text-decoration:none;color:inherit;vertical-align:middle}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn:active{transform:scale(.98)}
+.bg{background:var(--gold);color:var(--on-accent)}.bg:hover:not(:disabled){background:var(--gold-l)}
+.bgh{background:transparent;color:var(--mu);border:1px solid var(--br)}.bgh:hover{border-color:var(--gb);color:var(--tx)}
+.bsm{padding:5px 10px;font-size:12px}
+.bgr{background:rgba(29,158,117,.12);color:var(--g);border:1px solid rgba(29,158,117,.2)}.bgr:hover{background:rgba(29,158,117,.2)}
+.brd{background:rgba(216,90,48,.1);color:var(--red);border:1px solid rgba(216,90,48,.18)}.brd:hover{background:rgba(216,90,48,.18)}
+.bbl{background:rgba(55,138,221,.12);color:#2E6EB5;border:1px solid rgba(55,138,221,.2)}.bbl:hover{background:rgba(55,138,221,.2)}
+
+/* ── STAT CARDS ── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.sc{background:var(--C);border:1px solid var(--br);border-radius:var(--r);padding:15px 18px}
+.sc-l{font-family:'DM Mono',monospace;font-size:9px;color:var(--di);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px}
+.sc-v{font-family:'DM Mono',monospace;font-size:24px;font-weight:500;line-height:1}
+.sc-v.go{color:var(--gold)}.sc-v.gr{color:var(--g)}.sc-v.re{color:var(--red)}
+.sc-s{font-size:11px;color:var(--di);margin-top:3px}
+
+/* ── TABLE ── */
+.tw{background:var(--C);border:1px solid var(--br);border-radius:var(--r);overflow:hidden;margin-bottom:16px}
+.tb{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--br);flex-wrap:wrap}
+.tb-t{font-size:13px;font-weight:500}
+table{width:100%;border-collapse:collapse}
+th{font-family:'DM Mono',monospace;font-size:9px;color:var(--di);text-transform:uppercase;letter-spacing:1.5px;padding:9px 14px;text-align:left;border-bottom:1px solid var(--br);background:rgba(22,32,28,.02);white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid var(--br2);font-size:13px;color:var(--mu);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(22,32,28,.015)}
+.tdp{color:var(--tx)}.tdm{font-family:'DM Mono',monospace;font-size:12px}
+.tda{display:flex;gap:5px;justify-content:flex-end}
+
+/* ── PILL ── */
+.pill{font-family:'DM Mono',monospace;font-size:9px;font-weight:500;padding:2px 6px;border-radius:3px;letter-spacing:.7px;white-space:nowrap;display:inline-block}
+.pp{background:rgba(186,117,23,.12);color:#BA7517;border:1px solid rgba(186,117,23,.22)}
+.pa{background:rgba(55,138,221,.12);color:#2E6EB5;border:1px solid rgba(55,138,221,.22)}
+.pd{background:rgba(29,158,117,.12);color:#1D9E75;border:1px solid rgba(29,158,117,.22)}
+.pu{background:rgba(22,32,28,.06);color:var(--di);border:1px solid var(--br)}
+.pfr{background:rgba(22,32,28,.06);color:var(--di);border:1px solid var(--br)}
+.ppa{background:var(--gd);color:var(--gold);border:1px solid var(--gb)}
+
+/* ── SCORE ── */
+.sw{display:flex;align-items:center;gap:6px}
+.sbr{flex:1;height:4px;background:rgba(22,32,28,.06);border-radius:2px;overflow:hidden}
+.sf{height:100%;border-radius:2px;transition:width .8s ease}
+.sn{font-family:'DM Mono',monospace;font-size:11px;font-weight:500;min-width:26px;text-align:right}
+
+/* ── CARD ── */
+.card{background:var(--C);border:1px solid var(--br);border-radius:var(--r);overflow:hidden;margin-bottom:14px}
+.card-h{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--br)}
+.card-t{font-size:13px;font-weight:500;color:var(--tx)}
+.card-b{padding:16px}
+
+/* ── FORM ── */
+.fg2{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:11px}
+.fg3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px;margin-bottom:11px}
+.f{display:flex;flex-direction:column;gap:4px}
+.f label{font-size:10px;color:var(--mu);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace}
+.f input,.f select,.f textarea{background:var(--C2);border:1px solid var(--br);border-radius:7px;padding:8px 12px;font-size:13px;color:var(--tx);font-family:'DM Sans',sans-serif;font-weight:300;outline:none;transition:border-color .18s;width:100%}
+.f input:focus,.f select:focus,.f textarea:focus{border-color:var(--gb)}
+.f input::placeholder,.f textarea::placeholder{color:var(--di)}
+.f select option{background:var(--C)}
+.f-full{grid-column:1/-1}
+
+/* ── UPLOAD ── */
+.uz{border:1.5px dashed var(--gb);border-radius:var(--r);padding:32px 20px;text-align:center;cursor:pointer;transition:border-color .18s,background .18s;background:var(--gd);margin-bottom:14px}
+.uz:hover,.uz.drag{border-color:var(--gold);background:rgba(201,168,76,.08)}
+.uz-ic{font-size:30px;margin-bottom:8px}
+.uz h3{font-family:'Playfair Display',serif;font-size:15px;font-weight:600;margin-bottom:4px}
+.uz p{font-size:12px;color:var(--mu)}
+.fmts{display:flex;gap:4px;justify-content:center;margin-top:7px;flex-wrap:wrap}
+.fmts span{font-family:'DM Mono',monospace;font-size:9px;color:var(--gold);background:var(--C2);border:1px solid var(--gb);border-radius:3px;padding:1px 5px}
+
+/* ── AI CHECKS ── */
+.cks{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.ck{background:var(--C2);border:1px solid var(--br);border-radius:var(--r);padding:15px}
+.ck-t{font-family:'DM Mono',monospace;font-size:9px;color:var(--di);text-transform:uppercase;letter-spacing:2px;margin-bottom:7px}
+.ck-s{font-family:'DM Mono',monospace;font-size:26px;font-weight:500;line-height:1;margin-bottom:3px}
+.ck-c{display:flex;gap:5px;margin:7px 0;flex-wrap:wrap}
+.cn{font-family:'DM Mono',monospace;font-size:9px;padding:2px 5px;border-radius:3px;font-weight:500}
+.cc{background:rgba(216,90,48,.1);color:#D85A30;border:1px solid rgba(216,90,48,.18)}
+.cw{background:rgba(186,117,23,.1);color:#BA7517;border:1px solid rgba(186,117,23,.18)}
+.co{background:rgba(29,158,117,.1);color:#1D9E75;border:1px solid rgba(29,158,117,.18)}
+
+/* ── NEG POINTS ── */
+.neg{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.ni2{background:var(--C);border:1px solid var(--br);border-radius:7px;padding:10px 12px}
+.ni2-h{display:flex;align-items:flex-start;gap:7px;margin-bottom:4px}
+.ni2-t{font-size:13px;font-weight:500;color:var(--tx);flex:1;line-height:1.4}
+.ni2-s{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:var(--g);flex-shrink:0}
+.ni2-d{font-size:9px;padding:2px 5px;border-radius:3px;font-family:'DM Mono',monospace;font-weight:500;flex-shrink:0}
+.de{background:rgba(29,158,117,.12);color:#1D9E75}
+.dm{background:rgba(186,117,23,.12);color:#BA7517}
+.dh{background:rgba(216,90,48,.12);color:#D85A30}
+.em-box{font-size:11px;color:#2E6EB5;background:rgba(55,138,221,.06);border-left:2px solid #378ADD;padding:5px 9px;border-radius:0 5px 5px 0;cursor:pointer;font-style:italic;line-height:1.5;transition:background .15s}
+.em-box:hover{background:rgba(55,138,221,.12)}
+
+/* ── STRATEGY ── */
+.strat{background:rgba(139,92,246,.06);border:1px solid rgba(139,92,246,.15);border-radius:7px;padding:11px 14px;margin:8px 0}
+.strat-l{font-family:'DM Mono',monospace;font-size:9px;color:#6B46C1;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px}
+.strat-t{font-size:13px;color:var(--mu);line-height:1.65}
+
+/* ── ISSUES ── */
+.iss{display:flex;flex-direction:column;gap:4px;margin-top:7px}
+.is{padding:6px 10px;border-radius:5px;border-left:2px solid}
+.ic{background:rgba(216,90,48,.05);border-color:var(--red)}
+.iw{background:rgba(186,117,23,.05);border-color:var(--am)}
+.is-t{font-size:12px;font-weight:500;color:var(--tx);margin-bottom:1px}
+.is-d{font-size:11px;color:var(--di);line-height:1.45}
+.is-r{font-size:11px;color:#2E6EB5;margin-top:1px}
+
+/* ── SAVINGS HL ── */
+.sh{display:flex;gap:16px;background:rgba(29,158,117,.07);border:1px solid rgba(29,158,117,.15);border-radius:8px;padding:12px 16px;margin-bottom:13px;flex-wrap:wrap}
+.sh-i{display:flex;flex-direction:column;gap:2px}
+.sh-l{font-family:'DM Mono',monospace;font-size:9px;color:rgba(92,202,165,.7);text-transform:uppercase;letter-spacing:1.5px}
+.sh-v{font-family:'DM Mono',monospace;font-size:17px;font-weight:500;color:var(--g)}
+
+/* ── SUPPLIER CARD ── */
+.sup-c{background:var(--C2);border:1px solid var(--br);border-radius:var(--r);padding:13px 15px;display:flex;align-items:center;gap:12px;margin-bottom:7px;transition:border-color .18s}
+.sup-c:hover{border-color:var(--gb)}
+.sup-av{width:34px;height:34px;border-radius:7px;background:var(--gd);border:1px solid var(--gb);display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:11px;font-weight:500;color:var(--gold);flex-shrink:0}
+.sup-n{font-size:13px;font-weight:500;color:var(--tx)}
+.sup-m{font-size:11px;color:var(--mu);margin-top:1px}
+
+/* ── PO CARDS ── */
+.po-c{background:var(--C);border:1px solid var(--br);border-radius:var(--r);padding:14px 16px;display:flex;align-items:center;gap:14px;margin-bottom:7px;transition:border-color .18s,transform .18s;cursor:pointer}
+.po-c:hover{border-color:var(--gb);transform:translateY(-1px)}
+.po-icon{width:34px;height:34px;border-radius:7px;background:rgba(201,168,76,.08);border:1px solid var(--gb);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.po-num{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:var(--gold)}
+.po-sup{font-size:13px;color:var(--tx);margin-top:1px}
+.po-m{font-size:11px;color:var(--mu);margin-top:1px}
+
+/* ── MODAL ── */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:500;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.ov.show{opacity:1;pointer-events:all}
+.modal{background:var(--C);border:1px solid var(--br);border-radius:12px;padding:24px;width:100%;max-width:500px;max-height:90vh;overflow-y:auto}
+.modal-t{font-family:'Playfair Display',serif;font-size:17px;font-weight:600;margin-bottom:16px}
+.modal-a{display:flex;gap:7px;margin-top:16px;justify-content:flex-end}
+
+/* ── BACK ── */
+.back{display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--mu);background:transparent;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;margin-bottom:16px;padding:0;transition:color .18s}
+.back:hover{color:var(--tx)}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:2px;background:rgba(22,32,28,.04);border-radius:8px;padding:3px;margin-bottom:18px}
+.tab{flex:1;text-align:center;padding:7px;font-size:12px;font-weight:500;cursor:pointer;border-radius:6px;transition:background .18s,color .18s;color:var(--mu);border:none;background:transparent;font-family:'DM Sans',sans-serif}
+.tab.on{background:var(--gold);color:var(--on-accent)}
+
+.card-f{padding:10px 14px;border-top:1px solid var(--br2);display:flex;gap:8px}
+/* ── POLLING ── */
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--bl);animation:pulse 1.2s ease infinite;display:inline-block}
+.run-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#2E6EB5}
+
+/* ── MISC ── */
+@keyframes spin{to{transform:rotate(360deg)}}
+.sp{width:16px;height:16px;border:2px solid var(--br);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle}
+.ld{display:flex;align-items:center;justify-content:center;padding:44px;gap:8px;color:var(--mu);font-size:13px}
+.empty{text-align:center;padding:52px 20px}
+.ei{font-size:38px;display:block;margin-bottom:13px;opacity:.4}
+.et{font-family:'Playfair Display',serif;font-size:17px;font-weight:600;margin-bottom:6px}
+.es{font-size:13px;color:var(--mu);margin-bottom:20px;line-height:1.6}
+.srch{background:var(--C2);border:1px solid var(--br);border-radius:7px;padding:6px 11px;font-size:13px;color:var(--tx);font-family:'DM Sans',sans-serif;outline:none;width:185px;transition:border-color .18s}
+.srch:focus{border-color:var(--gb)}
+.srch::placeholder{color:var(--di)}
+.tag{font-size:11px;background:var(--C2);border:1px solid var(--br);border-radius:3px;padding:2px 6px;color:var(--mu)}
+.sep{height:1px;background:var(--br);margin:12px 0}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--br2);font-size:13px}
+.info-row:last-child{border-bottom:none}
+.info-k{color:var(--mu)}.info-v{color:var(--tx);text-align:right}
+.toast{position:fixed;bottom:16px;right:16px;z-index:999;background:var(--C);border:1px solid var(--gb);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--tx);max-width:270px;opacity:0;transform:translateY(6px);transition:opacity .22s,transform .22s;pointer-events:none}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.ok{border-color:rgba(29,158,117,.5);color:#1D9E75}
+.toast.err{border-color:rgba(216,90,48,.5);color:#D85A30}
+.badge-wrap{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+
+@media(max-width:900px){nav{display:none}main{margin-left:0}.stats,.cks,.fg2,.fg3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/" class="logo">Negotiate<em>X</em>.ai</a>
+  <div class="hdr-sep"></div>
+  <span class="hdr-pg" id="hdr-pg">Dashboard</span>
+  <div class="hdr-r">
+    <div class="chip" onclick="go('settings')">
+      <div class="av" id="av">?</div>
+      <div style="display:flex;flex-direction:column;line-height:1.2">
+        <span class="chip-n" id="chip-n">—</span>
+        <span class="chip-p" id="chip-p">—</span>
+      </div>
+    </div>
+    <a href="/admin" class="h-btn h-btn-n" id="admin-link" style="display:none">Admin →</a>
+    <button class="h-btn" onclick="logout()">Abmelden</button>
+  </div>
+</header>
+
+<nav id="sidebar">
+  <div class="ns">Analyse</div>
+  <button class="ni on" data-p="overview"><span class="ni-ic">📊</span>Übersicht</button>
+  <button class="ni" data-p="upload"><span class="ni-ic">📤</span>Neue Analyse</button>
+  <button class="ni" data-p="audits"><span class="ni-ic">📋</span>Analysen<span class="ni-b" id="nb-a">0</span></button>
+  <div class="ns">Einkauf</div>
+  <button class="ni" data-p="suppliers"><span class="ni-ic">🏢</span>Lieferanten<span class="ni-b" id="nb-s">0</span></button>
+  <button class="ni" data-p="pos"><span class="ni-ic">📄</span>Purchase Orders<span class="ni-b" id="nb-p">0</span></button>
+  <div class="ns">Konto</div>
+  <button class="ni" data-p="settings"><span class="ni-ic">⚙️</span>Einstellungen</button>
+  <a href="/" class="ni"><span class="ni-ic">🌐</span>Zur Website</a>
+  <div class="nfoot"><div class="nfoot-e" id="nfoot-e">—</div></div>
+</nav>
+
+<main>
+
+<!-- ══════ OVERVIEW ══════ -->
+<div class="panel on" id="panel-overview">
+  <div class="ph">
+    <div><h1 class="ph-t" id="welcome">Willkommen zurück.</h1><p class="ph-s">Ihre Beschaffungsanalysen im Überblick.</p></div>
+    <div class="ph-a"><button class="btn bg" onclick="go('upload')">+ Neue Analyse</button></div>
+  </div>
+  <div class="stats">
+    <div class="sc"><div class="sc-l">Analysen gesamt</div><div class="sc-v" id="o-tot">—</div></div>
+    <div class="sc"><div class="sc-l">Abgeschlossen</div><div class="sc-v gr" id="o-don">—</div></div>
+    <div class="sc"><div class="sc-l">Einsparungen ident.</div><div class="sc-v go" id="o-sav">—</div></div>
+    <div class="sc"><div class="sc-l">Dokumente analysiert</div><div class="sc-v" id="o-doc">—</div></div>
+  </div>
+  <div class="ph" style="margin-bottom:10px"><h2 style="font-size:14px;font-weight:500">Letzte Analysen</h2><button class="btn bgh bsm" onclick="go('audits')">Alle →</button></div>
+  <div id="o-list"><div class="ld"><span class="sp"></span>Wird geladen...</div></div>
+</div>
+
+<!-- ══════ UPLOAD ══════ -->
+<div class="panel" id="panel-upload">
+  <div class="ph"><div><h1 class="ph-t">Neue Analyse starten</h1><p class="ph-s">Lieferantendokument hochladen — KI analysiert automatisch in 2–5 Min.</p></div></div>
+  <div style="max-width:700px">
+    <div class="uz" id="uz" onclick="document.getElementById('fi').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="onDrop(event)">
+      <div class="uz-ic">📎</div>
+      <h3 id="uz-t">Dokument ablegen oder klicken</h3>
+      <p>Verträge, Rechnungen, Angebote, Rahmenvereinbarungen</p>
+      <div class="fmts"><span>PDF</span><span>XLSX</span><span>CSV</span><span>DOC</span></div>
+      <input type="file" id="fi" style="display:none" accept=".pdf,.xlsx,.xls,.csv,.doc,.docx" multiple onchange="onFiles(this.files)">
+    </div>
+    <div class="card">
+      <div class="card-h"><span class="card-t">📋 Projekt & Jobnummer</span></div>
+      <div class="card-b">
+        <div class="fg2">
+          <div class="f"><label>Jobnummer / Projektnr.</label><input id="f-job" placeholder="z.B. JOB-2025-042"></div>
+          <div class="f"><label>Kategorie</label><select id="f-cat">
+            <option value="General">Allgemein</option><option value="Software & IT">Software & IT</option>
+            <option value="Marketing">Marketing & Agenturen</option><option value="Lead-Einkauf">Lead-Einkauf</option>
+            <option value="Logistik">Logistik & Produktion</option><option value="Professional Services">Professional Services</option>
+            <option value="Energie">Energie & Utilities</option><option value="Telekommunikation">Telekommunikation</option>
+          </select></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><span class="card-t">🏢 Lieferantendaten</span></div>
+      <div class="card-b">
+        <div class="fg2">
+          <div class="f"><label>Lieferantenname</label><input id="f-sup" placeholder="ACME Logistics GmbH"></div>
+          <div class="f"><label>Ansprechpartner</label><input id="f-con" placeholder="Max Müller"></div>
+        </div>
+        <div class="fg3">
+          <div class="f"><label>Gesamtwert netto (€)</label><input type="number" id="f-val" placeholder="48000"></div>
+          <div class="f"><label>Laufzeit</label><input id="f-dur" placeholder="12 Monate"></div>
+          <div class="f"><label>Kostenstelle</label><input id="f-cc" placeholder="KST-100"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><span class="card-t">📝 Briefing & Analyse-Fokus</span></div>
+      <div class="card-b">
+        <div class="f f-full" style="margin-bottom:10px"><label>Was soll analysiert werden?</label><textarea id="f-brief" rows="3" placeholder="z.B. Wir arbeiten seit 3 Jahren mit diesem IT-Dienstleister. Ich vermute die Stundensätze Senior-Entwickler sind nicht mehr marktgerecht. Fokus auf Stundensätze und SLA-Konditionen."></textarea></div>
+        <div class="fg2">
+          <div class="f"><label>Vergleichsangebot vorhanden?</label><select id="f-comp"><option value="no">Nein</option><option value="yes">Ja — im Briefing beschrieben</option></select></div>
+          <div class="f"><label>Ziel-Einsparung</label><input id="f-tgt" placeholder="z.B. 15% oder €10.000/Jahr"></div>
+        </div>
+      </div>
+    </div>
+    <button class="btn bg" id="up-btn" onclick="doUpload()" style="width:100%;padding:12px;font-size:14px;margin-top:4px">→ Analyse starten</button>
+    <p style="font-size:11px;color:var(--di);text-align:center;margin-top:8px">Analyse startet automatisch: Preisbewertung · Einsparpotenzial · Vertragsbedingungen · Gesamtbewertung</p>
+  </div>
+</div>
+
+<!-- ══════ AUDITS LIST ══════ -->
+<div class="panel" id="panel-audits">
+  <div class="ph">
+    <div><h1 class="ph-t">Meine Analysen</h1><p class="ph-s">Alle Beschaffungsanalysen und KI-Ergebnisse.</p></div>
+    <div class="ph-a"><input class="srch" placeholder="Suchen..." oninput="filterRows('a-tbody',this.value)"><button class="btn bg bsm" onclick="go('upload')">+ Neu</button></div>
+  </div>
+  <div class="tw">
+    <table><thead><tr><th>Analyse / Unternehmen</th><th>Job-Nr.</th><th>Lieferant</th><th>Kat.</th><th>Status</th><th>Einsparung</th><th>Score</th><th>Erstellt</th><th></th></tr></thead>
+    <tbody id="a-tbody"><tr><td colspan="9"><div class="ld"><span class="sp"></span></div></td></tr></tbody></table>
+  </div>
+</div>
+
+<!-- ══════ AUDIT DETAIL ══════ -->
+<div class="panel" id="panel-detail">
+  <button class="back" onclick="go('audits')">← Zurück</button>
+  <div id="det"></div>
+</div>
+
+<!-- ══════ SUPPLIERS ══════ -->
+<div class="panel" id="panel-suppliers">
+  <div class="ph">
+    <div><h1 class="ph-t">Lieferanten</h1><p class="ph-s">Analysierte Lieferanten und ihre Score-Historie.</p></div>
+    <div class="ph-a"><button class="btn bgh bsm" onclick="openMod('sup-ov')">+ Lieferant anlegen</button></div>
+  </div>
+  <div id="sup-list"><div class="ld"><span class="sp"></span></div></div>
+</div>
+
+<!-- ══════ PURCHASE ORDERS ══════ -->
+<div class="panel" id="panel-pos">
+  <div class="ph">
+    <div><h1 class="ph-t">Purchase Orders</h1><p class="ph-s">Alle erstellten Bestellungen.</p></div>
+    <div class="ph-a"><button class="btn bg bsm" onclick="openMod('po-ov')">+ PO erstellen</button></div>
+  </div>
+  <div id="po-list"><div class="ld"><span class="sp"></span></div></div>
+</div>
+
+<!-- ══════ PO DETAIL ══════ -->
+<div class="panel" id="panel-po-detail">
+  <button class="back" onclick="go('pos')">← Zurück zu POs</button>
+  <div id="po-det"></div>
+</div>
+
+<!-- ══════ SETTINGS ══════ -->
+<div class="panel" id="panel-settings">
+  <div class="ph"><div><h1 class="ph-t">Einstellungen</h1><p class="ph-s">Ihr Profil und Konto.</p></div></div>
+  <div style="max-width:460px">
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-h"><span class="card-t">Profil</span></div>
+      <div class="card-b">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--br)">
+          <div class="av" style="width:46px;height:46px;font-size:15px;border-radius:50%" id="s-av">?</div>
+          <div><div style="font-size:14px;font-weight:500" id="s-nm">—</div><div style="font-size:12px;color:var(--mu)" id="s-em">—</div></div>
+        </div>
+        <div class="fg2" style="margin-bottom:10px">
+          <div class="f"><label>Name</label><input id="s-ni"></div>
+          <div class="f"><label>Unternehmen</label><input id="s-ci"></div>
+        </div>
+        <div class="f" style="margin-bottom:14px"><label>Plan</label><input id="s-pl" disabled style="color:var(--gold);opacity:1"></div>
+        <button class="btn bg" onclick="toast('Gespeichert ✓','ok')">Speichern</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><span class="card-t">Passwort & Sicherheit</span></div>
+      <div class="card-b">
+        <p style="font-size:13px;color:var(--mu);margin-bottom:14px">Passwort-Änderung kommt in Kürze.</p>
+        <button class="h-btn" style="width:100%;padding:11px;font-size:13px;border-radius:7px" onclick="logout()">Abmelden</button>
+      </div>
+    </div>
+      <div class="card" style="margin-top:16px">
+        <div class="card-h"><div class="sh-l" style="font-size:13px;font-weight:600">API-Keys</div><button class="btn bg bsm" onclick="createApiKey()">+ Neu erstellen</button></div>
+        <div style="padding:12px">
+          <input id="ak-name" placeholder="Key-Name (z.B. 'Meine Integration')" style="width:100%;padding:6px 10px;background:var(--C2);border:1px solid var(--br);border-radius:6px;color:var(--tx);font-size:12px;margin-bottom:10px;box-sizing:border-box">
+          <div id="ak-list" style="font-size:12px;color:var(--di)">Laden...</div>
+          <div id="ak-new" style="display:none;background:var(--C2);border:1px solid var(--br);border-radius:6px;padding:10px;margin-top:10px">
+            <div style="font-size:11px;color:var(--di);margin-bottom:4px">Neuer API-Key (nur einmal sichtbar!):</div>
+            <code id="ak-val" style="font-size:12px;color:var(--g);word-break:break-all"></code>
+          </div>
+        </div>
+      </div>
+  </div>
+</div>
+
+</main>
+
+<!-- ══════ PO MODAL ══════ -->
+<div class="ov" id="po-ov">
+  <div class="modal">
+    <div class="modal-t">Purchase Order erstellen</div>
+    <input type="hidden" id="po-aid">
+    <input type="hidden" id="po-oid">
+    <div class="fg2">
+      <div class="f"><label>PO-Nummer (optional)</label><input id="po-num" placeholder="Auto: PO-2025-00001"></div>
+      <div class="f"><label>Jobnummer</label><input id="po-job"></div>
+    </div>
+    <div class="fg2">
+      <div class="f"><label>Lieferant</label><input id="po-sup"></div>
+      <div class="f"><label>Betrag netto (€) *</label><input type="number" id="po-amt" placeholder="0.00"></div>
+    </div>
+    <div class="fg2">
+      <div class="f"><label>Besteller</label><input id="po-ord"></div>
+      <div class="f"><label>Kostenstelle</label><input id="po-cc"></div>
+    </div>
+    <div class="fg2">
+      <div class="f"><label>Lieferdatum</label><input type="date" id="po-del"></div>
+      <div class="f"><label>MwSt. (%)</label><input type="number" id="po-tax" value="19"></div>
+    </div>
+    <div class="f" style="margin-bottom:0"><label>Notizen / Beschreibung</label><textarea id="po-not" rows="2" placeholder="Gemäß Angebot vom..."></textarea></div>
+    <div class="modal-a">
+      <button class="btn bgh" onclick="closeMod('po-ov')">Abbrechen</button>
+      <button class="btn bg" onclick="savePo()">PO erstellen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ SUPPLIER MODAL ══════ -->
+<div class="ov" id="sup-ov">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-t">Lieferant anlegen</div>
+
+    <div style="font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--mu);text-transform:uppercase;margin:0 0 8px">Firmendaten</div>
+    <div class="fg2">
+      <div class="f"><label>Unternehmen *</label><input id="sm-n" placeholder="ACME GmbH"></div>
+      <div class="f"><label>Rechtsform</label><select id="sm-lf"><option value="">—</option><option>GmbH</option><option>AG</option><option>UG (haftungsbeschränkt)</option><option>GmbH & Co. KG</option><option>KG</option><option>OHG</option><option>e.K.</option><option>Einzelunternehmen</option><option>GbR</option><option>Sonstige</option></select></div>
+    </div>
+    <div class="fg2">
+      <div class="f"><label>Kategorie</label><select id="sm-c"><option>Allgemein</option><option>Software & IT</option><option>Marketing</option><option>Logistik</option><option>Professional Services</option><option>Energie</option></select></div>
+      <div class="f"><label>Mitarbeiterzahl</label><input type="number" min="0" id="sm-ec" placeholder="z. B. 50"></div>
+    </div>
+    <div class="f"><label>Adresse</label><textarea id="sm-a" rows="2" placeholder="Musterstr. 1, 50667 Köln"></textarea></div>
+
+    <div style="font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--mu);text-transform:uppercase;margin:14px 0 8px">Kontakt</div>
+    <div class="fg2">
+      <div class="f"><label>Kontaktperson</label><input id="sm-k" placeholder="Max Müller"></div>
+      <div class="f"><label>E-Mail</label><input type="email" id="sm-e" placeholder="max@acme.de"></div>
+    </div>
+    <div class="fg2">
+      <div class="f"><label>Telefon</label><input id="sm-ph" placeholder="+49 221 1234567"></div>
+      <div class="f"><label>Website</label><input id="sm-web" placeholder="https://acme.de"></div>
+    </div>
+
+    <div style="font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--mu);text-transform:uppercase;margin:14px 0 8px">Steuerliche & rechtliche Angaben</div>
+    <div class="fg2">
+      <div class="f"><label>Steuernummer</label><input id="sm-tax" placeholder="123/456/78910"></div>
+      <div class="f"><label>USt-IdNr.</label><input id="sm-vat" placeholder="DE123456789"></div>
+    </div>
+    <div class="fg2">
+      <div class="f"><label>D-U-N-S-Nummer</label><input id="sm-duns" placeholder="123456789"></div>
+      <div class="f"><label>Handelsregisternummer</label><input id="sm-hrb" placeholder="HRB 12345"></div>
+    </div>
+    <div class="f" style="display:flex;align-items:center;gap:8px;flex-direction:row">
+      <input type="checkbox" id="sm-wst" style="width:auto">
+      <label style="margin:0">Quellensteuerpflichtig (§ 48 EStG / § 50a EStG)</label>
+    </div>
+
+    <div style="font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--mu);text-transform:uppercase;margin:14px 0 8px">Bankverbindung</div>
+    <div class="fg2">
+      <div class="f"><label>IBAN</label><input id="sm-iban" placeholder="DE02 1203 0000 0000 2020 51"></div>
+      <div class="f"><label>BIC</label><input id="sm-bic" placeholder="BYLADEM1001"></div>
+    </div>
+    <div class="fg2">
+      <div class="f"><label>Bank</label><input id="sm-bank" placeholder="Deutsche Kreditbank"></div>
+      <div class="f"><label>Zahlungsziel (Tage)</label><input type="number" min="0" id="sm-pt" placeholder="30"></div>
+    </div>
+
+    <div style="font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--mu);text-transform:uppercase;margin:14px 0 8px">Sonstiges</div>
+    <div class="f" style="margin-bottom:0"><label>Notizen</label><textarea id="sm-notes" rows="2" placeholder="Interne Anmerkungen"></textarea></div>
+
+    <div class="modal-a">
+      <button class="btn bgh" onclick="closeMod('sup-ov')">Abbrechen</button>
+      <button class="btn bg" id="sup-save-btn" onclick="saveSup()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════ COUNTER-OFFER MODAL ══════ -->
+<div class="ov" id="co-ov">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-t">🤝 Verhandlungspaket</div>
+    <div id="co-body" style="max-height:60vh;overflow-y:auto;padding:4px 0"></div>
+    <div class="modal-a">
+      <button class="btn bgh" onclick="closeMod('co-ov')">Schließen</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toastel"></div>
+
+<script>
+// ── Auth ──────────────────────────────────────────────────────────────────
+const token = localStorage.getItem('nx_token');
+const user  = JSON.parse(localStorage.getItem('nx_user') || 'null');
+if (!token || !user) location.href = '/login';
+
+// ── State ─────────────────────────────────────────────────────────────────
+let audits = [], poList = [], supList = [], pollT = null;
+
+// ── Init ──────────────────────────────────────────────────────────────────
+function init() {
+  const ini = (user.name||user.email||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  ['av','s-av'].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=ini;});
+  document.getElementById('chip-n').textContent = user.name||user.email;
+  document.getElementById('chip-p').textContent = user.plan==='paid'?'Paid ✓':'Free';
+  document.getElementById('nfoot-e').textContent = user.email;
+  document.getElementById('s-nm').textContent = user.name||'—';
+  document.getElementById('s-em').textContent = user.email||'—';
+  const sni=document.getElementById('s-ni'); if(sni)sni.value=user.name||'';
+  const sci=document.getElementById('s-ci'); if(sci)sci.value=user.company_name||'';
+  const spl=document.getElementById('s-pl'); if(spl)spl.value=user.plan==='paid'?'Paid ✓':'Free';
+  document.getElementById('welcome').textContent=`Willkommen, ${user.name?.split(' ')[0]||'zurück'}.`;
+  document.getElementById('po-ord').value=user.name||'';
+  if (user.is_admin) document.getElementById('admin-link').style.display='';
+
+  // Sidebar
+  document.querySelectorAll('.ni[data-p]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.p)));
+
+  loadOverview();
+  loadApiKeys();
+}
+
+// ── Nav ───────────────────────────────────────────────────────────────────
+const pageNames = {overview:'Übersicht',upload:'Neue Analyse',audits:'Analysen',suppliers:'Lieferanten',pos:'Purchase Orders',settings:'Einstellungen',detail:'Detail',['po-detail']:'PO Detail'};
+
+function go(p) {
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.ni[data-p]').forEach(x=>x.classList.remove('on'));
+  const panel=document.getElementById('panel-'+p);
+  if(panel) panel.classList.add('on');
+  document.querySelectorAll(`.ni[data-p="${p}"]`).forEach(x=>x.classList.add('on'));
+  document.getElementById('hdr-pg').textContent=pageNames[p]||p;
+  if(p==='overview')  loadOverview();
+  if(p==='audits')    loadAudits();
+  if(p==='suppliers') loadSuppliers();
+  if(p==='pos')       loadPos();
+}
+
+// ── API ───────────────────────────────────────────────────────────────────
+async function api(path, opts={}) {
+  try {
+    const r = await fetch(path, {
+      ...opts,
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`,...(opts.headers||{})}
+    });
+    if(r.status===401){logout();return null;}
+    const t = await r.text();
+    return t?JSON.parse(t):null;
+  } catch(e){console.error(path,e);return null;}
+}
+
+function sc(s){return s>=70?'var(--g)':s>=40?'var(--am)':'var(--red)';}
+function fmt(n){return n?'€'+Math.round(n).toLocaleString('de'):'—';}
+function fdate(d){return d?new Date(d).toLocaleDateString('de'):'—';}
+
+// ── Overview ──────────────────────────────────────────────────────────────
+async function loadOverview() {
+  const data = await api('/api/audit/list');
+  if(!data){document.getElementById('o-list').innerHTML='<div class="ld" style="color:var(--di)">Fehler beim Laden.</div>';return;}
+  audits=data;
+  document.getElementById('nb-a').textContent=data.length;
+  const done=data.filter(a=>a.offers?.some(o=>o.ai_score)).length;
+  const docs=data.reduce((s,a)=>s+(a.offers?.length||0),0);
+  const sav=data.reduce((s,a)=>s+(a.total_savings_identified||0),0);
+  document.getElementById('o-tot').textContent=data.length;
+  document.getElementById('o-don').textContent=done;
+  document.getElementById('o-doc').textContent=docs;
+  document.getElementById('o-sav').textContent=sav?fmt(sav):'—';
+  const el=document.getElementById('o-list');
+  if(!data.length){el.innerHTML=`<div class="empty"><span class="ei">📄</span><h3 class="et">Noch keine Analysen</h3><p class="es">Laden Sie Ihre ersten Lieferantendokumente hoch.</p><button class="btn bg" onclick="go('upload')">Erste Analyse starten</button></div>`;return;}
+  el.innerHTML=`<div class="tw"><table><thead><tr><th>Analyse</th><th>Job-Nr.</th><th>Status</th><th>Einsparung</th><th>Score</th><th>Erstellt</th><th></th></tr></thead><tbody>${data.slice(0,5).map(a=>arow(a,true)).join('')}</tbody></table></div>`;
+  checkPoll(data);
+}
+
+// ── Audits ────────────────────────────────────────────────────────────────
+async function loadAudits() {
+  const tb=document.getElementById('a-tbody');
+  tb.innerHTML='<tr><td colspan="9"><div class="ld"><span class="sp"></span></div></td></tr>';
+  const data=await api('/api/audit/list');
+  if(!data){tb.innerHTML='<tr><td colspan="9" style="text-align:center;padding:28px;color:var(--di)">Fehler beim Laden.</td></tr>';return;}
+  audits=data;
+  document.getElementById('nb-a').textContent=data.length;
+  if(!data.length){tb.innerHTML='<tr><td colspan="9"><div class="empty" style="padding:36px"><span class="ei">📋</span><h3 class="et">Keine Analysen</h3><p class="es">Starten Sie Ihre erste Analyse.</p><button class="btn bg" onclick="go(\'upload\')">Analyse starten</button></div></td></tr>';return;}
+  tb.innerHTML=data.map(a=>arow(a,false)).join('');
+  checkPoll(data);
+}
+
+function arow(a,short) {
+  const name=a.questionnaire?.company_name||'Analyse';
+  const job=a.offers?.[0]?.job_number||a.questionnaire?.job_number||'—';
+  const sup=a.offers?.[0]?.supplier_name||'—';
+  const cat=a.offers?.[0]?.category||a.questionnaire?.industry||'—';
+  const docs=a.offers?.length||0;
+  const scored=a.offers?.filter(o=>o.ai_score)||[];
+  const avg=scored.length?Math.round(scored.reduce((s,o)=>s+(o.ai_score||0),0)/scored.length):0;
+  const sav=a.total_savings_identified;
+  const run=a.offers?.some(o=>o.status==='analyzing');
+  const stc=run?'pa':scored.length?'pd':a.status==='pending'?'pp':'pu';
+  const stl=run?'Läuft...':scored.length?'Fertig':a.status==='pending'?'Ausstehend':'Hochgeladen';
+  const date=fdate(a.created_at);
+  if(short) return `<tr><td><div class="tdp">${name}</div><div style="font-size:11px;color:var(--di)">${docs} Dok.</div></td><td class="tdm">${job}</td><td>${run?`<span class="run-badge"><span class="dot"></span>Läuft...</span>`:`<span class="pill ${stc}">${stl}</span>`}</td><td class="tdm">${sav?`<span style="color:var(--g)">${fmt(sav)}</span>`:'—'}</td><td>${avg?`<div class="sw" style="width:80px"><div class="sbr"><div class="sf" style="width:${avg}%;background:${sc(avg)}"></div></div><span class="sn" style="color:${sc(avg)}">${avg}</span></div>`:'—'}</td><td class="tdm" style="font-size:11px">${date}</td><td><button class="btn bgh bsm" onclick="loadDet('${a.id}')">Details</button></td></tr>`;
+  return `<tr><td><div class="tdp">${name}</div><div style="font-size:11px;color:var(--di);margin-top:1px">${docs} Dok.</div></td><td class="tdm">${job}</td><td>${sup}</td><td><span class="tag">${cat}</span></td><td>${run?`<span class="run-badge"><span class="dot"></span>Läuft...</span>`:`<span class="pill ${stc}">${stl}</span>`}</td><td class="tdm">${sav?`<span style="color:var(--g)">${fmt(sav)}</span>`:'—'}</td><td>${avg?`<div class="sw" style="width:90px"><div class="sbr"><div class="sf" style="width:${avg}%;background:${sc(avg)}"></div></div><span class="sn" style="color:${sc(avg)}">${avg}</span></div>`:'—'}</td><td class="tdm" style="font-size:11px">${date}</td><td><div class="tda"><button class="btn bgh bsm" onclick="loadDet('${a.id}')">Details</button></div></td></tr>`;
+}
+
+function filterRows(id,q) {
+  document.querySelectorAll(`#${id} tr`).forEach(tr=>{tr.style.display=!q||tr.textContent.toLowerCase().includes(q.toLowerCase())?'':'none';});
+}
+
+// ── Detail ────────────────────────────────────────────────────────────────
+async function loadDet(id) {
+  go('detail');
+  const el=document.getElementById('det');
+  el.innerHTML='<div class="ld"><span class="sp"></span>Wird geladen...</div>';
+  const a=await api(`/api/audit/audit/${id}`);
+  if(!a){el.innerHTML='<div class="ld" style="color:var(--di)">Fehler.</div>';return;}
+  renderDet(a);
+  // Poll if analyzing
+  if(a.offers?.some(o=>o.status==='analyzing')) {
+    a.offers.filter(o=>o.status==='analyzing').forEach(o=>connectOfferWS(o.id));
+    startPoll(id);
+  }
+}
+
+function renderDet(a) {
+  const el=document.getElementById('det');
+  const name=a.questionnaire?.company_name||'Analyse';
+  const job=a.offers?.[0]?.job_number||a.questionnaire?.job_number||'—';
+  const sav=a.total_savings_identified||0;
+  let h=`<div class="ph"><div><h1 class="ph-t">${name}</h1><p class="ph-s">Job-Nr: ${job} · ${fdate(a.created_at)}</p></div><div class="ph-a"><button class="btn bgh bsm" onclick="prefillPo('${a.id}');openMod('po-ov')">📄 PO erstellen</button><button class="btn bgh bsm" onclick="go('upload')">+ Weiteres Dok.</button></div></div>`;
+  if(sav>0) h+=`<div class="sh"><div class="sh-i"><div class="sh-l">Einsparpotenzial (realistisch)</div><div class="sh-v">${fmt(sav)}</div></div>${a.savings_percentage?`<div class="sh-i"><div class="sh-l">In % des Volumens</div><div class="sh-v">${a.savings_percentage.toFixed(1)} %</div></div>`:''}</div>`;
+  if(!a.offers?.length){h+=`<div class="empty"><span class="ei">📄</span><h3 class="et">Keine Dokumente</h3><p class="es">Laden Sie Dokumente für diese Analyse hoch.</p><button class="btn bg" onclick="go('upload')">Dokument hochladen</button></div>`;el.innerHTML=h;return;}
+  a.offers.forEach(o=>{
+    const osc=o.ai_score||0;
+    const run=o.status==='analyzing';
+    h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><div><div class="tdp">${o.title||'Dokument'}</div><div style="font-size:11px;color:var(--di);margin-top:1px">${o.category||''} ${o.total_net?'· €'+Number(o.total_net).toLocaleString('de'):''} ${o.job_number?'· '+o.job_number:''}</div></div>${run?`<span class="run-badge"><span class="dot"></span>KI analysiert...</span>`:osc?`<div class="sw" style="width:110px"><div class="sbr"><div class="sf" style="width:${osc}%;background:${sc(osc)}"></div></div><span class="sn" style="color:${sc(osc)}">${osc}/100</span></div>`:''}</div>`;
+    if(run){h+=`<div class="card-b"><div class="ld" style="padding:28px"><span class="sp"></span>KI analysiert — auto-aktualisiert alle 8 Sek.</div></div>`;}
+    else if(o.checks?.length){
+      h+=`<div class="card-b"><div class="cks">`;
+      const lbl={pricing:'Preisbewertung',savings:'Einsparpotenzial',terms:'Vertragsbedingungen',general:'Gesamtbewertung'};
+      o.checks.forEach(ck=>{
+        const s=ck.score||0;const c=sc(s);
+        h+=`<div class="ck"><div class="ck-t">${lbl[ck.check_type]||ck.check_type}</div><div class="ck-s" style="color:${c}">${s}<span style="font-size:13px;color:var(--di)">/100</span></div><div class="sbr" style="margin-bottom:7px"><div class="sf" style="width:${s}%;background:${c}"></div></div><div class="ck-c">${ck.critical_count?`<span class="cn cc">${ck.critical_count} Krit.</span>`:''}${ck.warning_count?`<span class="cn cw">${ck.warning_count} Warn.</span>`:''}${ck.ok_count?`<span class="cn co">${ck.ok_count} OK</span>`:''}</div>${ckBody(ck)}</div>`;
+      });
+      h+=`</div></div>`;
+    } else{h+=`<div class="card-b" style="color:var(--di);font-size:13px;padding:18px">Keine Analysedaten.</div>`;}
+    if(!run && (o.status==='analyzed'||o.status==='po_created')) h+=`<div class="card-f"><button class="btn bg bsm" onclick="generateCounterOffer('${o.id}','${(o.title||'Dokument').replace(/'/g,'\'')}')">🤝 Verhandlung generieren</button></div>`;
+    h+=`</div>`;
+  });
+  el.innerHTML=h;
+}
+
+function ckBody(ck){
+  const r=ck.result||{};
+  if(!r||r.error) return `<p style="font-size:11px;color:var(--di);margin-top:6px">Analyse fehlgeschlagen.</p>`;
+  if(ck.check_type==='savings'){
+    let h='';
+    if(r.realistic_savings_eur||r.max_savings_eur) h+=`<div style="display:flex;gap:11px;margin-bottom:7px">${r.realistic_savings_eur?`<div><div style="font-size:9px;color:var(--di);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">Realistisch</div><div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--g)">${fmt(r.realistic_savings_eur)}</div></div>`:''}${r.max_savings_eur?`<div><div style="font-size:9px;color:var(--di);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">Maximum</div><div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--g)">${fmt(r.max_savings_eur)}</div></div>`:''}</div>`;
+    if(r.negotiation_strategy) h+=`<div class="strat"><div class="strat-l">Verhandlungsstrategie</div><div class="strat-t">${r.negotiation_strategy}</div></div>`;
+    if(r.negotiation_points?.length){h+=`<div style="font-size:9px;color:var(--di);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">Verhandlungspunkte</div><div class="neg">`;r.negotiation_points.forEach(p=>{const dc={easy:'de',medium:'dm',hard:'dh'}[p.difficulty]||'dm';const dl={easy:'Einfach',medium:'Mittel',hard:'Schwer'}[p.difficulty]||'';h+=`<div class="ni2"><div class="ni2-h"><span class="ni2-t">${p.point}</span>${p.potential_saving?`<span class="ni2-s">${fmt(p.potential_saving)}</span>`:''}<span class="ni2-d ${dc}">${dl}</span></div>${p.suggested_email_text?`<div class="em-box" onclick="navigator.clipboard.writeText(this.dataset.t);toast('Kopiert ✓','ok')" data-t="${(p.suggested_email_text||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}" title="Klicken zum Kopieren">${p.suggested_email_text}</div>`:''}</div>`;});h+=`</div>`;}
+    if(r.quick_wins?.length){h+=`<div style="margin-top:7px"><div style="font-size:9px;color:var(--g);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace;margin-bottom:4px">Quick Wins</div>`;r.quick_wins.forEach(qw=>{h+=`<div style="font-size:11px;color:var(--g);padding:2px 0">✓ ${qw}</div>`;});h+=`</div>`;}
+    if(r.walk_away_point) h+=`<div style="margin-top:7px;font-size:11px;color:var(--di)">Walk-Away: ${r.walk_away_point}</div>`;
+    return h;
+  }
+  if(ck.check_type==='terms'){
+    let h='';
+    if(r.critical?.length){h+=`<div class="iss">`;r.critical.forEach(c=>{h+=`<div class="is ic"><div class="is-t">${c.clause||c}</div>${c.risk?`<div class="is-d">${c.risk}</div>`:''}${c.recommendation?`<div class="is-r">→ ${c.recommendation}</div>`:''}</div>`;});h+=`</div>`;}
+    if(r.warnings?.length){h+=`<div class="iss" style="margin-top:4px">`;r.warnings.slice(0,4).forEach(w=>{h+=`<div class="is iw"><div class="is-t">${w.clause||w}</div>${w.note?`<div class="is-d">${w.note}</div>`:''}</div>`;});h+=`</div>`;}
+    if(r.missing_clauses?.length) h+=`<div style="margin-top:6px;font-size:11px;color:var(--di)">Fehlende Klauseln: ${r.missing_clauses.join(', ')}</div>`;
+    if(r.overall_assessment) h+=`<p style="font-size:12px;color:var(--mu);line-height:1.6;margin-top:7px">${r.overall_assessment}</p>`;
+    return h;
+  }
+  if(ck.check_type==='pricing'){
+    let h=r.summary?`<p style="font-size:12px;color:var(--mu);line-height:1.6;margin-bottom:6px">${r.summary}</p>`:'';
+    if(r.overpriced_items?.length){h+=`<div class="iss">`;r.overpriced_items.forEach(i=>{h+=`<div class="is ic"><div class="is-t">${i.item||i}</div>${i.estimated_saving?`<div class="is-r" style="color:var(--g)">Potenzial: ${fmt(i.estimated_saving)}</div>`:''}${i.issue?`<div class="is-d">${i.issue}</div>`:''}</div>`;});h+=`</div>`;}
+    if(r.fair_items?.length) h+=`<div style="margin-top:5px;font-size:11px;color:var(--di)">Fair bewertet: ${r.fair_items.slice(0,3).join(', ')}</div>`;
+    return h;
+  }
+  if(ck.check_type==='general'){
+    let h=r.executive_summary?`<p style="font-size:12px;color:var(--mu);line-height:1.6;margin-bottom:7px">${r.executive_summary}</p>`:'';
+    if(r.recommendation){const rc={accept:'var(--g)',negotiate:'var(--am)',reject:'var(--red)'}[r.recommendation]||'var(--mu)';const rl={accept:'Akzeptieren',negotiate:'Nachverhandeln',reject:'Ablehnen'}[r.recommendation]||r.recommendation;h+=`<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:rgba(22,32,28,.04);border-radius:5px;margin-bottom:7px"><span style="font-size:11px;color:var(--di)">Empfehlung:</span><span style="font-size:12px;font-weight:500;color:${rc}">${rl}</span></div>`;}
+    if(r.strengths?.length) h+=`<div style="font-size:9px;color:var(--g);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace;margin-bottom:4px">Stärken</div>`+r.strengths.map(s=>`<div style="font-size:11px;color:var(--mu);padding:1px 0">+ ${s}</div>`).join('');
+    if(r.weaknesses?.length) h+=`<div style="font-size:9px;color:var(--red);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace;margin:5px 0 3px">Schwächen</div>`+r.weaknesses.map(w=>`<div style="font-size:11px;color:var(--mu);padding:1px 0">− ${w}</div>`).join('');
+    if(r.next_steps?.length){h+=`<div style="font-size:9px;color:var(--di);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace;margin:6px 0 4px">Nächste Schritte</div>`;r.next_steps.forEach(s=>{h+=`<div style="font-size:11px;color:var(--mu);padding:2px 0;display:flex;gap:5px"><span style="color:var(--gold)">→</span>${s}</div>`;});}
+    return h;
+  }
+  return '';
+}
+
+// WebSocket real-time updates (fallback to polling if WS unavailable)
+const _wsConns = {};
+function connectOfferWS(offerId) {
+  if (_wsConns[offerId]) return;
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  try {
+    const ws = new WebSocket(`${proto}//${location.host}/api/ws/offer/${offerId}`);
+    _wsConns[offerId] = ws;
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'analysis_complete') {
+          if (pollT) { clearInterval(pollT); pollT = null; }
+          loadDet(msg.offer_id);
+          toast('Analyse abgeschlossen! Score: ' + msg.score);
+        }
+      } catch {}
+    };
+    ws.onopen = () => { setInterval(() => ws.readyState === 1 && ws.send('ping'), 25000); };
+    ws.onerror = () => { delete _wsConns[offerId]; };
+    ws.onclose = () => { delete _wsConns[offerId]; };
+  } catch(e) { /* WS not available, polling handles it */ }
+}
+// ── Polling ───────────────────────────────────────────────────────────────
+function checkPoll(data){if(data.some(a=>a.offers?.some(o=>o.status==='analyzing'))&&!pollT)startPoll(null);}
+function startPoll(detailId){
+  if(pollT) return;
+  pollT=setInterval(async()=>{
+    const fresh=await api('/api/audit/list');
+    if(!fresh) return;
+    audits=fresh;
+    const still=fresh.some(a=>a.offers?.some(o=>o.status==='analyzing'));
+    if(!still){clearInterval(pollT);pollT=null;toast('Analyse abgeschlossen ✓','ok');}
+    const ap=document.querySelector('.panel.on');
+    if(ap?.id==='panel-overview') loadOverview();
+    if(ap?.id==='panel-audits')   {const tb=document.getElementById('a-tbody');if(tb)tb.innerHTML=fresh.map(a=>arow(a,false)).join('');}
+    if(ap?.id==='panel-detail'&&detailId){const fresh2=await api(`/api/audit/audit/${detailId}`);if(fresh2&&!fresh2.offers?.some(o=>o.status==='analyzing')){clearInterval(pollT);pollT=null;renderDet(fresh2);toast('Analyse fertig ✓','ok');}}
+  },8000);
+}
+
+// ── Upload ────────────────────────────────────────────────────────────────
+let files=[];
+function onFiles(f){files=Array.from(f);document.getElementById('uz-t').textContent=`${files.length} Datei${files.length>1?'en':''}: ${files.map(x=>x.name).join(', ')}`;}
+function onDrop(e){e.preventDefault();document.getElementById('uz').classList.remove('drag');onFiles(e.dataTransfer.files);}
+
+async function doUpload(){
+  if(!files.length){toast('Bitte Datei auswählen.','err');return;}
+  const btn=document.getElementById('up-btn');btn.disabled=true;btn.textContent='⏳ Wird hochgeladen...';
+  try{
+    const ar=await fetch('/api/audit/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      company_name:user.company_name||user.name,industry:document.getElementById('f-cat').value,
+      email:user.email,biggest_challenge:document.getElementById('f-brief').value,
+    })});
+    const ad=await ar.json();
+    if(!ad.audit_id) throw new Error('Audit-Erstellung fehlgeschlagen.');
+    for(const file of files){
+      const fd=new FormData();
+      fd.append('file',file);fd.append('audit_id',ad.audit_id);
+      fd.append('supplier_name',document.getElementById('f-sup').value||'');
+      fd.append('category',document.getElementById('f-cat').value);
+      fd.append('job_number',document.getElementById('f-job').value||'');
+      fd.append('auto_analyze','true');
+      const r=await fetch('/api/audit/upload-offer',{method:'POST',headers:{'Authorization':`Bearer ${token}`},body:fd});
+      if(!r.ok) throw new Error('Upload fehlgeschlagen.');
+    }
+    toast('Hochgeladen! Analyse gestartet ✓','ok');
+    files=[];
+    document.getElementById('uz-t').textContent='Dokument ablegen oder klicken';
+    ['f-job','f-sup','f-con','f-val','f-dur','f-cc','f-tgt'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+    document.getElementById('f-brief').value='';
+    btn.disabled=false;btn.textContent='→ Analyse starten';
+    setTimeout(()=>go('audits'),1200);
+  }catch(e){toast('Fehler: '+e.message,'err');btn.disabled=false;btn.textContent='→ Analyse starten';}
+}
+
+// ── Suppliers ─────────────────────────────────────────────────────────────
+async function loadSuppliers(){
+  const el=document.getElementById('sup-list');
+  el.innerHTML='<div class="ld"><span class="sp"></span></div>';
+  const realSups=await api('/api/suppliers/list')||[];
+  // Overlay analysis stats (count/avg score) from offers that happen to match a supplier by name.
+  const offerStats=audits.flatMap(a=>a.offers||[]).filter(o=>o.supplier_name&&o.supplier_name!=='—').reduce((acc,o)=>{
+    const ex=acc.find(x=>x.name===o.supplier_name);
+    if(!ex) acc.push({name:o.supplier_name,count:1,scores:[o.ai_score].filter(Boolean)});
+    else{ex.count++;if(o.ai_score)ex.scores.push(o.ai_score);}
+    return acc;
+  },[]);
+  const allSups=realSups.map(s=>{
+    const stat=offerStats.find(x=>x.name===s.name);
+    return {...s,count:stat?stat.count:0,scores:stat?stat.scores:[]};
+  });
+  document.getElementById('nb-s').textContent=allSups.length;
+  if(!allSups.length){el.innerHTML=`<div class="empty"><span class="ei">🏢</span><h3 class="et">Keine Lieferanten</h3><p class="es">Legen Sie Ihren ersten Lieferanten mit vollständigen Firmen-, Steuer- und Bankdaten an.</p><button class="btn bgh" onclick="openMod('sup-ov')">+ Lieferant anlegen</button></div>`;return;}
+  el.innerHTML=`<div style="display:flex;flex-direction:column;gap:0">${allSups.map(s=>{
+    const avgSc=s.scores.length?Math.round(s.scores.reduce((a,b)=>a+b,0)/s.scores.length):0;
+    const meta=[s.legal_form,s.category||'Allgemein',s.employee_count?`${s.employee_count} MA`:null,s.count?`${s.count} Analyse${s.count!==1?'n':''}`:null].filter(Boolean).join(' · ');
+    return`<div class="sup-c"><div class="sup-av">${s.name.slice(0,2).toUpperCase()}</div><div style="flex:1"><div class="sup-n">${s.name}</div><div class="sup-m">${meta}</div></div>${avgSc?`<div class="sw" style="width:90px"><div class="sbr"><div class="sf" style="width:${avgSc}%;background:${sc(avgSc)}"></div></div><span class="sn" style="color:${sc(avgSc)}">${avgSc}/100</span></div>`:'<span style="font-size:11px;color:var(--di)">Kein Score</span>'}</div>`;
+  }).join('')}</div>`;
+}
+
+// ── POs ───────────────────────────────────────────────────────────────────
+async function loadPos(){
+  const el=document.getElementById('po-list');
+  el.innerHTML='<div class="ld"><span class="sp"></span></div>';
+  // For now show from dashboard stats
+  const dash=await api('/api/admin/dashboard');
+  if(!dash){el.innerHTML='<div class="ld" style="color:var(--di)">Fehler.</div>';return;}
+  const cnt=dash.totals?.purchase_orders||0;
+  document.getElementById('nb-p').textContent=cnt;
+  if(!cnt){el.innerHTML=`<div class="empty"><span class="ei">📄</span><h3 class="et">Keine Purchase Orders</h3><p class="es">Erstellen Sie POs direkt aus einer abgeschlossenen Analyse heraus — Daten werden automatisch übernommen.</p><button class="btn bg" onclick="openMod('po-ov')">+ PO erstellen</button></div>`;return;}
+  el.innerHTML=`<div style="padding:18px;font-size:13px;color:var(--mu)">${cnt} Purchase Order${cnt!==1?'s':''} erstellt. Vollständige PO-Verwaltung folgt im nächsten Update.</div>`;
+}
+
+// ── PO Modal ──────────────────────────────────────────────────────────────
+function prefillPo(auditId){
+  const a=audits.find(x=>x.id===auditId);
+  if(!a) return;
+  const o=a.offers?.[0];
+  document.getElementById('po-job').value=o?.job_number||a.questionnaire?.job_number||'';
+  document.getElementById('po-sup').value=o?.supplier_name||'';
+  document.getElementById('po-amt').value=o?.total_net||'';
+  document.getElementById('po-aid').value=auditId;
+  document.getElementById('po-oid').value=o?.id||'';
+}
+
+function openMod(id){document.getElementById(id).classList.add('show');}
+function closeMod(id){document.getElementById(id).classList.remove('show');}
+
+async function savePo(){
+  const amt=parseFloat(document.getElementById('po-amt').value)||0;
+  if(!amt){toast('Betrag erforderlich.','err');return;}
+  const data=await api('/api/po/create',{method:'POST',body:JSON.stringify({
+    offer_id:document.getElementById('po-oid').value||null,
+    audit_id:document.getElementById('po-aid').value||null,
+    job_number:document.getElementById('po-job').value,
+    amount_net:amt,
+    tax_rate:parseFloat(document.getElementById('po-tax').value)||19,
+    cost_center:document.getElementById('po-cc').value,
+    orderer_name:document.getElementById('po-ord').value,
+    orderer_email:user.email,
+    notes:document.getElementById('po-not').value,
+    issuer_company:user.company_name||user.name,
+  })});
+  if(!data){toast('Fehler beim Erstellen.','err');return;}
+  toast(`PO ${data.po_number} erstellt ✓`,'ok');
+  closeMod('po-ov');
+  ['po-num','po-job','po-sup','po-amt','po-cc','po-not'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  document.getElementById('po-tax').value='19';
+  go('pos');
+}
+
+async function saveSup(){
+  const n=document.getElementById('sm-n').value.trim();
+  if(!n){toast('Unternehmen ist ein Pflichtfeld.','err');return;}
+  const payload={
+    name:n,
+    legal_form:document.getElementById('sm-lf').value||null,
+    category:document.getElementById('sm-c').value||null,
+    employee_count:document.getElementById('sm-ec').value?parseInt(document.getElementById('sm-ec').value):null,
+    address:document.getElementById('sm-a').value.trim()||null,
+    contact_name:document.getElementById('sm-k').value.trim()||null,
+    email:document.getElementById('sm-e').value.trim()||null,
+    phone:document.getElementById('sm-ph').value.trim()||null,
+    website:document.getElementById('sm-web').value.trim()||null,
+    tax_id:document.getElementById('sm-tax').value.trim()||null,
+    vat_id:document.getElementById('sm-vat').value.trim()||null,
+    duns_number:document.getElementById('sm-duns').value.trim()||null,
+    commercial_register_number:document.getElementById('sm-hrb').value.trim()||null,
+    withholding_tax_liable:document.getElementById('sm-wst').checked,
+    iban:document.getElementById('sm-iban').value.trim()||null,
+    bic:document.getElementById('sm-bic').value.trim()||null,
+    bank_name:document.getElementById('sm-bank').value.trim()||null,
+    payment_terms_days:document.getElementById('sm-pt').value?parseInt(document.getElementById('sm-pt').value):null,
+    notes:document.getElementById('sm-notes').value.trim()||null,
+  };
+  const btn=document.getElementById('sup-save-btn');
+  btn.disabled=true;btn.textContent='Wird gespeichert…';
+  const res=await api('/api/suppliers/create',{method:'POST',body:JSON.stringify(payload)});
+  btn.disabled=false;btn.textContent='Speichern';
+  if(!res||res.detail){toast(res&&res.detail?res.detail:'Fehler beim Speichern.','err');return;}
+  toast(`Lieferant "${n}" gespeichert ✓`,'ok');
+  closeMod('sup-ov');
+  ['sm-n','sm-lf','sm-c','sm-ec','sm-a','sm-k','sm-e','sm-ph','sm-web','sm-tax','sm-vat','sm-duns','sm-hrb','sm-iban','sm-bic','sm-bank','sm-pt','sm-notes'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  document.getElementById('sm-wst').checked=false;
+  loadSuppliers();
+}
+
+
+// ── Counter-Offer ─────────────────────────────────────────────────────────
+async function sendNegotiationEmail(offerId, subject) {
+  const toEl = document.getElementById('co-email-to');
+  const to = toEl ? toEl.value.trim() : '';
+  if (!to) { toast('Bitte E-Mail-Adresse eingeben'); return; }
+  const bodyEl = document.getElementById('co-email-body');
+  const emailBody = bodyEl ? bodyEl.innerText : '';
+  const res = await api(`/api/audit/send-email/${offerId}`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({to_email: to, subject: subject, body: emailBody})
+  });
+  if (res) toast(res.message || (res.sent ? 'E-Mail gesendet!' : 'Fehler beim Senden'));
+}
+async function generateCounterOffer(offerId, offerTitle) {
+  openMod('co-ov');
+  document.getElementById('co-body').innerHTML='<div class="ld"><span class="sp"></span>KI generiert Verhandlungspaket (ca. 20 Sek.)...</div>';
+  const data = await api('/api/audit/counter-offer/'+offerId, {method:'POST'});
+  if (!data) { document.getElementById('co-body').innerHTML='<div style="color:var(--red);padding:18px">Fehler. Bitte erneut versuchen.</div>'; return; }
+  renderCounterOffer(data);
+}
+function renderCounterOffer(d) {
+  const rp = d.reduction_percentage ? d.reduction_percentage.toFixed(1) : '0';
+  let h = '<div style="display:flex;gap:16px;margin-bottom:18px;flex-wrap:wrap">';
+  h += '<div class="sh-i" style="flex:1"><div class="sh-l">Original</div><div class="sh-v" style="color:var(--red)">'+fmt(d.original_total)+'</div></div>';
+  h += '<div class="sh-i" style="flex:1"><div class="sh-l">Gegenangebot</div><div class="sh-v" style="color:var(--g)">'+fmt(d.target_price)+'</div></div>';
+  h += '<div class="sh-i" style="flex:1"><div class="sh-l">Reduktion</div><div class="sh-v" style="color:var(--g)">&minus;'+rp+'%</div></div></div>';
+  if (d.target_price_rationale) h += '<div class="strat" style="margin-bottom:14px"><div class="strat-l">Begründung</div><div class="strat-t">'+d.target_price_rationale+'</div></div>';
+  if (d.priority_items?.length) {
+    h += '<div style="font-size:9px;color:var(--di);text-transform:uppercase;letter-spacing:1px;font-family:DM Mono,monospace;margin-bottom:6px">Verhandlungspositionen</div><div class="neg" style="margin-bottom:14px">';
+    d.priority_items.forEach(p => {
+      h += '<div class="ni2"><div class="ni2-h"><span class="ni2-t">'+p.item+'</span>';
+      if (p.original) h += '<span style="font-size:11px;color:var(--di);font-family:DM Mono,monospace">'+fmt(p.original)+' &rarr; <span style="color:var(--g)">'+fmt(p.target)+'</span></span>';
+      h += '</div>';
+      if (p.argument) h += '<div style="font-size:11px;color:var(--mu);margin-top:3px">'+p.argument+'</div>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+  if (d.negotiation_email) {
+    h += '<div style="font-size:9px;color:var(--bl);text-transform:uppercase;letter-spacing:1px;font-family:DM Mono,monospace;margin-bottom:6px">Verhandlungs-E-Mail</div>';
+    h += '<div style="background:var(--C2);border:1px solid var(--br);border-radius:8px;padding:14px;margin-bottom:10px">';
+    h += '<div style="font-size:11px;color:var(--mu);margin-bottom:8px"><b style="color:var(--tx)">Betreff:</b> '+d.negotiation_email.subject+'</div>';
+    h += '<div id="co-email-body" style="font-size:12px;color:var(--tx);line-height:1.7;white-space:pre-wrap">'+d.negotiation_email.body+'</div>';
+    h += '</div>';
+    h += `<button class="btn bgh bsm" onclick="navigator.clipboard.writeText(document.getElementById('co-email-body').textContent);toast('E-Mail kopiert ✓','ok')" style="margin-bottom:14px">&#128203; E-Mail kopieren</button>`;
+    h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">';
+    h += '<input id="co-email-to" type="email" placeholder="Empfänger E-Mail (optional)" style="flex:1;padding:6px 10px;background:var(--C2);border:1px solid var(--br);border-radius:6px;color:var(--tx);font-size:12px;min-width:180px">';
+    h += '<button class="btn bg bsm" onclick="sendNegotiationEmail(\'' + (d.offer_id||'') + '\',\'' + ((d.negotiation_email && d.negotiation_email.subject)||'').replace(/\x27/g,'') + '\')">&#128231; E-Mail senden</button>';
+    h += '</div>';
+  }
+  if (d.talking_points?.length) {
+    h += '<div style="font-size:9px;color:var(--di);text-transform:uppercase;letter-spacing:1px;font-family:DM Mono,monospace;margin-bottom:5px">Gesprächspunkte</div>';
+    d.talking_points.forEach(t => { h += '<div style="font-size:11px;color:var(--mu);padding:2px 0;display:flex;gap:6px"><span style="color:var(--gold)">&rarr;</span>'+t+'</div>'; });
+  }
+  h += '<div style="display:flex;gap:12px;margin-top:14px;flex-wrap:wrap">';
+  if (d.walk_away_price) h += '<div class="sh-i" style="flex:1"><div class="sh-l">Walk-Away Preis</div><div class="sh-v" style="font-size:14px;color:var(--am)">'+fmt(d.walk_away_price)+'</div></div>';
+  if (d.expected_outcome) h += '<div class="sh-i" style="flex:2"><div class="sh-l">Erwartetes Ergebnis</div><div style="font-size:12px;color:var(--mu);margin-top:4px">'+d.expected_outcome+'</div></div>';
+  h += '</div>';
+  document.getElementById('co-body').innerHTML = h;
+}
+
+// ── Logout ────────────────────────────────────────────────────────────────
+function logout(){['nx_token','nx_user','nx_lang','nx_cookie_consent'].forEach(k=>localStorage.removeItem(k));location.href='/';}
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+function toast(msg,type=''){const el=document.getElementById('toastel');el.textContent=msg;el.className='toast show '+type;setTimeout(()=>el.classList.remove('show'),3200);}
+
+
+async function loadApiKeys() {
+  const res = await api('/api/keys');
+  const el = document.getElementById('ak-list');
+  if (!el) return;
+  if (!res || !res.length) { el.innerHTML = '<span style="color:var(--di)">Keine API-Keys</span>'; return; }
+  el.innerHTML = res.map(k => `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--br2)">
+    <div><span style="font-family:monospace">${k.prefix}...</span> <span style="color:var(--di);margin-left:8px">${k.name}</span></div>
+    <button onclick="revokeApiKey('${k.id}')" style="background:none;border:none;color:var(--di);cursor:pointer;font-size:11px">Widerrufen</button>
+  </div>`).join('');
+}
+async function createApiKey() {
+  const name = document.getElementById('ak-name')?.value?.trim();
+  if (!name) { toast('Bitte Key-Namen eingeben'); return; }
+  const res = await api('/api/keys', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+  if (res?.key) {
+    document.getElementById('ak-val').textContent = res.key;
+    document.getElementById('ak-new').style.display = '';
+    toast('API-Key erstellt — jetzt kopieren!');
+    loadApiKeys();
+  }
+}
+async function revokeApiKey(id) {
+  if (!confirm('API-Key widerrufen?')) return;
+  await api(`/api/keys/${id}`, {method:'DELETE'});
+  toast('Key widerrufen'); loadApiKeys();
+}
+
+
+function exportBenchmark() {
+  var cat = (document.getElementById('bm-cat') ? document.getElementById('bm-cat').value : 'Software & IT');
+  window.open('/api/export/benchmark/' + encodeURIComponent(cat), '_blank');
+}
+function exportDATEV(auditId) {
+  window.open('/api/export/datev/' + auditId, '_blank');
+}
+function exportSAP(auditId) {
+  window.open('/api/export/sap/' + auditId, '_blank');
+}
+
+// Close modals on overlay click
+['po-ov','sup-ov','co-ov'].forEach(id=>{document.getElementById(id).addEventListener('click',e=>{if(e.target===e.currentTarget)closeMod(id);});});
+
+init();
+</script>
+
+<div id="cc-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;background:rgba(255,255,255,0.97);border-top:1px solid var(--gold-border, rgba(30,138,110,.28));padding:16px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;font-family:'DM Sans',sans-serif;backdrop-filter:blur(12px);">
+  <div style="font-size:13px;color:#5b6a63;max-width:700px">
+    Wir verwenden <strong style="color:#16201c">ausschliesslich technisch notwendige Cookies</strong> fuer die Authentifizierung. Keine Tracking-Cookies.
+    <a href="/privacy" style="color:#1E8A6E;margin-left:8px">Datenschutz</a>
+    &nbsp;|&nbsp;
+    <a href="/impressum" style="color:#1E8A6E">Impressum</a>
+  </div>
+  <button onclick="ccAccept()" style="padding:8px 20px;background:#1E8A6E;border:none;border-radius:6px;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Verstanden</button>
+</div>
+<script>
+(function(){if(!localStorage.getItem('cc_ok')){var b=document.getElementById('cc-banner');if(b)b.style.display='flex';}})();
+function ccAccept(){localStorage.setItem('cc_ok','1');var b=document.getElementById('cc-banner');if(b)b.style.display='none';}
+</script>
+</body>
+</html>

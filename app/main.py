@@ -5,7 +5,8 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from database import engine, Base
-from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public
+import models_v2  # noqa: F401 -- registers Phase 1 tables (tenants, cases, documents, ...) on Base.metadata
+from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -29,6 +30,7 @@ app.include_router(benchmark.router, prefix="/api/benchmark", tags=["Benchmark"]
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(audit.router, prefix="/api/audit", tags=["Audit"])
 app.include_router(purchase_orders.router, prefix="/api/po", tags=["Purchase Orders"])
+app.include_router(suppliers.router, prefix="/api/suppliers", tags=["Suppliers"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 app.include_router(export.router, prefix="/api/export", tags=["Export"])
 app.include_router(ws.router, prefix="/api", tags=["WebSocket"])
@@ -36,6 +38,14 @@ app.include_router(apikeys.router, prefix="/api", tags=["API Keys"])
 
 app.include_router(webhooks.router, prefix="/api/webhooks", tags=["Webhooks"])
 app.include_router(public.router, prefix="/api/public", tags=["Supplier Portal"])
+
+# Phase 1 (CTO briefing 7.10.2026): data model, upload, extraction, policy
+# engine, comparisons, read-only dashboard. Mounted under /api/v1 so the
+# existing nginx `location /api/` proxy on negotiatex.ai already covers it
+# without any nginx changes.
+app.include_router(tenants.router, prefix="/api/v1", tags=["Phase 1 - Tenants"])
+app.include_router(cases.router, prefix="/api/v1", tags=["Phase 1 - Cases"])
+app.include_router(policies.router, prefix="/api/v1", tags=["Phase 1 - Policies"])
 
 @app.get("/health")
 async def health_root():

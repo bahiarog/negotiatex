@@ -33,13 +33,27 @@ class Supplier(Base):
     __tablename__ = "suppliers"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     client_id = Column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="CASCADE"))
+    owner_user_id = Column(UUID(as_uuid=True), nullable=True)  # FK to auth users.id (loose, no DB constraint — see auth/tenant note)
     name = Column(String(255), nullable=False)
+    legal_form = Column(String(50))            # GmbH, AG, UG, Einzelunternehmen, etc.
     category = Column(String(100))
     contact_name = Column(String(255))
+    phone = Column(String(50))
+    email = Column(String(255))
+    website = Column(String(255))
     address = Column(Text)
     country = Column(String(100), default="Germany")
-    tax_id = Column(String(100))
-    email = Column(String(255))
+    tax_id = Column(String(100))               # Steuernummer
+    vat_id = Column(String(50))                # USt-IdNr.
+    duns_number = Column(String(20))           # D-U-N-S Nummer
+    commercial_register_number = Column(String(100))  # Handelsregisternummer (z.B. HRB 12345)
+    employee_count = Column(Integer)
+    iban = Column(String(50))
+    bic = Column(String(20))
+    bank_name = Column(String(255))
+    withholding_tax_liable = Column(Boolean, default=False)  # Quellensteuerpflichtig
+    payment_terms_days = Column(Integer)
+    notes = Column(Text)
     created_at = Column(DateTime, server_default=func.now())
     client = relationship("Client", back_populates="suppliers")
     offers = relationship("Offer", back_populates="supplier")
