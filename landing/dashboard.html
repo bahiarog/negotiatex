@@ -262,6 +262,8 @@ tr:hover td{background:rgba(22,32,28,.015)}
   <div class="ns">Einkauf</div>
   <button class="ni" data-p="suppliers"><span class="ni-ic">🏢</span>Lieferanten<span class="ni-b" id="nb-s">0</span></button>
   <button class="ni" data-p="pos"><span class="ni-ic">📄</span>Purchase Orders<span class="ni-b" id="nb-p">0</span></button>
+  <button class="ni" data-p="requisitions"><span class="ni-ic">✅</span>Anforderungen<span class="ni-b" id="nb-r">0</span></button>
+  <button class="ni" data-p="invoices"><span class="ni-ic">🧾</span>Rechnungen<span class="ni-b" id="nb-i">0</span></button>
   <div class="ns">Konto</div>
   <button class="ni" data-p="settings"><span class="ni-ic">⚙️</span>Einstellungen</button>
   <a href="/" class="ni"><span class="ni-ic">🌐</span>Zur Website</a>
@@ -382,6 +384,42 @@ tr:hover td{background:rgba(22,32,28,.015)}
   <div id="po-det"></div>
 </div>
 
+<!-- ══════ REQUISITIONS ══════ -->
+<div class="panel" id="panel-requisitions">
+  <div class="ph">
+    <div><h1 class="ph-t">Anforderungen</h1><p class="ph-s">Beschaffungsanforderungen mit mehrstufiger Freigabe (nach Betrag).</p></div>
+    <div class="ph-a"><button class="btn bg bsm" onclick="openReqCreateModal()">+ Anforderung erstellen</button></div>
+  </div>
+  <div id="req-list"><div class="ld"><span class="sp"></span></div></div>
+</div>
+
+<!-- ══════ REQUISITION DETAIL ══════ -->
+<div class="panel" id="panel-req-detail">
+  <button class="back" onclick="go('requisitions')">← Zurück zu Anforderungen</button>
+  <div id="req-det"></div>
+</div>
+
+<!-- ══════ INVOICES ══════ -->
+<div class="panel" id="panel-invoices">
+  <div class="ph">
+    <div><h1 class="ph-t">Rechnungen</h1><p class="ph-s">Rechnungsprüfung und 2-Wege-Abgleich gegen Purchase Orders (Rechnung ↔ PO, kein Wareneingang vorhanden).</p></div>
+  </div>
+  <div class="uz" id="inv-uz" onclick="document.getElementById('inv-fi').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="onInvDrop(event)">
+    <div class="uz-ic">🧾</div>
+    <h3 id="inv-uz-t">Rechnung ablegen oder klicken</h3>
+    <p>Wird automatisch per KI ausgelesen (Rechnungsnummer, Beträge, Positionen)</p>
+    <div class="fmts"><span>PDF</span><span>DOCX</span><span>XLSX</span><span>CSV</span><span>PNG/JPG</span></div>
+    <input type="file" id="inv-fi" style="display:none" accept=".pdf,.xlsx,.xls,.csv,.doc,.docx,.png,.jpg,.jpeg,.webp" onchange="onInvFile(this.files[0])">
+  </div>
+  <div id="inv-list"><div class="ld"><span class="sp"></span></div></div>
+</div>
+
+<!-- ══════ INVOICE DETAIL ══════ -->
+<div class="panel" id="panel-invoice-detail">
+  <button class="back" onclick="go('invoices')">← Zurück zu Rechnungen</button>
+  <div id="inv-det"></div>
+</div>
+
 <!-- ══════ SETTINGS ══════ -->
 <div class="panel" id="panel-settings">
   <div class="ph"><div><h1 class="ph-t">Einstellungen</h1><p class="ph-s">Ihr Profil und Konto.</p></div></div>
@@ -450,6 +488,48 @@ tr:hover td{background:rgba(22,32,28,.015)}
     <div class="modal-a">
       <button class="btn bgh" onclick="closeMod('po-ov')">Abbrechen</button>
       <button class="btn bg" onclick="savePo()">PO erstellen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ REQUISITION CREATE MODAL ══════ -->
+<div class="ov" id="req-ov">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-t">Anforderung erstellen</div>
+    <div class="fg2">
+      <div class="f"><label>Titel *</label><input id="req-title" placeholder="z.B. Büroausstattung Team X"></div>
+      <div class="f"><label>Kategorie</label><input id="req-cat" placeholder="z.B. IT, Büro, Marketing"></div>
+    </div>
+    <div class="fg2">
+      <div class="f"><label>Antragsteller Name *</label><input id="req-rname" placeholder="Max Müller"></div>
+      <div class="f"><label>Antragsteller E-Mail *</label><input type="email" id="req-remail" placeholder="max@firma.de"></div>
+    </div>
+    <div class="f" style="margin-bottom:11px"><label>Begründung</label><textarea id="req-just" rows="2" placeholder="Warum wird das benötigt?"></textarea></div>
+
+    <div style="font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--mu);text-transform:uppercase;margin:4px 0 8px">Positionen</div>
+    <div id="req-items"></div>
+    <button type="button" class="btn bgh bsm" onclick="addReqItemRow()" style="margin-bottom:12px">+ Position hinzufügen</button>
+    <div class="info-row"><span class="info-k">Geschätzter Gesamtbetrag</span><span class="info-v" id="req-total">€0</span></div>
+    <p style="font-size:11px;color:var(--di);margin-top:4px">Freigabestufen: ≤ 1.000 € → 1 Stufe · 1.000–10.000 € → 2 Stufen · &gt; 10.000 € → 3 Stufen (fester Regelsatz, kein konfigurierbares Freigabe-Matrix-System).</p>
+
+    <div class="modal-a">
+      <button class="btn bgh" onclick="closeMod('req-ov')">Abbrechen</button>
+      <button class="btn bg" id="req-save-btn" onclick="saveReq()">Anforderung anlegen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ REQUISITION SUBMIT (APPROVERS) MODAL ══════ -->
+<div class="ov" id="req-submit-ov">
+  <div class="modal">
+    <div class="modal-t">Zur Freigabe einreichen</div>
+    <input type="hidden" id="rs-req-id">
+    <p style="font-size:12px;color:var(--mu);margin-bottom:12px" id="rs-info"></p>
+    <div id="rs-approvers"></div>
+    <p style="font-size:11px;color:var(--di);margin-top:4px">Freigeber werden frei vom Antragsteller benannt — es gibt (noch) kein Organigramm/Rollensystem zur automatischen Zuordnung.</p>
+    <div class="modal-a">
+      <button class="btn bgh" onclick="closeMod('req-submit-ov')">Abbrechen</button>
+      <button class="btn bg" onclick="submitReq()">Einreichen</button>
     </div>
   </div>
 </div>
@@ -550,6 +630,7 @@ if (!token || !user) location.href = '/login';
 
 // ── State ─────────────────────────────────────────────────────────────────
 let audits = [], poList = [], supList = [], pollT = null;
+let reqList = [], invList = [], reqItemsN = 0, invUploadFile = null;
 
 // ── Init ──────────────────────────────────────────────────────────────────
 function init() {
@@ -575,7 +656,7 @@ function init() {
 }
 
 // ── Nav ───────────────────────────────────────────────────────────────────
-const pageNames = {overview:'Übersicht',upload:'Neue Analyse',audits:'Analysen',suppliers:'Lieferanten',pos:'Purchase Orders',settings:'Einstellungen',detail:'Detail',['po-detail']:'PO Detail'};
+const pageNames = {overview:'Übersicht',upload:'Neue Analyse',audits:'Analysen',suppliers:'Lieferanten',pos:'Purchase Orders',settings:'Einstellungen',detail:'Detail',['po-detail']:'PO Detail',requisitions:'Anforderungen',['req-detail']:'Anforderung Detail',invoices:'Rechnungen',['invoice-detail']:'Rechnung Detail'};
 
 function go(p) {
   document.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));
@@ -588,6 +669,8 @@ function go(p) {
   if(p==='audits')    loadAudits();
   if(p==='suppliers') loadSuppliers();
   if(p==='pos')       loadPos();
+  if(p==='requisitions') loadRequisitions();
+  if(p==='invoices')  loadInvoices();
 }
 
 // ── API ───────────────────────────────────────────────────────────────────
@@ -891,6 +974,272 @@ async function savePo(){
   go('pos');
 }
 
+// ── Requisitions ──────────────────────────────────────────────────────────
+const REQ_STATUS_PILL = {draft:'pu',submitted:'pp',pending_approval:'pa',approved:'pd',rejected:'pfr',converted_to_po:'ppa',cancelled:'pu'};
+const REQ_STATUS_LABEL = {draft:'Entwurf',submitted:'Eingereicht',pending_approval:'In Freigabe',approved:'Freigegeben',rejected:'Abgelehnt',converted_to_po:'→ PO erstellt',cancelled:'Storniert'};
+
+function requiredLevels(amount){ if(amount<=1000) return 1; if(amount<=10000) return 2; return 3; }
+
+function openReqCreateModal(){
+  document.getElementById('req-items').innerHTML=''; reqItemsN=0;
+  addReqItemRow();
+  openMod('req-ov');
+}
+
+async function loadRequisitions(){
+  const el=document.getElementById('req-list');
+  el.innerHTML='<div class="ld"><span class="sp"></span></div>';
+  const data=await api('/api/requisitions/list');
+  if(!data){el.innerHTML='<div class="ld" style="color:var(--di)">Fehler beim Laden.</div>';return;}
+  reqList=data;
+  document.getElementById('nb-r').textContent=data.length;
+  if(!data.length){el.innerHTML=`<div class="empty"><span class="ei">✅</span><h3 class="et">Keine Anforderungen</h3><p class="es">Legen Sie Ihre erste Beschaffungsanforderung an.</p><button class="btn bg" onclick="openReqCreateModal()">+ Anforderung erstellen</button></div>`;return;}
+  el.innerHTML=`<div class="tw"><table><thead><tr><th>Titel</th><th>Antragsteller</th><th>Betrag</th><th>Status</th><th>Erstellt</th><th></th></tr></thead><tbody>${data.map(r=>
+    `<tr><td><div class="tdp">${r.title}</div>${r.category?`<div style="font-size:11px;color:var(--di)">${r.category}</div>`:''}</td>
+    <td>${r.requester_name}</td><td class="tdm">${fmt(r.estimated_amount)}</td>
+    <td><span class="pill ${REQ_STATUS_PILL[r.status]||'pu'}">${REQ_STATUS_LABEL[r.status]||r.status}</span></td>
+    <td class="tdm" style="font-size:11px">${fdate(r.created_at)}</td>
+    <td><button class="btn bgh bsm" onclick="openReqDetail('${r.id}')">Details</button></td></tr>`).join('')}</tbody></table></div>`;
+}
+
+function addReqItemRow(){
+  const idx=reqItemsN++;
+  const wrap=document.getElementById('req-items');
+  const row=document.createElement('div');
+  row.className='fg2'; row.id='req-item-'+idx; row.style.marginBottom='7px';
+  row.innerHTML=`<div class="f"><label>Beschreibung</label><input class="ri-desc" placeholder="z.B. Testartikel"></div>
+    <div class="f" style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px">
+      <div><label style="font-size:10px;color:var(--mu)">Menge</label><input type="number" class="ri-qty" value="1" oninput="recalcReqTotal()"></div>
+      <div><label style="font-size:10px;color:var(--mu)">Einheit</label><input class="ri-unit" value="Stk."></div>
+      <div><label style="font-size:10px;color:var(--mu)">Preis (€)</label><input type="number" class="ri-price" value="0" oninput="recalcReqTotal()"></div>
+      <button type="button" class="btn bgh bsm" style="align-self:end" onclick="document.getElementById('req-item-${idx}').remove();recalcReqTotal()">✕</button>
+    </div>`;
+  wrap.appendChild(row);
+  recalcReqTotal();
+}
+function recalcReqTotal(){
+  let total=0;
+  document.querySelectorAll('#req-items .fg2').forEach(row=>{
+    const qty=parseFloat(row.querySelector('.ri-qty')?.value)||0;
+    const price=parseFloat(row.querySelector('.ri-price')?.value)||0;
+    total+=qty*price;
+  });
+  document.getElementById('req-total').textContent=fmt(total);
+}
+
+async function saveReq(){
+  const title=document.getElementById('req-title').value.trim();
+  const rname=document.getElementById('req-rname').value.trim();
+  const remail=document.getElementById('req-remail').value.trim();
+  if(!title||!rname||!remail){toast('Titel, Antragsteller-Name und E-Mail sind Pflichtfelder.','err');return;}
+  const items=[...document.querySelectorAll('#req-items .fg2')].map(row=>({
+    description:row.querySelector('.ri-desc').value.trim()||'(ohne Beschreibung)',
+    quantity:parseFloat(row.querySelector('.ri-qty').value)||1,
+    unit:row.querySelector('.ri-unit').value||'Stk.',
+    unit_price:parseFloat(row.querySelector('.ri-price').value)||0,
+  }));
+  if(!items.length){toast('Mindestens eine Position erforderlich.','err');return;}
+  const btn=document.getElementById('req-save-btn');btn.disabled=true;btn.textContent='Wird gespeichert…';
+  const res=await api('/api/requisitions/create',{method:'POST',body:JSON.stringify({
+    title,requester_name:rname,requester_email:remail,
+    justification:document.getElementById('req-just').value.trim()||null,
+    category:document.getElementById('req-cat').value.trim()||null,
+    items,
+  })});
+  btn.disabled=false;btn.textContent='Anforderung anlegen';
+  if(!res||res.detail){toast(res&&res.detail?res.detail:'Fehler beim Speichern.','err');return;}
+  toast(`Anforderung "${title}" angelegt ✓`,'ok');
+  closeMod('req-ov');
+  ['req-title','req-cat','req-rname','req-remail','req-just'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('req-items').innerHTML=''; reqItemsN=0; recalcReqTotal();
+  go('requisitions');
+}
+
+async function openReqDetail(id){
+  go('req-detail');
+  const el=document.getElementById('req-det');
+  el.innerHTML='<div class="ld"><span class="sp"></span>Wird geladen...</div>';
+  const r=await api(`/api/requisitions/${id}`);
+  if(!r){el.innerHTML='<div class="ld" style="color:var(--di)">Fehler.</div>';return;}
+  let h=`<div class="ph"><div><h1 class="ph-t">${r.title}</h1><p class="ph-s">Antragsteller: ${r.requester_name} (${r.requester_email}) · ${fdate(r.created_at)}</p></div>
+    <div class="ph-a"><span class="pill ${REQ_STATUS_PILL[r.status]||'pu'}">${REQ_STATUS_LABEL[r.status]||r.status}</span>
+    ${r.status==='draft'?`<button class="btn bg bsm" onclick="openSubmitModal('${r.id}',${r.estimated_amount})">Zur Freigabe einreichen</button>`:''}
+    ${r.status==='approved'?`<button class="btn bg bsm" onclick="convertReqToPo('${r.id}')">In PO umwandeln</button>`:''}
+    ${r.purchase_order_id?`<button class="btn bgh bsm" onclick="openPoDetail('${r.purchase_order_id}')">PO anzeigen →</button>`:''}
+    </div></div>`;
+  if(r.justification) h+=`<p style="font-size:13px;color:var(--mu);margin-bottom:14px">${r.justification}</p>`;
+  h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">Positionen</span></div><div class="tw" style="border:none;border-radius:0;margin:0">
+    <table><thead><tr><th>Beschreibung</th><th>Menge</th><th>Einheit</th><th>Einzelpreis</th><th>Gesamt</th></tr></thead><tbody>
+    ${r.items.map(i=>`<tr><td class="tdp">${i.description}</td><td class="tdm">${i.quantity}</td><td>${i.unit}</td><td class="tdm">${fmt(i.unit_price)}</td><td class="tdm">${fmt(i.total)}</td></tr>`).join('')}
+    </tbody></table></div></div>`;
+  if(r.approvals?.length){
+    h+=`<div class="card"><div class="card-h"><span class="card-t">Freigabekette</span></div><div class="card-b">`;
+    r.approvals.forEach(a=>{
+      const stc=a.status==='approved'?'pd':a.status==='rejected'?'pfr':'pp';
+      const stl=a.status==='approved'?'Freigegeben':a.status==='rejected'?'Abgelehnt':'Ausstehend';
+      h+=`<div class="info-row"><span class="info-k">Stufe ${a.level}: ${a.approver_name} (${a.approver_email})</span><span class="info-v"><span class="pill ${stc}">${stl}</span></span></div>`;
+      if(a.comment) h+=`<div style="font-size:12px;color:var(--mu);margin:-4px 0 8px;padding-left:4px">💬 ${a.comment}</div>`;
+    });
+    h+=`</div></div>`;
+  }
+  el.innerHTML=h;
+}
+
+function openSubmitModal(id,amount){
+  document.getElementById('rs-req-id').value=id;
+  const levels=requiredLevels(amount);
+  document.getElementById('rs-info').textContent=`Geschätzter Betrag: ${fmt(amount)} → ${levels} Freigabestufe(n) erforderlich.`;
+  const wrap=document.getElementById('rs-approvers');
+  wrap.innerHTML='';
+  for(let lvl=1;lvl<=levels;lvl++){
+    const row=document.createElement('div');
+    row.className='fg2'; row.style.marginBottom='9px';
+    row.innerHTML=`<div class="f"><label>Stufe ${lvl} — Name</label><input class="rs-name" data-lvl="${lvl}" placeholder="Name des Freigebers"></div>
+      <div class="f"><label>Stufe ${lvl} — E-Mail</label><input type="email" class="rs-email" data-lvl="${lvl}" placeholder="freigeber@firma.de"></div>`;
+    wrap.appendChild(row);
+  }
+  openMod('req-submit-ov');
+}
+async function submitReq(){
+  const id=document.getElementById('rs-req-id').value;
+  const approvers=[...document.querySelectorAll('.rs-name')].map(nEl=>{
+    const lvl=nEl.dataset.lvl;
+    const eEl=document.querySelector(`.rs-email[data-lvl="${lvl}"]`);
+    return {level:parseInt(lvl),approver_name:nEl.value.trim(),approver_email:eEl.value.trim()};
+  });
+  if(approvers.some(a=>!a.approver_name||!a.approver_email)){toast('Bitte für jede Stufe Name und E-Mail angeben.','err');return;}
+  const res=await api(`/api/requisitions/${id}/submit`,{method:'POST',body:JSON.stringify({approvers})});
+  if(!res||res.detail){toast(res&&res.detail?res.detail:'Fehler beim Einreichen.','err');return;}
+  toast('Anforderung zur Freigabe eingereicht ✓','ok');
+  closeMod('req-submit-ov');
+  openReqDetail(id);
+}
+async function convertReqToPo(id){
+  const res=await api(`/api/requisitions/${id}/convert-to-po`,{method:'POST'});
+  if(!res||res.detail){toast(res&&res.detail?res.detail:'Fehler bei der Umwandlung.','err');return;}
+  toast(`Purchase Order ${res.po_number} erstellt ✓`,'ok');
+  openReqDetail(id);
+}
+
+// ── Invoices ──────────────────────────────────────────────────────────────
+const INV_STATUS_PILL = {received:'pu',extracted:'pp',matched:'pd',exception:'pfr',approved_for_payment:'ppa',paid:'pd',rejected:'pfr'};
+const INV_STATUS_LABEL = {received:'Empfangen',extracted:'Extrahiert',matched:'Abgeglichen',exception:'Abweichung',approved_for_payment:'Zur Zahlung freigegeben',paid:'Bezahlt',rejected:'Abgelehnt'};
+
+async function loadInvoices(){
+  const el=document.getElementById('inv-list');
+  el.innerHTML='<div class="ld"><span class="sp"></span></div>';
+  const data=await api('/api/invoices/list');
+  if(!data){el.innerHTML='<div class="ld" style="color:var(--di)">Fehler beim Laden.</div>';return;}
+  invList=data;
+  document.getElementById('nb-i').textContent=data.length;
+  if(!data.length){el.innerHTML=`<div class="empty"><span class="ei">🧾</span><h3 class="et">Keine Rechnungen</h3><p class="es">Laden Sie Ihre erste Rechnung hoch.</p></div>`;return;}
+  el.innerHTML=`<div class="tw"><table><thead><tr><th>Rechnungsnr.</th><th>Betrag Brutto</th><th>Status</th><th>Hochgeladen</th><th></th></tr></thead><tbody>${data.map(i=>
+    `<tr><td><div class="tdp">${i.invoice_number||'(ohne Nr.)'}</div><div style="font-size:11px;color:var(--di)">${i.file_name||''}</div></td>
+    <td class="tdm">${i.total_gross?fmt(i.total_gross):'—'}</td>
+    <td><span class="pill ${INV_STATUS_PILL[i.status]||'pu'}">${INV_STATUS_LABEL[i.status]||i.status}</span></td>
+    <td class="tdm" style="font-size:11px">${fdate(i.uploaded_at)}</td>
+    <td><button class="btn bgh bsm" onclick="openInvoiceDetail('${i.id}')">Details</button></td></tr>`).join('')}</tbody></table></div>`;
+}
+
+function onInvFile(f){ if(f) doInvoiceUpload(f); }
+function onInvDrop(e){ e.preventDefault(); document.getElementById('inv-uz').classList.remove('drag'); if(e.dataTransfer.files[0]) doInvoiceUpload(e.dataTransfer.files[0]); }
+
+async function doInvoiceUpload(file){
+  const t=document.getElementById('inv-uz-t');
+  const prev=t.textContent;
+  t.textContent='⏳ Wird hochgeladen & von KI ausgelesen...';
+  const fd=new FormData(); fd.append('file',file);
+  try{
+    const r=await fetch('/api/invoices/upload',{method:'POST',headers:{'Authorization':`Bearer ${token}`},body:fd});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.detail||'Upload fehlgeschlagen.');
+    toast(`Rechnung hochgeladen (Status: ${INV_STATUS_LABEL[data.status]||data.status}) ✓`,'ok');
+    t.textContent=prev;
+    loadInvoices();
+  }catch(e){ toast('Fehler: '+e.message,'err'); t.textContent=prev; }
+}
+
+async function openInvoiceDetail(id){
+  go('invoice-detail');
+  const el=document.getElementById('inv-det');
+  el.innerHTML='<div class="ld"><span class="sp"></span>Wird geladen...</div>';
+  const i=await api(`/api/invoices/${id}`);
+  if(!i){el.innerHTML='<div class="ld" style="color:var(--di)">Fehler.</div>';return;}
+  const canApprove=i.status==='matched';
+  let h=`<div class="ph"><div><h1 class="ph-t">${i.invoice_number||'Rechnung (ohne Nr.)'}</h1><p class="ph-s">${i.file_name||''} · Hochgeladen ${fdate(i.uploaded_at)}</p></div>
+    <div class="ph-a"><span class="pill ${INV_STATUS_PILL[i.status]||'pu'}">${INV_STATUS_LABEL[i.status]||i.status}</span>
+    <button class="btn bg bsm" ${canApprove?'':'disabled title="Nur möglich, wenn Status=Abgeglichen (alle Positionen ok). Bitte zuerst Abweichungen klären."'} onclick="approveInvPayment('${i.id}')">Zur Zahlung freigeben</button>
+    <button class="btn brd bsm" onclick="rejectInv('${i.id}')">Ablehnen</button>
+    </div></div>`;
+  h+=`<div class="stats" style="grid-template-columns:repeat(4,1fr)">
+    <div class="sc"><div class="sc-l">Netto</div><div class="sc-v">${i.total_net?fmt(i.total_net):'—'}</div></div>
+    <div class="sc"><div class="sc-l">MwSt.</div><div class="sc-v">${i.total_tax?fmt(i.total_tax):'—'}</div></div>
+    <div class="sc"><div class="sc-l">Brutto</div><div class="sc-v go">${i.total_gross?fmt(i.total_gross):'—'}</div></div>
+    <div class="sc"><div class="sc-l">Fällig</div><div class="sc-v" style="font-size:14px">${fdate(i.due_date)}</div></div>
+  </div>`;
+  h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">PO-Abgleich (2-Wege: Rechnung ↔ PO — kein Wareneingang im System)</span></div><div class="card-b">
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+      <div class="f" style="flex:1;min-width:220px"><label>Purchase Order wählen</label><select id="inv-po-sel"><option value="">— bitte wählen —</option></select></div>
+      <button class="btn bg bsm" onclick="matchInv('${i.id}')">Abgleich starten</button>
+    </div>
+  </div></div>`;
+  h+=`<div class="card"><div class="card-h"><span class="card-t">Rechnungspositionen</span></div><div class="tw" style="border:none;border-radius:0;margin:0">
+    <table><thead><tr><th>Beschreibung</th><th>Menge</th><th>Preis</th><th>Netto</th><th>Status</th><th>Zugeordnete PO-Position</th></tr></thead><tbody>
+    ${(i.line_items||[]).map(l=>{
+      const mc={ok:'pd',price_variance:'pfr',qty_variance:'pp',unmatched:'pu'}[l.match_status]||'pu';
+      const ml={ok:'OK',price_variance:'Preisabweichung',qty_variance:'Mengenabweichung',unmatched:'Nicht zugeordnet'}[l.match_status]||l.match_status;
+      const po=l.matched_po_item;
+      return `<tr><td class="tdp">${l.description}</td><td class="tdm">${l.quantity??'—'}</td><td class="tdm">${l.unit_price!=null?fmt(l.unit_price):'—'}</td><td class="tdm">${l.net_total!=null?fmt(l.net_total):'—'}</td>
+      <td><span class="pill ${mc}">${ml}</span></td>
+      <td style="font-size:11px">${po?`${po.description} (Menge ${po.quantity}, ${fmt(po.unit_price)})`:'—'}</td></tr>`;
+    }).join('')}
+    </tbody></table></div></div>`;
+  el.innerHTML=h;
+
+  const pos=await api('/api/po/list')||[];
+  const sel=document.getElementById('inv-po-sel');
+  if(sel){ sel.innerHTML='<option value="">— bitte wählen —</option>'+pos.map(p=>`<option value="${p.id}" ${p.id===i.purchase_order_id?'selected':''}>${p.po_number} (${fmt(p.amount_net)})</option>`).join(''); }
+}
+async function matchInv(id){
+  const poId=document.getElementById('inv-po-sel').value;
+  if(!poId){toast('Bitte eine Purchase Order wählen.','err');return;}
+  const res=await api(`/api/invoices/${id}/match`,{method:'POST',body:JSON.stringify({purchase_order_id:poId})});
+  if(!res||res.detail){toast(res&&res.detail?res.detail:'Fehler beim Abgleich.','err');return;}
+  toast(`Abgleich abgeschlossen — Status: ${INV_STATUS_LABEL[res.status]||res.status}`,res.status==='matched'?'ok':'err');
+  openInvoiceDetail(id);
+}
+async function approveInvPayment(id){
+  const res=await api(`/api/invoices/${id}/approve-for-payment`,{method:'POST'});
+  if(!res||res.detail){toast(res&&res.detail?res.detail:'Fehler.','err');return;}
+  toast('Zur Zahlung freigegeben ✓','ok');
+  openInvoiceDetail(id);
+}
+async function rejectInv(id){
+  const reason=prompt('Grund für die Ablehnung:');
+  if(reason===null)return;
+  const res=await api(`/api/invoices/${id}/reject`,{method:'POST',body:JSON.stringify({reason})});
+  if(!res||res.detail){toast(res&&res.detail?res.detail:'Fehler.','err');return;}
+  toast('Rechnung abgelehnt','ok');
+  openInvoiceDetail(id);
+}
+
+// Resolve PO detail from other panels (requisitions -> PO link). Reuses the
+// existing /api/po/{id} endpoint; a minimal detail view since full PO
+// management is out of scope for this task per the existing PO panel's own
+// "folgt im nächsten Update" note.
+async function openPoDetail(poId){
+  go('po-detail');
+  const el=document.getElementById('po-det');
+  el.innerHTML='<div class="ld"><span class="sp"></span>Wird geladen...</div>';
+  const po=await api(`/api/po/${poId}`);
+  if(!po){el.innerHTML='<div class="ld" style="color:var(--di)">Fehler.</div>';return;}
+  el.innerHTML=`<div class="ph"><div><h1 class="ph-t">${po.po_number}</h1><p class="ph-s">${po.orderer_name||''} · Status: ${po.status}</p></div></div>
+  <div class="card"><div class="card-h"><span class="card-t">Positionen</span></div><div class="tw" style="border:none;border-radius:0;margin:0">
+  <table><thead><tr><th>Beschreibung</th><th>Menge</th><th>Einheit</th><th>Preis</th><th>Gesamt</th></tr></thead><tbody>
+  ${po.items.map(i=>`<tr><td class="tdp">${i.description}</td><td class="tdm">${i.quantity}</td><td>${i.unit}</td><td class="tdm">${fmt(i.unit_price)}</td><td class="tdm">${fmt(i.total_price)}</td></tr>`).join('')}
+  </tbody></table></div></div>`;
+}
+
 function toggleInvitePanel(){
   const p=document.getElementById('sup-invite-panel');
   p.style.display=p.style.display==='none'?'block':'none';
@@ -1079,7 +1428,7 @@ function exportSAP(auditId) {
 }
 
 // Close modals on overlay click
-['po-ov','sup-ov','co-ov'].forEach(id=>{document.getElementById(id).addEventListener('click',e=>{if(e.target===e.currentTarget)closeMod(id);});});
+['po-ov','sup-ov','co-ov','req-ov','req-submit-ov'].forEach(id=>{document.getElementById(id).addEventListener('click',e=>{if(e.target===e.currentTarget)closeMod(id);});});
 
 init();
 </script>

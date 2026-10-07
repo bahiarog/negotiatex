@@ -47,6 +47,16 @@ async def create_po(payload: POCreate, db: AsyncSession = Depends(get_db)):
     await db.commit()
     return {"po_id": str(po.id), "po_number": po_number, "amount_net": payload.amount_net, "amount_gross": amount_gross, "status": "draft"}
 
+@router.get("/list")
+async def list_pos(db: AsyncSession = Depends(get_db)):
+    """Lightweight PO list for selector dropdowns (e.g. invoice matching). Added
+    alongside the invoice-matching feature -- purely additive, read-only."""
+    r = await db.execute(select(PurchaseOrder).order_by(PurchaseOrder.created_at.desc()))
+    pos = r.scalars().all()
+    return [{"id": str(p.id), "po_number": p.po_number, "status": p.status.value if p.status else "draft",
+             "amount_net": p.amount_net, "orderer_name": p.orderer_name} for p in pos]
+
+
 @router.get("/{po_id}")
 async def get_po(po_id: str, db: AsyncSession = Depends(get_db)):
     r = await db.execute(select(PurchaseOrder).where(PurchaseOrder.id == po_id))
