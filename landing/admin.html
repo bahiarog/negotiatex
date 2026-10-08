@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NegotiateX.ai — Admin</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  /* Shared brand palette (same light mint theme as index.html), kept
+     under this page's existing short variable names so none of the
+     admin-specific rules below need to change. */
+  --gold:#1E8A6E;--gl:#27A382;--gd:rgba(30,138,110,.08);--gb:rgba(30,138,110,.28);
+  --bg:#f7f6f1;--C:#ffffff;--C2:#f0f3ef;--hov:#eef1ec;
+  --tx:#16201c;--mu:#5b6a63;--di:#8b958f;
+  --br:rgba(22,32,28,.09);--br2:rgba(22,32,28,.05);
+  --r:10px;--g:#1D9E75;--red:#D85A30;--am:#BA7517;--bl:#2E6EB5;
+  --sw:224px;--hh:56px;--on-accent:#ffffff;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;font-size:14px}
+
+header{position:fixed;top:0;left:0;right:0;z-index:300;height:var(--hh);background:rgba(247,246,241,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--br);display:flex;align-items:center;padding:0 20px;gap:10px}
+.logo{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--tx);text-decoration:none}
+.logo em{color:var(--gold);font-style:normal}
+.abadge{font-family:'DM Mono',monospace;font-size:9px;font-weight:500;color:var(--gold);background:var(--gd);border:1px solid var(--gb);border-radius:3px;padding:2px 7px;letter-spacing:1px}
+.hdr-r{margin-left:auto;display:flex;align-items:center;gap:8px}
+.chip{display:flex;align-items:center;gap:7px;padding:4px 10px 4px 5px;background:var(--C);border:1px solid var(--br);border-radius:8px}
+.av{width:26px;height:26px;border-radius:50%;background:var(--gd);border:1px solid var(--gb);display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:10px;font-weight:500;color:var(--gold)}
+.h-btn{font-size:12px;color:var(--di);background:transparent;border:1px solid var(--br);padding:5px 11px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:border-color .18s,color .18s;text-decoration:none}
+.h-btn:hover{border-color:rgba(216,90,48,.4);color:var(--red)}
+.h-btn-g{color:var(--mu)}.h-btn-g:hover{border-color:var(--gb);color:var(--tx)}
+
+nav{position:fixed;top:var(--hh);left:0;bottom:0;width:var(--sw);background:var(--C);border-right:1px solid var(--br);display:flex;flex-direction:column;z-index:200;overflow-y:auto}
+.ns{font-family:'DM Mono',monospace;font-size:9px;color:var(--di);text-transform:uppercase;letter-spacing:2px;padding:16px 16px 5px}
+.ni{display:flex;align-items:center;gap:8px;padding:7px 12px;margin:1px 8px;border-radius:7px;font-size:13px;color:var(--mu);background:transparent;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;width:calc(100% - 16px);text-align:left;transition:background .14s,color .14s}
+.ni:hover{background:var(--hov);color:var(--tx)}
+.ni.on{background:var(--gd);color:var(--gold);border:1px solid var(--gb)}
+.ni-ic{font-size:14px;width:17px;text-align:center;flex-shrink:0}
+.ni-b{margin-left:auto;font-family:'DM Mono',monospace;font-size:9px;background:var(--gd);color:var(--gold);border-radius:3px;padding:1px 5px}
+
+main{margin-left:var(--sw);margin-top:var(--hh);padding:24px}
+.panel{display:none}.panel.on{display:block}
+
+.ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;gap:12px;flex-wrap:wrap}
+.ph-t{font-family:'Playfair Display',serif;font-size:21px;font-weight:600}
+.ph-s{font-size:12px;color:var(--mu);margin-top:2px}
+.ph-a{display:flex;gap:6px;align-items:center;flex-shrink:0}
+
+.btn{font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif;border:none;padding:7px 14px;border-radius:7px;cursor:pointer;transition:background .18s;display:inline-flex;align-items:center;gap:5px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.bg{background:var(--gold);color:var(--on-accent)}.bg:hover:not(:disabled){background:var(--gl)}
+.bgh{background:transparent;color:var(--mu);border:1px solid var(--br)}.bgh:hover{border-color:var(--gb);color:var(--tx)}
+.bsm{padding:5px 10px;font-size:12px}
+.bgr{background:rgba(29,158,117,.12);color:var(--g);border:1px solid rgba(29,158,117,.2)}.bgr:hover{background:rgba(29,158,117,.2)}
+.brd{background:rgba(216,90,48,.1);color:var(--red);border:1px solid rgba(216,90,48,.18)}.brd:hover{background:rgba(216,90,48,.18)}
+.bbl{background:rgba(55,138,221,.12);color:#2E6EB5;border:1px solid rgba(55,138,221,.2)}.bbl:hover{background:rgba(55,138,221,.2)}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.sc{background:var(--C);border:1px solid var(--br);border-radius:var(--r);padding:15px 18px}
+.sc-l{font-family:'DM Mono',monospace;font-size:9px;color:var(--di);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px}
+.sc-v{font-family:'DM Mono',monospace;font-size:24px;font-weight:500;line-height:1}
+.sc-v.go{color:var(--gold)}.sc-v.gr{color:var(--g)}.sc-v.re{color:var(--red)}
+
+.tw{background:var(--C);border:1px solid var(--br);border-radius:var(--r);overflow:hidden;margin-bottom:16px}
+.tb{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--br);flex-wrap:wrap}
+.tb-t{font-size:13px;font-weight:500}
+table{width:100%;border-collapse:collapse}
+th{font-family:'DM Mono',monospace;font-size:9px;color:var(--di);text-transform:uppercase;letter-spacing:1.5px;padding:9px 14px;text-align:left;border-bottom:1px solid var(--br);background:rgba(22,32,28,.02);white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid var(--br2);font-size:13px;color:var(--mu);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(22,32,28,.015)}
+.tdp{color:var(--tx)}.tdm{font-family:'DM Mono',monospace;font-size:12px}
+.tda{display:flex;gap:5px;justify-content:flex-end}
+
+.pill{font-family:'DM Mono',monospace;font-size:9px;font-weight:500;padding:2px 6px;border-radius:3px;letter-spacing:.7px;white-space:nowrap;display:inline-block}
+.pv{background:rgba(29,158,117,.12);color:#1D9E75;border:1px solid rgba(29,158,117,.22)}
+.pu{background:rgba(22,32,28,.06);color:var(--di);border:1px solid var(--br)}
+.pp{background:rgba(186,117,23,.12);color:#BA7517;border:1px solid rgba(186,117,23,.22)}
+.pd{background:rgba(29,158,117,.12);color:#1D9E75;border:1px solid rgba(29,158,117,.22)}
+.pa{background:rgba(55,138,221,.12);color:#2E6EB5;border:1px solid rgba(55,138,221,.22)}
+
+.card{background:var(--C);border:1px solid var(--br);border-radius:var(--r);overflow:hidden;margin-bottom:14px}
+.card-h{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--br)}
+.card-t{font-size:13px;font-weight:500}
+.card-b{padding:16px}
+
+.fg2{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:11px}
+.fg3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px;margin-bottom:11px}
+.f{display:flex;flex-direction:column;gap:4px}
+.f label{font-size:10px;color:var(--mu);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace}
+.f input,.f select,.f textarea{background:var(--C2);border:1px solid var(--br);border-radius:7px;padding:8px 12px;font-size:13px;color:var(--tx);font-family:'DM Sans',sans-serif;font-weight:300;outline:none;transition:border-color .18s;width:100%}
+.f input:focus,.f select:focus,.f textarea:focus{border-color:var(--gb)}
+.f input::placeholder,.f textarea::placeholder{color:var(--di)}
+.f select option{background:var(--C)}
+
+/* BENCHMARK COMPARE WIDGET */
+.bm-widget{background:var(--C2);border:1px solid var(--br);border-radius:var(--r);padding:20px;margin-bottom:14px}
+.bm-bar-wrap{margin:16px 0}
+.bm-bar-track{height:8px;background:rgba(22,32,28,.06);border-radius:4px;position:relative;overflow:visible;margin:8px 0}
+.bm-bar-bg{position:absolute;top:0;left:0;height:100%;background:rgba(22,32,28,.06);border-radius:4px}
+.bm-bar-range{position:absolute;top:0;height:100%;background:rgba(201,168,76,.2);border-radius:4px}
+.bm-bar-you{position:absolute;top:-3px;width:14px;height:14px;border-radius:50%;border:2px solid var(--bg);transform:translateX(-50%);transition:left .6s ease}
+.bm-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--di);font-family:'DM Mono',monospace;margin-top:4px}
+.bm-verdict{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:5px;font-size:12px;font-weight:500;margin-top:10px}
+.bm-over{background:rgba(216,90,48,.1);color:var(--red);border:1px solid rgba(216,90,48,.18)}
+.bm-fair{background:rgba(201,168,76,.1);color:var(--gold);border:1px solid var(--gb)}
+.bm-under{background:rgba(29,158,117,.1);color:var(--g);border:1px solid rgba(29,158,117,.2)}
+.bm-stats-row{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px}
+.bm-stat{display:flex;flex-direction:column;gap:2px}
+.bm-stat-l{font-size:9px;color:var(--di);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:1px}
+.bm-stat-v{font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--tx)}
+
+/* LOG */
+.log-list{display:flex;flex-direction:column}
+.lr{display:flex;align-items:flex-start;gap:11px;padding:10px 14px;border-bottom:1px solid var(--br2)}
+.lr:last-child{border-bottom:none}
+.ld2{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.l-up{background:var(--bl)}.l-an{background:var(--g)}.l-cr{background:var(--gold)}.l-df{background:var(--di)}
+.lm{font-size:13px;color:var(--mu);flex:1;line-height:1.4}
+.lm strong{color:var(--tx);font-weight:500}
+.lt{font-family:'DM Mono',monospace;font-size:11px;color:var(--di);white-space:nowrap}
+
+/* MODAL */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:500;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.ov.show{opacity:1;pointer-events:all}
+.modal{background:var(--C);border:1px solid var(--br);border-radius:12px;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
+.modal-t{font-family:'Playfair Display',serif;font-size:17px;font-weight:600;margin-bottom:16px}
+.modal-a{display:flex;gap:7px;margin-top:16px;justify-content:flex-end}
+
+.back{display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--mu);background:transparent;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;margin-bottom:16px;padding:0;transition:color .18s}
+.back:hover{color:var(--tx)}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--br2);font-size:13px}
+.info-row:last-child{border-bottom:none}
+.ik{color:var(--mu)}.iv{color:var(--tx);text-align:right}
+.srch{background:var(--C2);border:1px solid var(--br);border-radius:7px;padding:6px 11px;font-size:13px;color:var(--tx);font-family:'DM Sans',sans-serif;outline:none;width:185px;transition:border-color .18s}
+.srch:focus{border-color:var(--gb)}
+.srch::placeholder{color:var(--di)}
+.tag{font-size:11px;background:var(--C2);border:1px solid var(--br);border-radius:3px;padding:2px 6px;color:var(--mu)}
+.sep{height:1px;background:var(--br);margin:12px 0}
+.empty{text-align:center;padding:48px 20px}
+.ei{font-size:36px;display:block;margin-bottom:12px;opacity:.4}
+.et{font-family:'Playfair Display',serif;font-size:17px;font-weight:600;margin-bottom:6px}
+.es{font-size:13px;color:var(--mu);margin-bottom:18px}
+
+/* STATUS DOTS */
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.s-ok{background:var(--g)}.s-warn{background:var(--am)}.s-err{background:var(--red)}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+.sp{width:16px;height:16px;border:2px solid var(--br);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+.ld{display:flex;align-items:center;justify-content:center;padding:44px;gap:8px;color:var(--mu);font-size:13px}
+.toast{position:fixed;bottom:16px;right:16px;z-index:999;background:var(--C);border:1px solid var(--gb);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--tx);max-width:270px;opacity:0;transform:translateY(6px);transition:opacity .22s,transform .22s;pointer-events:none}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.ok{border-color:rgba(29,158,117,.5);color:#1D9E75}
+.toast.err{border-color:rgba(216,90,48,.5);color:#D85A30}
+
+@media(max-width:900px){nav{display:none}main{margin-left:0}.stats,.fg2,.fg3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/" class="logo">Negotiate<em>X</em>.ai</a>
+  <span class="abadge">ADMIN</span>
+  <div class="hdr-r">
+    <div class="chip"><div class="av" id="av">R</div><span style="font-size:12px;font-weight:500" id="hdr-n">—</span></div>
+    <a href="/dashboard" class="h-btn h-btn-g">User-Ansicht</a>
+    <button class="h-btn" onclick="logout()">Abmelden</button>
+  </div>
+</header>
+
+<nav>
+  <div class="ns">Übersicht</div>
+  <button class="ni on" data-p="overview"><span class="ni-ic">📊</span>Dashboard</button>
+  <div class="ns">Nutzer & Analysen</div>
+  <button class="ni" data-p="users"><span class="ni-ic">👥</span>Nutzer<span class="ni-b" id="nb-u">—</span></button>
+  <button class="ni" data-p="audits"><span class="ni-ic">📋</span>Alle Analysen<span class="ni-b" id="nb-a">—</span></button>
+  <div class="ns">Benchmark-Pool</div>
+  <button class="ni" data-p="benchmark"><span class="ni-ic">📈</span>Datenpool<span class="ni-b" id="nb-bm">—</span></button>
+  <button class="ni" data-p="compare"><span class="ni-ic">🔍</span>Vergleichs-Tool</button>
+  <div class="ns">System</div>
+  <button class="ni" data-p="activity"><span class="ni-ic">📝</span>Activity Log</button>
+  <button class="ni" data-p="status"><span class="ni-ic">🔌</span>System Status</button>
+</nav>
+
+<main>
+
+<!-- ══ OVERVIEW ══ -->
+<div class="panel on" id="panel-overview">
+  <div class="ph"><div><h1 class="ph-t">Admin Dashboard</h1><p class="ph-s">Gesamtübersicht NegotiateX.ai</p></div><div class="ph-a"><button class="btn bgh bsm" onclick="loadAll()">↻ Aktualisieren</button></div></div>
+  <div class="stats">
+    <div class="sc"><div class="sc-l">Nutzer</div><div class="sc-v go" id="s-u">—</div></div>
+    <div class="sc"><div class="sc-l">Paid Accounts</div><div class="sc-v gr" id="s-p">—</div></div>
+    <div class="sc"><div class="sc-l">Analysen</div><div class="sc-v" id="s-a">—</div></div>
+    <div class="sc"><div class="sc-l">Benchmark-Einträge</div><div class="sc-v go" id="s-bm">—</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+    <div>
+      <div class="ph" style="margin-bottom:10px"><h2 style="font-size:14px;font-weight:500">Neue Nutzer</h2><button class="btn bgh bsm" onclick="go('users')">Alle →</button></div>
+      <div id="ov-u"><div class="ld"><span class="sp"></span></div></div>
+    </div>
+    <div>
+      <div class="ph" style="margin-bottom:10px"><h2 style="font-size:14px;font-weight:500">Benchmark-Pool Status</h2><button class="btn bgh bsm" onclick="go('benchmark')">Details →</button></div>
+      <div id="ov-bm"><div class="ld"><span class="sp"></span></div></div>
+    </div>
+  </div>
+  <div class="ph" style="margin-bottom:10px;margin-top:8px"><h2 style="font-size:14px;font-weight:500">Letzte Aktivität</h2><button class="btn bgh bsm" onclick="go('activity')">Alle →</button></div>
+  <div id="ov-act"><div class="ld"><span class="sp"></span></div></div>
+</div>
+
+<!-- ══ USERS ══ -->
+<div class="panel" id="panel-users">
+  <div class="ph"><div><h1 class="ph-t">Nutzer</h1><p class="ph-s">Alle registrierten Accounts.</p></div><div class="ph-a"><input class="srch" placeholder="Suchen..." oninput="filterRows('u-tb',this.value)"></div></div>
+  <div class="tw"><table><thead><tr><th>Name / Unternehmen</th><th>E-Mail</th><th>Plan</th><th>Rolle</th><th>Registriert</th><th></th></tr></thead>
+  <tbody id="u-tb"><tr><td colspan="6"><div class="ld"><span class="sp"></span></div></td></tr></tbody></table></div>
+</div>
+
+<!-- USER DETAIL -->
+<div class="panel" id="panel-user-detail">
+  <button class="back" onclick="go('users')">← Zurück</button>
+  <div id="ud"></div>
+</div>
+
+<!-- ══ AUDITS ══ -->
+<div class="panel" id="panel-audits">
+  <div class="ph"><div><h1 class="ph-t">Alle Analysen</h1><p class="ph-s">Sämtliche Beschaffungsanalysen.</p></div><div class="ph-a"><input class="srch" placeholder="Suchen..." oninput="filterRows('a-tb',this.value)"></div></div>
+  <div class="tw"><table><thead><tr><th>Unternehmen</th><th>E-Mail</th><th>Branche</th><th>Status</th><th>Dok.</th><th>Einsparung</th><th>Erstellt</th><th></th></tr></thead>
+  <tbody id="a-tb"><tr><td colspan="8"><div class="ld"><span class="sp"></span></div></td></tr></tbody></table></div>
+</div>
+
+<!-- AUDIT DETAIL -->
+<div class="panel" id="panel-audit-detail">
+  <button class="back" onclick="go('audits')">← Zurück</button>
+  <div id="adet"></div>
+</div>
+
+<!-- ══ BENCHMARK POOL ══ -->
+<div class="panel" id="panel-benchmark">
+  <div class="ph">
+    <div><h1 class="ph-t">Benchmark-Datenpool</h1><p class="ph-s">Marktdaten für Preisvergleiche — unser Wettbewerbsvorteil.</p></div>
+    <div class="ph-a">
+      <input class="srch" placeholder="Suchen..." oninput="filterRows('bm-tb',this.value)">
+      <button class="btn bgh bsm" onclick="go('compare')">🔍 Vergleichs-Tool</button>
+      <button class="btn bg bsm" onclick="openMod('bm-ov')">+ Eintrag hinzufügen</button>
+    </div>
+  </div>
+
+  <!-- Pool Stats -->
+  <div id="bm-stats" style="margin-bottom:16px"><div class="ld"><span class="sp"></span></div></div>
+
+  <!-- Category breakdown -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-h"><span class="card-t">📊 Pool nach Kategorie</span></div>
+    <div class="card-b" id="bm-cats"><div class="ld" style="padding:20px"><span class="sp"></span></div></div>
+  </div>
+
+  <!-- Entries table -->
+  <div class="tw">
+    <div class="tb">
+      <span class="tb-t">Alle Einträge</span>
+      <select id="bm-cat-filter" onchange="loadBenchmarks()" style="background:var(--C2);border:1px solid var(--br);border-radius:6px;padding:5px 10px;font-size:12px;color:var(--tx);font-family:'DM Sans',sans-serif;outline:none;margin-left:auto">
+        <option value="">Alle Kategorien</option>
+        <option>Software & IT</option><option>Marketing</option><option>Lead-Einkauf</option>
+        <option>Logistik</option><option>Professional Services</option><option>Energie</option><option>General</option>
+      </select>
+      <select id="bm-type-filter" onchange="loadBenchmarks()" style="background:var(--C2);border:1px solid var(--br);border-radius:6px;padding:5px 10px;font-size:12px;color:var(--tx);font-family:'DM Sans',sans-serif;outline:none">
+        <option value="">Alle Typen</option>
+        <option value="hourly_rate">Stundensatz</option><option value="daily_rate">Tagessatz</option>
+        <option value="fte">FTE/Monat</option><option value="flat">Pauschal</option>
+        <option value="monthly">Monatspauschale</option><option value="cpl">CPL</option>
+      </select>
+    </div>
+    <table><thead><tr><th>Kategorie</th><th>Typ</th><th>Bezeichnung</th><th>Wert</th><th>Region</th><th>Quelle</th><th>Status</th><th>Erstellt</th><th></th></tr></thead>
+    <tbody id="bm-tb"><tr><td colspan="9"><div class="ld"><span class="sp"></span></div></td></tr></tbody></table>
+  </div>
+</div>
+
+<!-- ══ COMPARE TOOL ══ -->
+<div class="panel" id="panel-compare">
+  <div class="ph"><div><h1 class="ph-t">Vergleichs-Tool</h1><p class="ph-s">Prüfen Sie einen Wert gegen unseren Benchmark-Pool.</p></div></div>
+  <div style="max-width:600px">
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-h"><span class="card-t">Wert eingeben</span></div>
+      <div class="card-b">
+        <div class="fg3">
+          <div class="f"><label>Kategorie</label><select id="cmp-cat">
+            <option value="Software & IT">Software & IT</option><option value="Marketing">Marketing</option>
+            <option value="Lead-Einkauf">Lead-Einkauf</option><option value="Logistik">Logistik</option>
+            <option value="Professional Services">Professional Services</option><option value="Energie">Energie</option>
+          </select></div>
+          <div class="f"><label>Typ</label><select id="cmp-type">
+            <option value="hourly_rate">Stundensatz</option><option value="daily_rate">Tagessatz</option>
+            <option value="fte">FTE-Kosten/Monat</option><option value="flat">Pauschalpreis</option>
+            <option value="monthly">Monatspauschale</option><option value="cpl">Cost per Lead</option>
+          </select></div>
+          <div class="f"><label>Ihr Wert (€)</label><input type="number" id="cmp-val" placeholder="z.B. 115"></div>
+        </div>
+        <button class="btn bg" onclick="doCompare()" style="width:100%;padding:11px">→ Vergleichen</button>
+      </div>
+    </div>
+    <div id="cmp-result"></div>
+  </div>
+</div>
+
+<!-- ══ ACTIVITY ══ -->
+<div class="panel" id="panel-activity">
+  <div class="ph"><div><h1 class="ph-t">Activity Log</h1><p class="ph-s">Alle Systemaktivitäten.</p></div><div class="ph-a"><button class="btn bgh bsm" onclick="loadActivity()">↻ Aktualisieren</button></div></div>
+  <div class="tw"><div class="log-list" id="act-list"><div class="ld"><span class="sp"></span></div></div></div>
+</div>
+
+<!-- ══ STATUS ══ -->
+<div class="panel" id="panel-status">
+  <div class="ph"><div><h1 class="ph-t">System Status</h1></div><div class="ph-a"><button class="btn bgh bsm" onclick="checkStatus()">↻ Prüfen</button></div></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div class="card"><div class="card-h"><span class="card-t"><span class="status-dot" id="d-api"></span>Backend API</span></div><div class="card-b">
+      <div class="info-row"><span class="ik">Status</span><span class="iv" id="l-api">Prüfe...</span></div>
+      <div class="info-row"><span class="ik">Endpoint</span><span class="iv tdm" style="font-size:11px">negotiatex.ai/api</span></div>
+      <div class="info-row"><span class="ik">Framework</span><span class="iv">FastAPI + Python 3.12</span></div>
+    </div></div>
+    <div class="card"><div class="card-h"><span class="card-t"><span class="status-dot s-ok"></span>PostgreSQL</span></div><div class="card-b">
+      <div class="info-row"><span class="ik">Version</span><span class="iv">PostgreSQL 16</span></div>
+      <div class="info-row"><span class="ik">Container</span><span class="iv tdm" style="font-size:11px">negotiatex-db</span></div>
+      <div class="info-row"><span class="ik">Tabellen</span><span class="iv">clients · audits · offers · ai_checks · benchmark_entries · users · po</span></div>
+    </div></div>
+    <div class="card"><div class="card-h"><span class="card-t"><span class="status-dot s-warn"></span>Claude AI</span></div><div class="card-b">
+      <div class="info-row"><span class="ik">Modell</span><span class="iv tdm" style="font-size:11px">claude-opus-4-5</span></div>
+      <div class="info-row"><span class="ik">Checks</span><span class="iv">Pricing · Savings · Terms · General</span></div>
+      <div class="info-row"><span class="ik">Auto-Benchmark</span><span class="iv" style="color:var(--g)">Aktiv ✓</span></div>
+    </div></div>
+    <div class="card"><div class="card-h"><span class="card-t"><span class="status-dot s-ok"></span>Server</span></div><div class="card-b">
+      <div class="info-row"><span class="ik">IP</span><span class="iv tdm" style="font-size:11px">187.124.10.46</span></div>
+      <div class="info-row"><span class="ik">SSL</span><span class="iv" style="color:var(--g)">Let's Encrypt ✓</span></div>
+      <div class="info-row"><span class="ik">nginx</span><span class="iv">1.29 (Docker)</span></div>
+    </div></div>
+  </div>
+</div>
+
+</main>
+
+<!-- BENCHMARK MODAL -->
+<div class="ov" id="bm-ov">
+  <div class="modal">
+    <div class="modal-t">Benchmark-Eintrag hinzufügen</div>
+    <div class="fg2">
+      <div class="f"><label>Kategorie *</label><select id="bm-cat">
+        <option value="Software & IT">Software & IT</option><option value="Marketing">Marketing</option>
+        <option value="Lead-Einkauf">Lead-Einkauf</option><option value="Logistik">Logistik</option>
+        <option value="Professional Services">Professional Services</option><option value="Energie">Energie</option><option value="General">Allgemein</option>
+      </select></div>
+      <div class="f"><label>Typ *</label><select id="bm-type">
+        <option value="hourly_rate">Stundensatz</option><option value="daily_rate">Tagessatz</option>
+        <option value="fte">FTE-Kosten/Monat</option><option value="flat">Pauschalpreis</option>
+        <option value="monthly">Monatspauschale</option><option value="cpl">Cost per Lead</option>
+      </select></div>
+    </div>
+    <div class="fg2">
+      <div class="f"><label>Bezeichnung</label><input id="bm-lbl" placeholder="z.B. Senior Developer"></div>
+      <div class="f"><label>Wert (€) *</label><input type="number" id="bm-val" placeholder="z.B. 115"></div>
+    </div>
+    <div class="fg2">
+      <div class="f"><label>Region</label><select id="bm-reg"><option value="DACH">DACH</option><option value="DE">Deutschland</option><option value="EU">EU</option><option value="Global">Global</option></select></div>
+      <div class="f"><label>Quelle</label><select id="bm-src"><option value="manual">Manuell</option><option value="market_data">Marktdaten</option><option value="offer">Aus Angebot</option></select></div>
+    </div>
+    <div class="f" style="margin-bottom:0"><label>Notizen</label><textarea id="bm-notes" rows="2" placeholder="z.B. Quelle: Freelancermap 2025 Q1"></textarea></div>
+    <div class="modal-a">
+      <button class="btn bgh" onclick="closeMod('bm-ov')">Abbrechen</button>
+      <button class="btn bg" onclick="saveBm()">Hinzufügen</button>
+    </div>
+  </div>
+</div>
+
+<!-- PLAN MODAL -->
+<div class="ov" id="plan-ov">
+  <div class="modal">
+    <div class="modal-t">Plan ändern</div>
+    <input type="hidden" id="plan-uid">
+    <div class="f" style="margin-bottom:12px"><label>Nutzer</label><input id="plan-uname" disabled></div>
+    <div class="f" style="margin-bottom:0"><label>Plan</label><select id="plan-sel"><option value="free">Free</option><option value="trial">Trial</option><option value="paid">Paid ✓</option></select></div>
+    <div class="modal-a">
+      <button class="btn bgh" onclick="closeMod('plan-ov')">Abbrechen</button>
+      <button class="btn bg" onclick="savePlan()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="tel"></div>
+
+<script>
+const token = localStorage.getItem('nx_token');
+const user  = JSON.parse(localStorage.getItem('nx_user') || 'null');
+if (!token || !user) location.href = '/login';
+if (!user.is_admin)  location.href = '/dashboard';
+
+let users=[], audits=[], bmEntries=[];
+
+function init() {
+  const ini=(user.name||'R').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  document.getElementById('av').textContent=ini;
+  document.getElementById('hdr-n').textContent=user.name||user.email;
+  document.querySelectorAll('.ni[data-p]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.p)));
+  loadAll();
+}
+
+function go(p) {
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.ni[data-p]').forEach(x=>x.classList.remove('on'));
+  const panel=document.getElementById('panel-'+p);
+  if(panel)panel.classList.add('on');
+  document.querySelectorAll(`.ni[data-p="${p}"]`).forEach(x=>x.classList.add('on'));
+  if(p==='users')     loadUsers();
+  if(p==='audits')    loadAudits();
+  if(p==='benchmark') loadBenchmarks();
+  if(p==='activity')  loadActivity();
+  if(p==='status')    checkStatus();
+}
+
+async function api(path,opts={}) {
+  try {
+    const r=await fetch(path,{...opts,headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`,...(opts.headers||{})}});
+    if(r.status===401){logout();return null;}
+    const t=await r.text();return t?JSON.parse(t):null;
+  } catch(e){console.error(path,e);return null;}
+}
+
+function fmt(n){return n!=null?'€'+Number(n).toLocaleString('de',{minimumFractionDigits:0,maximumFractionDigits:0}):'—';}
+function fdate(d){return d?new Date(d).toLocaleDateString('de'):'—';}
+function sc(s){return s>=70?'var(--g)':s>=40?'var(--am)':'var(--red)';}
+
+// ── Load All ──────────────────────────────────────────────────────────
+async function loadAll() {
+  const [dash,usrs,auds,bmstats]=await Promise.all([
+    api('/api/admin/dashboard'), api('/api/admin/users'),
+    api('/api/audit/list'), api('/api/benchmark/stats')
+  ]);
+  users=usrs||[]; audits=auds||[];
+  const paid=(usrs||[]).filter(u=>u.plan==='paid').length;
+  document.getElementById('s-u').textContent=usrs?.length||0;
+  document.getElementById('s-p').textContent=paid;
+  document.getElementById('s-a').textContent=auds?.length||0;
+  document.getElementById('s-bm').textContent=bmstats?.total||0;
+  document.getElementById('nb-u').textContent=usrs?.length||0;
+  document.getElementById('nb-a').textContent=auds?.length||0;
+  document.getElementById('nb-bm').textContent=bmstats?.total||0;
+  renderOvUsers(usrs?.slice(0,5)||[]);
+  renderOvBm(bmstats);
+  loadOvActivity();
+}
+
+function renderOvUsers(us) {
+  if(!us.length){document.getElementById('ov-u').innerHTML='<div style="padding:18px;font-size:13px;color:var(--di)">Noch keine Nutzer.</div>';return;}
+  document.getElementById('ov-u').innerHTML=`<div class="tw"><table><thead><tr><th>Name</th><th>Plan</th><th>Erstellt</th></tr></thead><tbody>${
+    us.map(u=>`<tr><td><div class="tdp">${u.name||'—'}</div><div style="font-size:11px;color:var(--di)">${u.email}</div></td><td><span class="pill ${u.plan==='paid'?'ppa':'pu'}">${(u.plan||'free').toUpperCase()}</span>${u.is_admin?'<span class="pill pa" style="margin-left:4px">ADMIN</span>':''}</td><td class="tdm" style="font-size:11px">${fdate(u.created_at)}</td></tr>`).join('')
+  }</tbody></table></div>`;
+}
+
+function renderOvBm(s) {
+  if(!s||!s.total){
+    document.getElementById('ov-bm').innerHTML=`<div style="padding:18px;font-size:13px;color:var(--di)">Pool ist leer. <button class="btn bgh bsm" onclick="openMod('bm-ov')">+ Eintrag hinzufügen</button></div>`;
+    return;
+  }
+  const cats=s.categories?.slice(0,5)||[];
+  document.getElementById('ov-bm').innerHTML=`<div class="card-b" style="padding:14px">${cats.map(c=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--br2);font-size:13px"><span style="color:var(--mu)">${c.name}</span><span class="tdm" style="color:var(--gold)">${c.count} Eintr.</span></div>`).join('')}<div style="margin-top:10px;font-size:12px;color:var(--di)">Total: ${s.total} · Verifiziert: ${s.verified}</div></div>`;
+}
+
+async function loadOvActivity() {
+  const data=await api('/api/admin/activity?limit=6');
+  if(!data?.length){document.getElementById('ov-act').innerHTML='<div style="padding:18px;font-size:13px;color:var(--di)">Keine Aktivität.</div>';return;}
+  document.getElementById('ov-act').innerHTML=`<div class="tw"><div class="log-list">${renderLogs(data)}</div></div>`;
+}
+
+// ── Users ─────────────────────────────────────────────────────────────
+async function loadUsers() {
+  document.getElementById('u-tb').innerHTML='<tr><td colspan="6"><div class="ld"><span class="sp"></span></div></td></tr>';
+  const data=await api('/api/admin/users');
+  if(!data){document.getElementById('u-tb').innerHTML='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--di)">Fehler.</td></tr>';return;}
+  users=data;
+  document.getElementById('nb-u').textContent=data.length;
+  if(!data.length){document.getElementById('u-tb').innerHTML='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--di)">Keine Nutzer.</td></tr>';return;}
+  document.getElementById('u-tb').innerHTML=data.map(u=>`<tr>
+    <td><div class="tdp">${u.name||'—'}</div><div style="font-size:11px;color:var(--di)">${u.company_name||''}</div></td>
+    <td class="tdm" style="font-size:12px">${u.email}</td>
+    <td><span class="pill ${u.plan==='paid'?'ppa':'pu'}">${(u.plan||'FREE').toUpperCase()}</span></td>
+    <td>${u.is_admin?'<span class="pill pa">ADMIN</span>':'<span style="font-size:12px;color:var(--di)">User</span>'}</td>
+    <td class="tdm" style="font-size:11px">${fdate(u.created_at)}</td>
+    <td><div class="tda">
+      <button class="btn bgh bsm" onclick="openPlanMod('${u.id}','${(u.name||u.email).replace(/'/g,"\\'")}','${u.plan||'free'}')">Plan</button>
+      <button class="btn bgh bsm" onclick="showUserDet('${u.id}')">Details</button>
+    </div></td>
+  </tr>`).join('');
+}
+
+async function showUserDet(uid) {
+  go('user-detail');
+  const el=document.getElementById('ud');
+  el.innerHTML='<div class="ld"><span class="sp"></span></div>';
+  const u=users.find(x=>x.id===uid);
+  if(!u){el.innerHTML='<div class="ld" style="color:var(--di)">Nicht gefunden.</div>';return;}
+  const userAudits=audits.filter(a=>a.questionnaire?.email===u.email);
+  el.innerHTML=`<div class="ph"><div><h1 class="ph-t">${u.name||u.email}</h1><p class="ph-s">${u.email} · ${u.company_name||'—'}</p></div>
+    <div class="ph-a"><button class="btn bg bsm" onclick="openPlanMod('${u.id}','${(u.name||u.email).replace(/'/g,"\\'")}','${u.plan||'free'}')">Plan ändern</button></div></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+    <div class="card"><div class="card-h"><span class="card-t">Profil</span></div><div class="card-b">
+      <div class="info-row"><span class="ik">E-Mail</span><span class="iv tdm" style="font-size:11px">${u.email}</span></div>
+      <div class="info-row"><span class="ik">Unternehmen</span><span class="iv">${u.company_name||'—'}</span></div>
+      <div class="info-row"><span class="ik">Registriert</span><span class="iv tdm" style="font-size:11px">${new Date(u.created_at).toLocaleString('de')}</span></div>
+    </div></div>
+    <div class="card"><div class="card-h"><span class="card-t">Account</span></div><div class="card-b">
+      <div class="info-row"><span class="ik">Plan</span><span class="iv"><span class="pill ${u.plan==='paid'?'ppa':'pu'}">${(u.plan||'free').toUpperCase()}</span></span></div>
+      <div class="info-row"><span class="ik">Admin</span><span class="iv">${u.is_admin?'<span style="color:var(--gold)">Ja ✓</span>':'Nein'}</span></div>
+      <div class="info-row"><span class="ik">Analysen</span><span class="iv">${userAudits.length}</span></div>
+    </div></div>
+  </div>
+  ${userAudits.length?`<h2 style="font-size:14px;font-weight:500;margin-bottom:10px">Analysen</h2><div class="tw"><table><thead><tr><th>Analyse</th><th>Status</th><th>Einsparung</th><th>Erstellt</th></tr></thead><tbody>${
+    userAudits.map(a=>`<tr><td class="tdp">${a.questionnaire?.company_name||'—'}</td><td><span class="pill ${a.status==='complete'||a.offers?.some(o=>o.ai_score)?'pd':'pp'}">${a.status}</span></td><td class="tdm">${a.total_savings_identified?fmt(a.total_savings_identified):'—'}</td><td class="tdm" style="font-size:11px">${fdate(a.created_at)}</td></tr>`).join('')
+  }</tbody></table></div>`:''}`;
+}
+
+// ── Audits ────────────────────────────────────────────────────────────
+async function loadAudits() {
+  document.getElementById('a-tb').innerHTML='<tr><td colspan="8"><div class="ld"><span class="sp"></span></div></td></tr>';
+  const data=await api('/api/audit/list');
+  if(!data){document.getElementById('a-tb').innerHTML='<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--di)">Fehler.</td></tr>';return;}
+  audits=data;
+  document.getElementById('nb-a').textContent=data.length;
+  if(!data.length){document.getElementById('a-tb').innerHTML='<tr><td colspan="8" style="text-align:center;padding:28px;color:var(--di)">Keine Analysen.</td></tr>';return;}
+  document.getElementById('a-tb').innerHTML=data.map(a=>{
+    const name=a.questionnaire?.company_name||'—';
+    const email=a.questionnaire?.email||'—';
+    const cat=a.questionnaire?.industry||'—';
+    const docs=a.offers?.length||0;
+    const sav=a.total_savings_identified;
+    const run=a.offers?.some(o=>o.status==='analyzing');
+    const scored=a.offers?.filter(o=>o.ai_score)||[];
+    const stc=run?'pa':scored.length?'pd':a.status==='pending'?'pp':'pu';
+    const stl=run?'Läuft':scored.length?'Fertig':'Ausstehend';
+    return `<tr>
+      <td><div class="tdp">${name}</div></td>
+      <td class="tdm" style="font-size:11px">${email}</td>
+      <td><span class="tag">${cat}</span></td>
+      <td><span class="pill ${stc}">${stl}</span></td>
+      <td>${docs}</td>
+      <td class="tdm">${sav?`<span style="color:var(--g)">${fmt(sav)}</span>`:'—'}</td>
+      <td class="tdm" style="font-size:11px">${fdate(a.created_at)}</td>
+      <td><button class="btn bgh bsm" onclick="showAuditDet('${a.id}')">Details</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function showAuditDet(id) {
+  go('audit-detail');
+  const el=document.getElementById('adet');
+  el.innerHTML='<div class="ld"><span class="sp"></span></div>';
+  const a=await api(`/api/audit/audit/${id}`);
+  if(!a){el.innerHTML='<div class="ld" style="color:var(--di)">Fehler.</div>';return;}
+  const name=a.questionnaire?.company_name||'Analyse';
+  const sav=a.total_savings_identified||0;
+  let h=`<div class="ph"><div><h1 class="ph-t">${name}</h1><p class="ph-s">${a.questionnaire?.email||''} · ${fdate(a.created_at)}</p></div></div>`;
+  if(sav>0)h+=`<div style="display:flex;gap:16px;background:rgba(29,158,117,.07);border:1px solid rgba(29,158,117,.15);border-radius:8px;padding:12px 16px;margin-bottom:14px"><div><div style="font-size:9px;color:rgba(92,202,165,.7);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:2px">Einsparpotenzial</div><div style="font-family:'DM Mono',monospace;font-size:18px;font-weight:500;color:var(--g)">${fmt(sav)}</div></div></div>`;
+  if(!a.offers?.length){h+='<div style="padding:28px;text-align:center;color:var(--di)">Keine Dokumente.</div>';el.innerHTML=h;return;}
+  a.offers.forEach(o=>{
+    const osc=o.ai_score||0;
+    h+=`<div class="card" style="margin-bottom:12px"><div class="card-h"><div class="tdp">${o.title||'Dokument'}</div>${osc?`<div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:${sc(osc)}">${osc}/100</div>`:''}</div>`;
+    if(o.checks?.length){
+      h+=`<div class="card-b" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">`;
+      const lbl={pricing:'Preisbewertung',savings:'Einsparpotenzial',terms:'Vertragsbedingungen',general:'Gesamtbewertung'};
+      o.checks.forEach(ck=>{const s=ck.score||0;const c=sc(s);h+=`<div style="background:var(--C2);border:1px solid var(--br);border-radius:8px;padding:12px"><div style="font-size:9px;color:var(--di);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px">${lbl[ck.check_type]||ck.check_type}</div><div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:500;color:${c};margin-bottom:4px">${s}</div><div style="height:3px;background:rgba(22,32,28,.06);border-radius:2px;overflow:hidden"><div style="height:100%;width:${s}%;background:${c};border-radius:2px"></div></div><div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">${ck.critical_count?`<span style="font-size:9px;padding:1px 4px;border-radius:2px;background:rgba(216,90,48,.1);color:#D85A30">${ck.critical_count}K</span>`:''}${ck.warning_count?`<span style="font-size:9px;padding:1px 4px;border-radius:2px;background:rgba(186,117,23,.1);color:#BA7517">${ck.warning_count}W</span>`:''}${ck.ok_count?`<span style="font-size:9px;padding:1px 4px;border-radius:2px;background:rgba(29,158,117,.1);color:#1D9E75">${ck.ok_count}OK</span>`:''}</div></div>`;});
+      h+=`</div>`;
+    }else{h+=`<div class="card-b" style="color:var(--di);font-size:13px">Keine Analysedaten.</div>`;}
+    h+=`</div>`;
+  });
+  el.innerHTML=h;
+}
+
+// ── Benchmark Pool ────────────────────────────────────────────────────
+async function loadBenchmarks() {
+  const cat=document.getElementById('bm-cat-filter')?.value||'';
+  const type=document.getElementById('bm-type-filter')?.value||'';
+  let path='/api/benchmark/entries';
+  const params=[];
+  if(cat) params.push('category='+encodeURIComponent(cat));
+  if(type) params.push('metric_type='+encodeURIComponent(type));
+  if(params.length) path+='?'+params.join('&');
+  const [entries,stats]=await Promise.all([api(path),api('/api/benchmark/stats')]);
+  bmEntries=entries||[];
+  document.getElementById('nb-bm').textContent=stats?.total||0;
+  // Render stats
+  if(stats){
+    const metricsHtml=stats.metrics?.map(m=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--br2);font-size:13px"><div><div style="color:var(--tx)">${metricLabel(m.type)}</div><div style="font-size:11px;color:var(--di)">${m.count} Einträge</div></div><div class="tdm" style="color:var(--gold)">${m.avg?'Ø €'+m.avg:''}</div></div>`).join('')||'';
+    document.getElementById('bm-cats').innerHTML=metricsHtml||'<div style="color:var(--di);font-size:13px">Noch keine Daten.</div>';
+    const totHtml=`<div class="stats"><div class="sc"><div class="sc-l">Einträge gesamt</div><div class="sc-v go">${stats.total}</div></div><div class="sc"><div class="sc-l">Verifiziert</div><div class="sc-v gr">${stats.verified}</div></div><div class="sc"><div class="sc-l">Kategorien</div><div class="sc-v">${stats.categories?.length||0}</div></div><div class="sc"><div class="sc-l">Metrik-Typen</div><div class="sc-v">${stats.metrics?.length||0}</div></div></div>`;
+    document.getElementById('bm-stats').innerHTML=totHtml;
+  }
+  // Render table
+  const tb=document.getElementById('bm-tb');
+  if(!bmEntries.length){tb.innerHTML='<tr><td colspan="9"><div class="empty" style="padding:36px"><span class="ei">📈</span><h3 class="et">Pool ist leer</h3><p class="es">Fügen Sie Marktdaten manuell hinzu oder laden Sie Angebote hoch — Werte werden automatisch extrahiert.</p><button class="btn bg" onclick="openMod(\'bm-ov\')">+ Eintrag hinzufügen</button></div></td></tr>';return;}
+  tb.innerHTML=bmEntries.map(e=>`<tr>
+    <td><span class="tag">${e.category}</span></td>
+    <td class="tdm">${metricLabel(e.metric_type)}</td>
+    <td class="tdp">${e.metric_label||'—'}</td>
+    <td class="tdm" style="color:var(--gold);font-weight:500">${fmt(e.value)}</td>
+    <td>${e.region||'DACH'}</td>
+    <td><span class="pill pu">${e.source||'manual'}</span></td>
+    <td>${e.verified?'<span class="pill pv">✓ Verifiziert</span>':'<span class="pill pu">Ungeprüft</span>'}</td>
+    <td class="tdm" style="font-size:11px">${fdate(e.created_at)}</td>
+    <td><div class="tda">
+      ${!e.verified?`<button class="btn bgr bsm" onclick="verifyBm('${e.id}')">✓</button>`:''}
+      <button class="btn brd bsm" onclick="deleteBm('${e.id}')">✕</button>
+    </div></td>
+  </tr>`).join('');
+}
+
+function metricLabel(t){const m={hourly_rate:'Stundensatz',daily_rate:'Tagessatz',fte:'FTE/Monat',flat:'Pauschal',monthly:'Monatspauschale',cpl:'CPL',savings_point:'Einsparpunkt'};return m[t]||t;}
+
+async function saveBm(){
+  const val=parseFloat(document.getElementById('bm-val').value)||0;
+  if(!val){toast('Wert erforderlich.','err');return;}
+  const data=await api('/api/benchmark/entries',{method:'POST',body:JSON.stringify({
+    category:document.getElementById('bm-cat').value,
+    metric_type:document.getElementById('bm-type').value,
+    metric_label:document.getElementById('bm-lbl').value||null,
+    value:val, region:document.getElementById('bm-reg').value,
+    source:document.getElementById('bm-src').value,
+    notes:document.getElementById('bm-notes').value||null,
+  })});
+  if(!data){toast('Fehler.','err');return;}
+  toast('Eintrag gespeichert ✓','ok');
+  closeMod('bm-ov');
+  ['bm-lbl','bm-val','bm-notes'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  loadBenchmarks();
+}
+
+async function verifyBm(id){
+  await api(`/api/benchmark/entries/${id}/verify`,{method:'PATCH'});
+  toast('Verifiziert ✓','ok'); loadBenchmarks();
+}
+
+async function deleteBm(id){
+  if(!confirm('Eintrag löschen?')) return;
+  await api(`/api/benchmark/entries/${id}`,{method:'DELETE'});
+  toast('Gelöscht.','ok'); loadBenchmarks();
+}
+
+// ── Compare Tool ──────────────────────────────────────────────────────
+async function doCompare(){
+  const cat=document.getElementById('cmp-cat').value;
+  const type=document.getElementById('cmp-type').value;
+  const val=parseFloat(document.getElementById('cmp-val').value)||0;
+  if(!val){toast('Bitte Wert eingeben.','err');return;}
+  const el=document.getElementById('cmp-result');
+  el.innerHTML='<div class="ld"><span class="sp"></span>Vergleiche...</div>';
+  const data=await api(`/api/benchmark/compare?category=${encodeURIComponent(cat)}&metric_type=${encodeURIComponent(type)}&value=${val}`);
+  if(!data){el.innerHTML='<div class="ld" style="color:var(--di)">Fehler.</div>';return;}
+  if(!data.has_data){
+    el.innerHTML=`<div class="bm-widget"><p style="font-size:13px;color:var(--di)">Noch keine Daten im Pool für <strong style="color:var(--tx)">${cat} · ${metricLabel(type)}</strong>. Fügen Sie Einträge hinzu.</p><button class="btn bg bsm" style="margin-top:12px" onclick="openMod('bm-ov')">+ Eintrag hinzufügen</button></div>`;
+    return;
+  }
+  const verdictCls=data.verdict==='overpriced'?'bm-over':data.verdict==='below_market'?'bm-under':'bm-fair';
+  const verdictTxt=data.verdict==='overpriced'?`+${data.diff_pct}% über Markt`:data.verdict==='below_market'?`${data.diff_pct}% unter Markt`:'Im Marktbereich';
+  // Calculate position for bar (min=0%, max=100%)
+  const range=data.max-data.min||1;
+  const youPct=Math.min(100,Math.max(0,(val-data.min)/range*100));
+  const p25Pct=Math.min(100,Math.max(0,(data.p25-data.min)/range*100));
+  const p75Pct=Math.min(100,Math.max(0,(data.p75-data.min)/range*100));
+  const dotColor=data.verdict==='overpriced'?'var(--red)':data.verdict==='below_market'?'var(--g)':'var(--gold)';
+  el.innerHTML=`<div class="bm-widget">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div><div style="font-size:11px;color:var(--di);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">${cat} · ${metricLabel(type)}</div><div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:500;color:var(--tx)">€${val.toLocaleString('de')}</div></div>
+      <span class="bm-verdict ${verdictCls}">${verdictTxt}</span>
+    </div>
+    <div class="bm-bar-wrap">
+      <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--di);font-family:'DM Mono',monospace;margin-bottom:4px"><span>Min: €${data.min}</span><span>P25: €${data.p25}</span><span>Ø: €${data.avg}</span><span>P75: €${data.p75}</span><span>Max: €${data.max}</span></div>
+      <div class="bm-bar-track" style="height:10px;background:rgba(22,32,28,.06);border-radius:5px;position:relative">
+        <div style="position:absolute;top:0;height:100%;left:${p25Pct}%;width:${p75Pct-p25Pct}%;background:rgba(201,168,76,.2);border-radius:3px"></div>
+        <div style="position:absolute;top:-3px;left:${youPct}%;width:16px;height:16px;border-radius:50%;background:${dotColor};border:2px solid var(--bg);transform:translateX(-50%)" title="Ihr Wert: €${val}"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--di);font-family:'DM Mono',monospace;margin-top:4px"><span>←Günstig</span><span style="color:var(--gold)">■ P25–P75 Marktband</span><span>Teuer→</span></div>
+    </div>
+    <div class="bm-stats-row">
+      <div class="bm-stat"><div class="bm-stat-l">Ihr Wert</div><div class="bm-stat-v" style="color:${dotColor}">€${val.toLocaleString('de')}</div></div>
+      <div class="bm-stat"><div class="bm-stat-l">Markt-Ø</div><div class="bm-stat-v">€${data.avg}</div></div>
+      <div class="bm-stat"><div class="bm-stat-l">Abweichung</div><div class="bm-stat-v" style="color:${dotColor}">${data.diff_pct>0?'+':''}${data.diff_pct}%</div></div>
+      <div class="bm-stat"><div class="bm-stat-l">Datenpunkte</div><div class="bm-stat-v">${data.count}</div></div>
+      <div class="bm-stat"><div class="bm-stat-l">Min / Max</div><div class="bm-stat-v">€${data.min} / €${data.max}</div></div>
+    </div>
+  </div>`;
+}
+
+// ── Activity ──────────────────────────────────────────────────────────
+async function loadActivity(){
+  const el=document.getElementById('act-list');
+  el.innerHTML='<div class="ld"><span class="sp"></span></div>';
+  const data=await api('/api/admin/activity?limit=50');
+  if(!data?.length){el.innerHTML='<div style="padding:24px;text-align:center;color:var(--di)">Keine Aktivität.</div>';return;}
+  el.innerHTML=renderLogs(data);
+}
+
+function renderLogs(items){
+  const dc={uploaded:'l-up',analyzed:'l-an',created:'l-cr'};
+  return items.map(l=>`<div class="lr"><div class="ld2 ${dc[l.action]||'l-df'}"></div><div class="lm"><strong>${l.user_name||'System'}</strong> — ${l.message||l.action}</div><div class="lt">${new Date(l.created_at).toLocaleString('de',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</div></div>`).join('');
+}
+
+// ── Status ────────────────────────────────────────────────────────────
+async function checkStatus(){
+  try{
+    const r=await fetch('/health');const d=await r.json();
+    const ok=d.status==='ok';
+    document.getElementById('d-api').className='status-dot '+(ok?'s-ok':'s-err');
+    document.getElementById('l-api').textContent=ok?'Online ✓':'Fehler';
+    toast(ok?'Alle Systeme online ✓':'Backend-Fehler!',ok?'ok':'err');
+  }catch(e){
+    document.getElementById('d-api').className='status-dot s-err';
+    document.getElementById('l-api').textContent='Nicht erreichbar';
+    toast('Backend nicht erreichbar.','err');
+  }
+}
+
+// ── Plan Modal ────────────────────────────────────────────────────────
+function openPlanMod(uid,name,plan){document.getElementById('plan-uid').value=uid;document.getElementById('plan-uname').value=name;document.getElementById('plan-sel').value=plan;openMod('plan-ov');}
+async function savePlan(){
+  const uid=document.getElementById('plan-uid').value;
+  const plan=document.getElementById('plan-sel').value;
+  await api(`/api/admin/users/${uid}/plan?plan=${plan}`,{method:'PATCH'});
+  toast('Plan aktualisiert: '+plan.toUpperCase(),'ok');closeMod('plan-ov');loadUsers();loadAll();
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────
+function openMod(id){document.getElementById(id).classList.add('show');}
+function closeMod(id){document.getElementById(id).classList.remove('show');}
+function filterRows(id,q){document.querySelectorAll(`#${id} tr`).forEach(tr=>{tr.style.display=!q||tr.textContent.toLowerCase().includes(q.toLowerCase())?'':'none';});}
+function logout(){['nx_token','nx_user'].forEach(k=>localStorage.removeItem(k));location.href='/';}
+function toast(msg,type=''){const el=document.getElementById('tel');el.textContent=msg;el.className='toast show '+type;setTimeout(()=>el.classList.remove('show'),3200);}
+['bm-ov','plan-ov'].forEach(id=>{document.getElementById(id)?.addEventListener('click',e=>{if(e.target===e.currentTarget)closeMod(id);});});
+
+init();
+</script>
+</body>
+</html>

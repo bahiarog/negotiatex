@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Angebot einreichen &#8211; NegotiateX.ai</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/theme.css">
+<style>
+  /* Page-local aliases so the rest of this page's rules (written against
+     --bg2/--br/--t1/--t2/--g/--b/--r) resolve to the shared brand palette
+     from /assets/theme.css instead of the old dark theme. */
+  :root{--bg2:var(--bg-card);--br:var(--border);--t1:var(--text);--t2:var(--text-muted);--g:var(--gold);--b:var(--gold);--r:var(--status-bad)}
+  body{font-family:'DM Sans',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
+  .card{background:var(--bg2);border:1px solid var(--br);border-radius:16px;padding:32px;width:100%;max-width:520px;box-shadow:0 20px 48px rgba(22,32,28,0.06)}
+  h1{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;margin-bottom:4px}
+  .sub{font-size:13px;color:var(--t2);margin-bottom:28px}
+  .logo{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--t1);letter-spacing:-0.5px;margin-bottom:20px}
+  .f{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+  label{font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:0.5px;font-family:'DM Mono',monospace}
+  input,select,textarea{background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:10px 12px;color:var(--t1);font-size:13px;width:100%;outline:none;transition:border .15s;font-family:'DM Sans',sans-serif}
+  input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim)}
+  .fg2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .btn{padding:12px 20px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;width:100%;margin-top:8px;transition:opacity .15s,background .15s}
+  .btn:hover{opacity:.9} .btn:disabled{opacity:.4;cursor:not-allowed}
+  .bg{background:var(--g);color:var(--on-accent)}
+  .drop{border:2px dashed var(--br);border-radius:8px;padding:28px;text-align:center;cursor:pointer;transition:border .15s;background:var(--bg-card2)}
+  .drop:hover,.drop.over{border-color:var(--gold)}
+  .drop.has-file{border-color:var(--g)}
+  .fn{font-size:12px;color:var(--g);margin-top:6px}
+  .msg{padding:12px 16px;border-radius:8px;font-size:13px;margin-top:16px;display:none}
+  .msg.ok{background:var(--gold-dim);border:1px solid var(--gold-border);color:#1D9E75}
+  .msg.err{background:rgba(216,90,48,.08);border:1px solid rgba(216,90,48,.28);color:var(--r)}
+  .steps{display:flex;gap:8px;margin-bottom:24px}
+  .step{flex:1;text-align:center;font-size:10px;color:var(--t2);padding:6px;border-radius:6px;background:var(--bg-card2)}
+  .step span{display:block;font-size:16px;margin-bottom:2px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">NegotiateX.ai</div>
+  <h1>Angebot einreichen</h1>
+  <p class="sub">KI-gest&#252;tzte Analyse Ihres Angebots &#8212; kostenlos und unverbindlich</p>
+  <div class="steps">
+    <div class="step"><span>&#128228;</span>Upload</div>
+    <div class="step"><span>&#129302;</span>KI-Analyse</div>
+    <div class="step"><span>&#128202;</span>Bericht</div>
+  </div>
+  <form id="form">
+    <div class="fg2">
+      <div class="f"><label>Unternehmen *</label><input id="company" required placeholder="ACME GmbH"></div>
+      <div class="f"><label>Kategorie</label>
+        <select id="category">
+          <option>Software &amp; IT</option><option>Marketing</option><option>Logistik</option>
+          <option>Professional Services</option><option>Hardware</option><option>General</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg2">
+      <div class="f"><label>Kontaktperson</label><input id="contact" placeholder="Max M&#252;ller"></div>
+      <div class="f"><label>E-Mail *</label><input id="email" type="email" required placeholder="max@acme.de"></div>
+    </div>
+    <div class="f"><label>Gesamtvolumen netto (&#8364;)</label><input id="total" type="number" min="0" placeholder="0.00"></div>
+    <div class="f"><label>Angebotsdatei *</label>
+      <div class="drop" id="drop" onclick="document.getElementById('file').click()">
+        <div style="font-size:24px">&#128196;</div>
+        <div style="font-size:13px;color:var(--t2);margin-top:4px">PDF, Excel, CSV, Word &#8212; max. 25 MB</div>
+        <div class="fn" id="fn"></div>
+      </div>
+      <input type="file" id="file" accept=".pdf,.xlsx,.xls,.csv,.doc,.docx" style="display:none">
+    </div>
+    <div class="f"><label>Notizen (optional)</label><textarea id="notes" rows="2" placeholder="Besonderheiten, Deadlines..."></textarea></div>
+    <button type="submit" class="btn bg" id="submit-btn">Angebot einreichen &amp; analysieren lassen</button>
+  </form>
+  <div class="msg" id="msg"></div>
+  <p style="font-size:11px;color:var(--t2);margin-top:16px;text-align:center">Ihre Daten werden DSGVO-konform verarbeitet und nicht an Dritte weitergegeben.</p>
+</div>
+<script>
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('file');
+const fn = document.getElementById('fn');
+fileInput.onchange = () => {
+  if (fileInput.files[0]) { fn.textContent = fileInput.files[0].name; drop.classList.add('has-file'); }
+};
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = (e) => {
+  e.preventDefault(); drop.classList.remove('over');
+  if (e.dataTransfer.files[0]) {
+    const dt = new DataTransfer(); dt.items.add(e.dataTransfer.files[0]);
+    fileInput.files = dt.files; fn.textContent = e.dataTransfer.files[0].name; drop.classList.add('has-file');
+  }
+};
+document.getElementById('form').onsubmit = async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('submit-btn');
+  if (!fileInput.files[0]) { showMsg('Bitte Datei auswählen.', 'err'); return; }
+  btn.disabled = true; btn.textContent = 'Wird eingereicht...';
+  const fd = new FormData();
+  fd.append('company_name', document.getElementById('company').value);
+  fd.append('contact_email', document.getElementById('email').value);
+  fd.append('contact_name', document.getElementById('contact').value);
+  fd.append('category', document.getElementById('category').value);
+  fd.append('total_net', document.getElementById('total').value || '0');
+  fd.append('notes', document.getElementById('notes').value);
+  fd.append('file', fileInput.files[0]);
+  try {
+    const res = await fetch('/api/public/submit', {method:'POST', body:fd});
+    const data = await res.json();
+    if (res.ok) {
+      showMsg('✅ ' + data.message, 'ok');
+      document.getElementById('form').style.display = 'none';
+    } else {
+      showMsg('❌ Fehler: ' + (data.detail || 'Unbekannter Fehler'), 'err');
+      btn.disabled = false; btn.textContent = 'Angebot einreichen & analysieren lassen';
+    }
+  } catch(err) {
+    showMsg('❌ Netzwerkfehler. Bitte erneut versuchen.', 'err');
+    btn.disabled = false; btn.textContent = 'Angebot einreichen & analysieren lassen';
+  }
+};
+function showMsg(text, type) {
+  const m = document.getElementById('msg');
+  m.textContent = text; m.className = 'msg ' + type; m.style.display = 'block';
+}
+</script>
+<div style="text-align:center;padding:16px;font-size:11px;color:var(--text-dim)"><a href="/privacy" style="color:var(--text-dim);margin-right:12px">Datenschutz</a><a href="/impressum" style="color:var(--text-dim)">Impressum</a></div>
+</body>
+</html>
