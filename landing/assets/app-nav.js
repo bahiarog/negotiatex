@@ -9,7 +9,7 @@
     { href: '/cases-dashboard', label: 'Verhandlungen' },
     { href: '/data-center', label: 'Data Center' },
   ];
-  const AVAILABLE = (window.NX_NAV_PAGES || ['/agent-dashboard', '/sourcing-dashboard', '/rfq-dashboard', '/cases-dashboard', '/data-center']);
+  const AVAILABLE = (window.NX_NAV_PAGES || ['/projects', '/agent-dashboard', '/sourcing-dashboard', '/rfq-dashboard', '/cases-dashboard', '/data-center']);
 
   const css = `
   #app-nav{position:fixed;top:0;left:0;right:0;z-index:300;height:56px;background:rgba(247,246,241,.94);backdrop-filter:blur(16px);

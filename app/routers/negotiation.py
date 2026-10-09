@@ -474,7 +474,7 @@ async def approve_action(
     if not send_result.get("sent"):
         raise HTTPException(502, f"Versand fehlgeschlagen: {send_result.get('message')}")
 
-    msg_id = make_msgid(domain="negotiatex.ai")
+    msg_id = send_result["message_id"]
     db.add(EmailMessage(
         case_id=case.id, tenant_id=membership.tenant_id, direction=EmailDirection.outbound,
         message_id=msg_id, from_addr="info@negotiatex.ai", to_addr=action.recipient_email,
@@ -593,6 +593,26 @@ async def get_case_exceptions(
 # Endpunkte danach weiter agieren.
 # ---------------------------------------------------------------------------
 
+async def _project_event_for_case(db: AsyncSession, case: Case, classification: str, body: str):
+    """Verhandlungsantwort im Zeitstrahl eines Vorhabens melden (falls der
+    Fall zu einem gehoert). Fehler brechen die Verarbeitung nie ab."""
+    try:
+        from sqlalchemy import cast, String
+        from models_projects import Project
+        from services.projects import add_event
+        project = (await db.execute(select(Project).where(
+            cast(Project.negotiations_json, String).like(f"%{case.id}%")))).scalars().first()
+        if not project:
+            return
+        prices = _extract_prices(body or "")
+        what = {"acceptance": "hat den Vorschlag angenommen", "counter_price": "hat ein Gegenangebot gemacht",
+                "no_movement": "bleibt beim bisherigen Preis"}.get(classification, "hat geantwortet")
+        await add_event(db, project, "negotiation_reply", f"Verhandlung: Dienstleister {what}",
+                        f"Genannter Preis: {prices[-1]}" if prices else None, milestone=True)
+    except Exception:
+        logger.exception(f"Vorhaben-Ereignis fuer Fall {case.id} fehlgeschlagen")
+
+
 async def ingest_inbound_message(db: AsyncSession, email_record: dict) -> dict:
     """email_record: dict wie von services.email_imap.fetch_unseen_messages
     geliefert (oder vom Test-Endpunkt synthetisiert). Matched via Message-ID-
@@ -678,6 +698,7 @@ async def ingest_inbound_message(db: AsyncSession, email_record: dict) -> dict:
         return {"matched": True, "classification": classification}
 
     # counter_price / acceptance / no_movement: zaehlt als Preisrunde.
+    await _project_event_for_case(db, case, classification, inbound.body_text)
     rounds_sent = await _count_sent_price_rounds(case.id, db)
     await _transition(db, case, CaseStatus.EVALUATING_RESPONSE, actor="system",
                        reason=f"Antwort erhalten und klassifiziert als '{classification}'.")

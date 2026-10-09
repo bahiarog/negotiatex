@@ -61,6 +61,32 @@ def _get_body_text(msg: email.message.Message) -> str:
         return str(msg.get_payload())
 
 
+ATTACHMENT_TYPES = {".pdf", ".docx", ".doc", ".xlsx", ".xls", ".csv"}
+MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024
+MAX_ATTACHMENTS = 5
+RAW_SOURCE_LIMIT = 200_000  # Anhaenge werden separat gespeichert, nicht als Text in der DB
+
+
+def _get_attachments(msg: email.message.Message) -> list[dict]:
+    out = []
+    for part in msg.walk():
+        filename = part.get_filename()
+        if not filename:
+            continue
+        filename = _decode(filename).strip().replace("/", "_").replace("\\", "_")
+        ext = os.path.splitext(filename)[1].lower()
+        if ext not in ATTACHMENT_TYPES:
+            continue
+        data = part.get_payload(decode=True) or b""
+        if not data or len(data) > MAX_ATTACHMENT_BYTES:
+            logger.warning(f"IMAP: Anhang {filename} uebersprungen ({len(data)} Bytes)")
+            continue
+        out.append({"filename": filename[:200], "content_type": part.get_content_type(), "data": data})
+        if len(out) >= MAX_ATTACHMENTS:
+            break
+    return out
+
+
 def fetch_unseen_messages() -> list[dict]:
     """Verbindet sich, holt alle ungelesenen Nachrichten, parst die
     relevanten Header + Body, markiert sie als gelesen und gibt eine Liste
@@ -110,7 +136,8 @@ def fetch_unseen_messages() -> list[dict]:
                 "to_addr": to_addr.strip().lower(),
                 "subject": _decode(msg.get("Subject")),
                 "body_text": _get_body_text(msg),
-                "raw_source": raw_bytes.decode("utf-8", errors="replace"),
+                "raw_source": raw_bytes.decode("utf-8", errors="replace")[:RAW_SOURCE_LIMIT],
+                "attachments": _get_attachments(msg),
             })
             # Als gelesen markieren -> verhindert, dass derselbe Poll-Zyklus
             # (oder ein spaeterer) dieselbe UNSEEN-Nachricht erneut liefert.

@@ -57,6 +57,38 @@ def _extract_subject_token(subject: str) -> str | None:
 # Testbar in Minuten statt Tagen, siehe Bericht (Judgment Call).
 REMINDER_DELAY_MINUTES = int(os.getenv("NEGOTIATION_REMINDER_DELAY_MINUTES", "15"))
 
+# Beide uvicorn-Worker registrieren dieselben Jobs. Eine Sitzungs-Sperre in
+# PostgreSQL sorgt dafuer, dass jeder Job zur selben Zeit nur einmal laeuft
+# (sonst doppelte Reminder-Entwuerfe bzw. doppelt abgeholte Mails).
+LOCK_POLL_INBOX = 7270101
+LOCK_NEGOTIATION_REMINDERS = 7270102
+LOCK_OUTREACH_REMINDERS = 7270103
+
+
+class _JobLock:
+    def __init__(self, key: int):
+        self.key = key
+        self.conn = None
+        self.acquired = False
+
+    async def __aenter__(self):
+        from sqlalchemy import text
+        from database import admin_engine
+        self.conn = await admin_engine.connect()
+        self.acquired = bool(await self.conn.scalar(text("SELECT pg_try_advisory_lock(:k)"), {"k": self.key}))
+        await self.conn.commit()
+        return self.acquired
+
+    async def __aexit__(self, *exc):
+        from sqlalchemy import text
+        try:
+            if self.acquired:
+                await self.conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": self.key})
+                await self.conn.commit()
+        finally:
+            await self.conn.close()
+        return False
+
 
 async def _dispatch_inbound_message(db, m: dict) -> dict:
     """Siehe Moduldoc: versucht Negotiation -> NDA -> generische Outreach-
@@ -71,14 +103,30 @@ async def _dispatch_inbound_message(db, m: dict) -> dict:
     from services.sourcing_classifier import detect_redline, detect_signature_claim
     from datetime import datetime as _dt
 
+    from models_contracts import RFQInvitation
+    from models_sourcing import SupplierCandidate
+    from services.offer_intake import intake_from_email
+
     in_reply_to = m.get("in_reply_to")
     refs = (m.get("references_header") or "").split()
     candidate_ids = set(t.strip() for t in refs if t.strip())
     if in_reply_to:
         candidate_ids.add(in_reply_to.strip())
     if not candidate_ids:
-        logger.warning(f"poll_inbox_job: Nachricht ohne In-Reply-To/References, kann nicht zugeordnet werden: {m.get('subject')}")
-        return {"matched": False}
+        # Ohne Antwort-Bezug bleibt nur der Betreff-Token (Schritt 5 unten).
+        logger.info(f"poll_inbox_job: Nachricht ohne In-Reply-To/References -> Betreff-Fallback: {m.get('subject')}")
+        candidate_ids = {"<none>"}
+
+    # 0) Antwort auf eine versendete Angebotsanfrage (RFQ-Einladung)? Mit
+    # Anhang -> Angebotseingang; ohne Anhang -> normale Kandidaten-Antwort.
+    inv = (await db.execute(select(RFQInvitation).where(RFQInvitation.message_id.in_(list(candidate_ids))))).scalars().first()
+    if inv:
+        cand = (await db.execute(select(SupplierCandidate).where(SupplierCandidate.id == inv.supplier_candidate_id))).scalar_one_or_none()
+        if cand:
+            res = await intake_from_email(db, m, cand)
+            if res:
+                return res
+            return await ingest_inbound_outreach_message(db, m, candidate_override=cand)
 
     # 1) Verhandlung (Teil A)?
     r = await db.execute(select(EmailMessage).where(
@@ -110,30 +158,47 @@ async def _dispatch_inbound_message(db, m: dict) -> dict:
         return {"matched": True, "kind": "nda_return", "redline_detected": redline}
 
     # 3) Generische Erstkontakt-/Stammblatt-Antwort (Teil B / B4)?
-    r = await db.execute(select(OutreachMessage).where(
+    out_msg = (await db.execute(select(OutreachMessage).where(
         OutreachMessage.direction == OutreachDirection.outbound, OutreachMessage.message_id.in_(list(candidate_ids)),
-    ))
-    if r.scalars().first():
+    ))).scalars().first()
+    if out_msg:
+        cand = (await db.execute(select(SupplierCandidate).where(SupplierCandidate.id == out_msg.supplier_candidate_id))).scalar_one_or_none()
+        if cand:
+            res = await intake_from_email(db, m, cand)
+            if res:
+                return res
         return await ingest_inbound_outreach_message(db, m)
 
     # 4) Fallback: Subject-Token (siehe Moduldoc oben) -- nur wenn die
-    # Header-basierte Zuordnung nichts gefunden hat, z.B. weil ein
-    # SMTP-Relay die Message-ID beim Versand umgeschrieben hat.
+    # Header-basierte Zuordnung nichts gefunden hat. Der Absender muss zur
+    # hinterlegten Kontaktadresse passen, sonst koennte jeder mit einem
+    # geratenen Token Nachrichten einschleusen.
     token = _extract_subject_token(m.get("subject") or "")
     if token:
-        from models_sourcing import SupplierCandidate
         from sqlalchemy import cast, String
         r = await db.execute(select(SupplierCandidate).where(cast(SupplierCandidate.id, String).like(f"{token}%")))
         cand = r.scalars().first()
-        if cand:
+        sender = (m.get("from_addr") or "").lower()
+        if cand and (cand.contact_email or "").lower() == sender:
             logger.info(f"poll_inbox_job: ueber Subject-Token-Fallback zugeordnet (Message-ID/References ohne Treffer): Kandidat {cand.id}")
+            res = await intake_from_email(db, m, cand)
+            if res:
+                return res
             return await ingest_inbound_outreach_message(db, m, candidate_override=cand)
+        if cand:
+            logger.warning(f"poll_inbox_job: Betreff-Token passt zu Kandidat {cand.id}, Absender {sender} aber nicht zur Kontaktadresse -- nicht zugeordnet.")
 
     logger.warning(f"poll_inbox_job: Nachricht konnte keinem Fall/Kandidaten/NDA zugeordnet werden: {m.get('subject')}")
     return {"matched": False}
 
 
 async def poll_inbox_job():
+    async with _JobLock(LOCK_POLL_INBOX) as got:
+        if got:
+            await _poll_inbox()
+
+
+async def _poll_inbox():
     from services.email_imap import fetch_unseen_messages
     from database import AdminSessionLocal as AsyncSessionLocal  # Teil C: system worker, see database.py docstring
 
@@ -146,16 +211,31 @@ async def poll_inbox_job():
     if not messages:
         return
 
-    async with AsyncSessionLocal() as db:
-        for m in messages:
+    for m in messages:
+        # Eigene Session je Nachricht: ein Fehler (z.B. abgebrochene
+        # Transaktion) darf die folgenden Nachrichten nicht mitreissen.
+        async with AsyncSessionLocal() as db:
             try:
                 result = await _dispatch_inbound_message(db, m)
                 logger.info(f"poll_inbox_job: Nachricht verarbeitet -> {result}")
             except Exception:
+                await db.rollback()
                 logger.exception(f"poll_inbox_job: Verarbeitung einer Nachricht fehlgeschlagen: {m.get('subject')}")
 
 
 async def check_reminders_job():
+    async with _JobLock(LOCK_NEGOTIATION_REMINDERS) as got:
+        if got:
+            await _check_reminders()
+
+
+async def check_outreach_reminders_job():
+    async with _JobLock(LOCK_OUTREACH_REMINDERS) as got:
+        if got:
+            await _check_outreach_reminders()
+
+
+async def _check_reminders():
     """A5: 'Keine Antwort innerhalb des konfigurierten Fensters' -> ein
     Erinnerungsentwurf wird angelegt (status=draft), der genau wie ein
     Preisvorschlag menschliche Freigabe ueber POST .../approve braucht,
@@ -224,7 +304,7 @@ async def check_reminders_job():
             logger.exception("check_reminders_job fehlgeschlagen")
 
 
-async def check_outreach_reminders_job():
+async def _check_outreach_reminders():
     """B4: 'hoechstens ZWEI Reminder auf einem Timer'. Faellige, nicht
     stornierte OutreachReminderTimer-Zeilen (siehe models_sourcing --
     stornes werden von ingest_inbound_outreach_message bei JEDER
@@ -256,7 +336,7 @@ async def check_outreach_reminders_job():
                 reminder = OutreachAction(
                     tenant_id=timer.tenant_id, supplier_candidate_id=cand.id, kind="reminder",
                     reminder_number=timer.reminder_number, recipient_email=cand.contact_email,
-                    rendered_subject=f"Erinnerung ({timer.reminder_number}/2): Anfrage zu {cand.service_match_note or cand.company_name}",
+                    rendered_subject=f"Erinnerung ({timer.reminder_number}/2): Anfrage zu {(cand.service_match_note or cand.company_name)[:120]} / {str(cand.id)[:8]}",
                     rendered_body=(
                         "Guten Tag,\n\nwir moechten kurz an unsere vorherige Anfrage erinnern und freuen uns "
                         "auf Ihre Rueckmeldung, ob grundsaetzlich Interesse an einer Angebotsabgabe besteht.\n\n"

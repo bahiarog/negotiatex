@@ -287,7 +287,9 @@ async def invite_candidate(rfq_id: str, payload: InvitePayload, user=Depends(get
 
     req = (await db.execute(select(SourcingRequest).where(SourcingRequest.id == rfq.sourcing_request_id))).scalar_one()
     vorgang = str(rfq.id)[:8]
-    subject = RFQ_INVITE_SUBJECT_TMPL.format(prefix="[TEST – ]" if rfq.test_mode else "", vorgang=vorgang)
+    # Kandidaten-Token am Ende: stabile Zuordnung der Antwort, auch wenn der
+    # Mailclient die Antwort-Header nicht mitschickt (siehe email_poller).
+    subject = RFQ_INVITE_SUBJECT_TMPL.format(prefix="[TEST – ]" if rfq.test_mode else "", vorgang=vorgang) + f" / {str(cand.id)[:8]}"
     body = RFQ_INVITE_BODY_TMPL.format(
         frist=rfq.deadline.strftime("%d.%m.%Y"), bedarf=req.bedarf_text, spec=rfq.spec_text,
         testnote="Testlauf, keine Beauftragung." if rfq.test_mode else "",
@@ -382,7 +384,7 @@ async def approve_rfq_action(rfq_id: str, action_id: str, user=Depends(get_curre
     if not send_result.get("sent"):
         raise HTTPException(502, f"Versand fehlgeschlagen: {send_result.get('message')}")
 
-    msg_id = make_msgid(domain="negotiatex.ai")
+    msg_id = send_result["message_id"]
     action.status = RFQActionStatus.sent
 
     if action.kind == "invite":
@@ -394,6 +396,22 @@ async def approve_rfq_action(rfq_id: str, action_id: str, user=Depends(get_curre
             inv.message_id = msg_id
         if rfq.status == RFQStatus.draft:
             rfq.status = RFQStatus.sent
+
+    try:
+        from services.offer_intake import project_for_rfq
+        from services.projects import add_event
+        from models_projects import ProjectStatus
+        project = await project_for_rfq(db, rfq)
+        if project:
+            cand = await _get_candidate_or_404(action.supplier_candidate_id, membership.tenant_id, db)
+            label = {"invite": "Angebotsanfrage", "receipt_confirmation": "Eingangsbestaetigung", "award_notice": "Zusage",
+                     "decline_notice": "Absage", "clarification_broadcast": "Klarstellung"}.get(action.kind, action.kind)
+            await add_event(db, project, f"sent_{action.kind}", f"{label} an {cand.company_name} versendet",
+                            actor=str(user.id))
+            if action.kind == "invite" and project.status == ProjectStatus.sourcing:
+                project.status = ProjectStatus.collecting_offers
+    except Exception:
+        logger.exception("Vorhaben-Ereignis nach RFQ-Versand fehlgeschlagen")
 
     await db.commit()
     return {"sent": True, "message_id": msg_id, "rfq_status": rfq.status.value, "payload_hash": action.payload_hash}
@@ -512,36 +530,20 @@ async def upload_offer(rfq_id: str, supplier_candidate_id: str = Form(...), file
     content = await file.read()
     if len(content) > 15 * 1024 * 1024:
         raise HTTPException(400, "Datei zu gross (max. 15 MB).")
-    import tempfile, os as _os
-    from pathlib import Path
-    suffix = Path(file.filename or "").suffix.lower() or ".pdf"
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
+    from services.offer_intake import store_offer_file, intake_offer
     try:
-        from services.pdf_parser import extract_text
-        text = await extract_text(tmp_path, file.filename or "offer.pdf")
-    finally:
-        _os.unlink(tmp_path)
-    if not text or text.startswith("[Error") or text.startswith("[Unsupported"):
-        raise HTTPException(400, f"Datei konnte nicht gelesen werden: {text}")
-
-    extracted = extract_offer_fields(text)
-    offer = RFQOffer(
-        tenant_id=membership.tenant_id, rfq_id=rfq.id, supplier_candidate_id=cand.id, version=1,
-        unit_price=extracted.get("unit_price"), quantity=extracted.get("quantity"),
-        freight_cost=extracted.get("freight_cost") or Decimal("0"), other_costs=extracted.get("other_costs") or Decimal("0"),
-        currency=extracted.get("currency") or "EUR", delivery_date=extracted.get("delivery_date"),
-        payment_terms=extracted.get("payment_terms"), scope_note=extracted.get("scope_note"),
-        spec_confirmed=extracted.get("spec_confirmed"), raw_extracted_json=extracted, created_by=str(user.id),
-    )
-    await _apply_comparability(offer, rfq)
-    db.add(offer)
-    if rfq.status == RFQStatus.sent:
-        rfq.status = RFQStatus.collecting_offers
+        doc, _version, text = await store_offer_file(db, membership.tenant_id, file.filename or "angebot.pdf", content,
+                                                     cand.company_name, actor=str(user.id), source="upload")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not text:
+        raise HTTPException(400, "Datei konnte nicht gelesen werden -- bitte Angebot manuell erfassen.")
+    offer, review = await intake_offer(db, rfq, cand, text, actor=str(user.id), doc=doc, channel="Upload")
     await db.commit()
     await db.refresh(offer)
     result = _offer_to_dict(offer)
+    result["review_status"] = review.status
+    result["document_id"] = str(doc.id)
     result["extraction_note"] = "Fehlende Felder wurden NICHT geraten -- bitte manuell pruefen/ergaenzen."
     return result
 

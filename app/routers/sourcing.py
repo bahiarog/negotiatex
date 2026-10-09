@@ -621,7 +621,7 @@ async def approve_outreach(
     if not send_result.get("sent"):
         raise HTTPException(502, f"Versand fehlgeschlagen: {send_result.get('message')}")
 
-    msg_id = make_msgid(domain="negotiatex.ai")
+    msg_id = send_result["message_id"]
     db.add(OutreachMessage(
         tenant_id=membership.tenant_id, supplier_candidate_id=cand.id, direction=OutreachDirection.outbound,
         message_id=msg_id, from_addr="info@negotiatex.ai", to_addr=action.recipient_email,
@@ -638,6 +638,8 @@ async def approve_outreach(
                 tenant_id=membership.tenant_id, supplier_candidate_id=cand.id,
                 reminder_number=i, due_at=now + timedelta(minutes=minutes),
             ))
+    label = {"first_contact": "Erstkontakt", "reminder": "Erinnerung", "stammdaten_invite": "Stammdaten-Link"}.get(action.kind, action.kind)
+    await _project_event(db, cand, f"sent_{action.kind}", f"{label} an {cand.company_name} versendet", actor=str(user.id))
     await db.commit()
     return {"sent": True, "message_id": msg_id, "candidate_status": cand.status.value, "payload_hash": action.payload_hash}
 
@@ -790,25 +792,45 @@ async def _auto_prepare_after_interest(db: AsyncSession, cand: SupplierCandidate
             cand.status = CandidateStatus.nda_review
     else:
         # 4b) Kein NDA noetig: RFQ-Einladung mit vollem Briefing direkt entwerfen.
-        existing_rfq_invite = await db.execute(select(RFQInvitation).where(RFQInvitation.rfq_id == rfq.id, RFQInvitation.supplier_candidate_id == cand.id))
-        if not existing_rfq_invite.scalars().first():
-            db.add(RFQInvitation(tenant_id=tenant_id, rfq_id=rfq.id, supplier_candidate_id=cand.id))
-            subject = RFQ_BRIEFING_SUBJECT_TMPL.format(prefix="[TEST – ]", bedarf=req.bedarf_text[:60], vorgangs_id=vorgangs_id)
-            body = RFQ_BRIEFING_BODY_TMPL.format(
-                bedarf=req.bedarf_text, spec=rfq.spec_text, frist=rfq.deadline.strftime("%d.%m.%Y"),
-                nda_note="", testnote="Testlauf, keine Beauftragung.",
-            )
-            db.add(RFQAction(
-                tenant_id=tenant_id, rfq_id=rfq.id, supplier_candidate_id=cand.id, kind="invite",
-                recipient_email=cand.contact_email, rendered_subject=subject, rendered_body=body,
-                status=RFQActionStatus.draft, created_by="system",
-            ))
+        await _draft_rfq_invite(db, cand, req, rfq, tenant_id)
+
+
+async def _draft_rfq_invite(db: AsyncSession, cand: SupplierCandidate, req: SourcingRequest, rfq: RFQ, tenant_id) -> bool:
+    """Angebotsanfrage mit vollem Briefing als ENTWURF (einmal je Kandidat)."""
+    existing_rfq_invite = await db.execute(select(RFQInvitation).where(RFQInvitation.rfq_id == rfq.id, RFQInvitation.supplier_candidate_id == cand.id))
+    if existing_rfq_invite.scalars().first() or not cand.contact_email:
+        return False
+    if rfq.deadline < datetime.utcnow() + timedelta(days=1):
+        rfq.deadline = datetime.utcnow() + timedelta(days=3)
+    db.add(RFQInvitation(tenant_id=tenant_id, rfq_id=rfq.id, supplier_candidate_id=cand.id))
+    subject = RFQ_BRIEFING_SUBJECT_TMPL.format(prefix="[TEST – ]", bedarf=req.title[:60], vorgangs_id=str(cand.id)[:8])
+    body = RFQ_BRIEFING_BODY_TMPL.format(
+        bedarf=req.bedarf_text, spec=rfq.spec_text, frist=rfq.deadline.strftime("%d.%m.%Y"),
+        nda_note="", testnote="Testlauf, keine Beauftragung.",
+    )
+    db.add(RFQAction(
+        tenant_id=tenant_id, rfq_id=rfq.id, supplier_candidate_id=cand.id, kind="invite",
+        recipient_email=cand.contact_email, rendered_subject=subject, rendered_body=body,
+        status=RFQActionStatus.draft, created_by="system",
+    ))
+    return True
 
 
 # ---------------------------------------------------------------------------
 # Inbound outreach reply handling -- shared by IMAP poller
 # (services/email_poller.py) and the test-inject endpoint below.
 # ---------------------------------------------------------------------------
+
+async def _project_event(db: AsyncSession, cand: SupplierCandidate, kind: str, title: str,
+                         detail: Optional[str] = None, milestone: bool = False, actor: str = "agent"):
+    """Meldet ein Ereignis in den Zeitstrahl des Vorhabens (falls vorhanden);
+    Fehler hier duerfen die eigentliche Verarbeitung nie abbrechen."""
+    try:
+        from services.projects import event_for_request
+        await event_for_request(db, cand.sourcing_request_id, kind, title, detail, milestone, actor)
+    except Exception:
+        logger.exception(f"Vorhaben-Ereignis fuer Kandidat {cand.id} fehlgeschlagen")
+
 
 async def ingest_inbound_outreach_message(db: AsyncSession, email_record: dict, candidate_override: "SupplierCandidate | None" = None) -> dict:
     """Analog zu routers.negotiation.ingest_inbound_message. Matched via
@@ -879,8 +901,26 @@ async def ingest_inbound_outreach_message(db: AsyncSession, email_record: dict, 
     for t in r.scalars().all():
         t.cancelled = True
 
+    # Nur ein Kandidat im Erstkontakt-Stadium wird neu klassifiziert. Spaetere
+    # Mails (Stammblatt-Rueckfragen, NDA-Thread, Angebot) duerfen einen schon
+    # weiter fortgeschrittenen Status nicht auf 'interessiert' zuruecksetzen.
+    early = cand.status in (CandidateStatus.found, CandidateStatus.shortlisted,
+                            CandidateStatus.contacted, CandidateStatus.responded)
+    if not early:
+        cand.open_questions_json = list(cand.open_questions_json or []) + [
+            f"Neue Nachricht von {from_addr} ({datetime.utcnow():%d.%m. %H:%M}) -- bitte sichten: {(inbound.body_text or '')[:300]}"
+        ]
+        await _project_event(db, cand, "supplier_message", f"Nachricht von {cand.company_name} eingegangen",
+                             (inbound.subject or "")[:200])
+        await db.commit()
+        return {"matched": True, "classification": "follow_up", "candidate_status": cand.status.value}
+
     cand.status = CandidateStatus.responded
     classification = classify_outreach_reply(inbound.body_text)
+    label = {"decline": "hat abgesagt", "interest": "hat Interesse bestaetigt",
+             "question": "hat eine Rueckfrage", "no_signal": "hat geantwortet (unklar)"}.get(classification, "hat geantwortet")
+    await _project_event(db, cand, f"reply_{classification}", f"{cand.company_name} {label}",
+                         None, milestone=classification == "interest")
 
     if classification == "decline":
         cand.status = CandidateStatus.declined
@@ -1263,12 +1303,12 @@ async def approve_send_nda(
     if not cand.contact_email:
         raise HTTPException(400, "Kandidat hat keine contact_email hinterlegt.")
 
-    subject = f"[TEST] NDA-Entwurf zur Pruefung -- {nda.party_b_name}"
+    subject = f"[TEST] NDA-Entwurf zur Pruefung -- {nda.party_b_name} / {str(cand.id)[:8]}"
     send_result = send_negotiation_email(to_email=cand.contact_email, subject=subject, body=nda.draft_text, from_name="NegotiateX.ai")
     if not send_result.get("sent"):
         raise HTTPException(502, f"Versand fehlgeschlagen: {send_result.get('message')}")
 
-    msg_id = make_msgid(domain="negotiatex.ai")
+    msg_id = send_result["message_id"]
     db.add(OutreachMessage(
         tenant_id=membership.tenant_id, supplier_candidate_id=cand.id, direction=OutreachDirection.outbound,
         message_id=msg_id, from_addr="info@negotiatex.ai", to_addr=cand.contact_email,
@@ -1373,6 +1413,12 @@ async def approve_nda(
 
     cand = (await db.execute(select(SupplierCandidate).where(SupplierCandidate.id == nda.supplier_candidate_id))).scalar_one()
     cand.status = CandidateStatus.nda_approved
+    # Naechster Schritt vorbereiten: Angebotsanfrage mit vollem Briefing als Entwurf.
+    req = (await db.execute(select(SourcingRequest).where(SourcingRequest.id == cand.sourcing_request_id))).scalar_one_or_none()
+    rfq = (await db.execute(select(RFQ).where(RFQ.sourcing_request_id == cand.sourcing_request_id))).scalars().first() if req else None
+    drafted = bool(rfq) and await _draft_rfq_invite(db, cand, req, rfq, nda.tenant_id)
+    await _project_event(db, cand, "nda_approved", f"NDA mit {cand.company_name} freigegeben",
+                         "Angebotsanfrage liegt zur Freigabe bereit." if drafted else None)
     await db.commit()
     return _nda_to_dict(nda)
 
