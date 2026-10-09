@@ -917,6 +917,56 @@ async def ingest_inbound_outreach_message(db: AsyncSession, email_record: dict, 
     return {"matched": True, "classification": classification, "candidate_status": cand.status.value}
 
 
+@router.post("/candidates/{candidate_id}/prepare-followup")
+async def prepare_followup(
+    candidate_id: str, user=Depends(get_current_user),
+    membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db),
+):
+    """Manueller Nachtrag fuer Kandidaten, bei denen die automatische
+    Vorbereitung (Stammdaten-Einladung, NDA-Einschaetzung, RFQ-Briefing) nicht
+    gelaufen ist -- z.B. weil der Kandidat schon vor Einfuehrung dieser
+    Funktion Interesse bekundet hatte. Ruft dieselbe, idempotente Funktion wie
+    der automatische Pfad auf (ueberspringt bereits vorhandene Einladung/NDA/
+    RFQ-Einladung), erzeugt also nur, was wirklich noch fehlt."""
+    cand = await _get_candidate_or_404(candidate_id, membership.tenant_id, db)
+    if not cand.contact_email:
+        raise HTTPException(400, "Kandidat hat keine contact_email hinterlegt.")
+    await _auto_prepare_after_interest(db, cand, membership.tenant_id)
+    await db.commit()
+    await db.refresh(cand)
+    return _candidate_to_dict(cand)
+
+
+@router.get("/candidates/{candidate_id}/outreach")
+async def list_outreach_actions(candidate_id: str, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+    cand = await _get_candidate_or_404(candidate_id, membership.tenant_id, db)
+    r = await db.execute(select(OutreachAction).where(OutreachAction.supplier_candidate_id == cand.id).order_by(desc(OutreachAction.created_at)))
+    return [_action_to_dict(a) for a in r.scalars().all()]
+
+
+@router.get("/candidates/{candidate_id}/nda")
+async def get_nda_for_candidate(candidate_id: str, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+    cand = await _get_candidate_or_404(candidate_id, membership.tenant_id, db)
+    r = await db.execute(select(NDA).where(NDA.supplier_candidate_id == cand.id))
+    nda = r.scalar_one_or_none()
+    if not nda:
+        raise HTTPException(404, "Fuer diesen Kandidaten existiert noch keine NDA.")
+    return _nda_to_dict(nda)
+
+
+@router.get("/candidates/{candidate_id}/onboarding-invite")
+async def get_onboarding_invite(candidate_id: str, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+    cand = await _get_candidate_or_404(candidate_id, membership.tenant_id, db)
+    r = await db.execute(select(CandidateOnboardingInvite).where(CandidateOnboardingInvite.supplier_candidate_id == cand.id))
+    inv = r.scalar_one_or_none()
+    if not inv:
+        raise HTTPException(404, "Fuer diesen Kandidaten existiert noch keine Stammdaten-Einladung.")
+    return {
+        "id": str(inv.id), "status": inv.status.value if hasattr(inv.status, "value") else inv.status,
+        "confirmed_by_name": inv.confirmed_by_name, "confirmed_at": inv.confirmed_at, "created_at": inv.created_at,
+    }
+
+
 @router.post("/internal/test-inbound-outreach/{candidate_id}")
 async def test_inbound_outreach(
     candidate_id: str, payload: TestInboundOutreachReply,

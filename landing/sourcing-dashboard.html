@@ -158,14 +158,11 @@ async function renderRequest(id) {
     </div>`;
 }
 
+const OUTREACH_KIND_LABELS = {first_contact: 'Erstkontakt', reminder: 'Erinnerung', stammdaten_invite: 'Stammdaten-Einladung'};
+
 async function renderCandidate(id) {
   app.innerHTML = '<div class="loading">Lade...</div>';
   const cand = await api(`/candidates/${id}`);
-  let nda = null;
-  try {
-    const events = [];
-  } catch(e) {}
-
   const checks = Object.entries(cand.must_criteria_check_json||{}).map(([k,v]) => `<li><b>${esc(k)}</b>: <span class="b-${v}">${esc(v)}</span></li>`).join('');
   const stamm = Object.entries(cand.stammblatt_json||{}).map(([k,v]) => `<li><b>${esc(k)}</b>: ${esc(v.status)} ${v.value?('— '+esc(v.value)):''} <span class="mono">[${esc(v.source||'')}, ${esc(v.reviewer||'')}]</span></li>`).join('');
 
@@ -179,51 +176,142 @@ async function renderCandidate(id) {
       <div class="disclaimer">Fehlende Angaben werden explizit "unknown" markiert, nie geraten.</div>
     </div>
 
-    <div class="panel"><div class="panel-h">Erstkontakt (B4)</div>
+    <div class="panel"><div class="panel-h">Erstkontakt, Erinnerungen &amp; Stammdaten-Einladung (B4)</div>
       <div class="row-actions">
         <button class="btn" onclick="doShortlist('${cand.id}')">Shortlist</button>
-        <button class="btn primary" onclick="doDraftOutreach('${cand.id}')">Erstkontakt entwerfen</button>
+        <button class="btn primary" onclick="doDraftOutreach('${cand.id}')">Neuen Erstkontakt entwerfen</button>
+        <button class="btn" onclick="doPrepareFollowup('${cand.id}')" title="Erzeugt nachtraeglich Stammdaten-Einladung, NDA-Einschaetzung und RFQ-Briefing, falls das bei diesem Kandidaten noch nicht automatisch gelaufen ist (z.B. weil das Interesse vor Einfuehrung dieser Funktion kam). Bereits vorhandene Schritte werden nicht doppelt angelegt.">Stammdaten-/Angebots-Vorbereitung nachholen</button>
       </div>
-      <div id="outreach-area"></div>
+      <div id="outreach-area"><div class="loading">Lade Vorgaenge...</div></div>
+    </div>
+
+    <div class="panel"><div class="panel-h">Stammdaten-Einladung (Self-Service)</div>
+      <div id="invite-area"><div class="loading">Lade...</div></div>
     </div>
 
     <div class="panel"><div class="panel-h">Stammblatt (B5)</div>
-      ${stamm ? `<ul class="events">${stamm}</ul>` : '<div class="empty">Noch keine Stammblatt-Felder erfasst.</div>'}
-      <div class="disclaimer">Bankdaten werden ausschliesslich ueber den dedizierten /bank-data-Endpunkt erfasst, niemals per gewoehnlicher Outreach-E-Mail. Eine Aenderung von IBAN/BIC erzwingt automatisch eine erneute Verifikation.</div>
+      ${stamm ? `<ul class="events">${stamm}</ul>` : '<div class="empty">Noch keine Stammblatt-Felder erfasst. Sobald der Lieferant die Stammdaten-Einladung ausfuellt, erscheinen die Felder hier (Status "eingegangen", noch ungeprueft).</div>'}
+      <div class="disclaimer">Bankdaten werden ausschliesslich ueber den dedizierten /bank-data-Endpunkt erfasst, niemals per gewoehnlicher Outreach-E-Mail oder Self-Service-Formular. Eine Aenderung von IBAN/BIC erzwingt automatisch eine erneute Verifikation.</div>
     </div>
 
     <div class="panel"><div class="panel-h">NDA (B6) — Status-Tracking, keine rechtsverbindliche E-Signatur</div>
-      <div class="row-actions">
-        <button class="btn" onclick="doNdaDraft('${cand.id}')">NDA-Entwurf erstellen</button>
-      </div>
-      <div id="nda-area" class="timeline"></div>
+      <div id="nda-area" class="timeline"><div class="loading">Lade...</div></div>
     </div>`;
 
+  loadOutreachArea(cand.id);
+  loadInviteArea(cand.id);
   loadNdaArea(cand.id);
 }
 
 async function doShortlist(id){ try{ await post(`/candidates/${id}/shortlist`); location.hash = location.hash; renderCandidate(id); }catch(e){ alert(e.message);} }
-async function doDraftOutreach(id){
-  try {
-    const a = await post(`/candidates/${id}/outreach/draft`);
-    document.getElementById('outreach-area').innerHTML = `
-      <div style="padding:14px 18px"><b>${esc(a.rendered_subject)}</b><pre style="white-space:pre-wrap;font-family:'DM Sans',sans-serif;font-size:13px">${esc(a.rendered_body)}</pre>
-      <button class="btn primary" onclick="approveOutreach('${id}','${a.id}')">Freigeben &amp; senden</button></div>`;
-  } catch(e){ alert(e.message); }
-}
-async function approveOutreach(cid, aid){ try{ const r = await post(`/candidates/${cid}/outreach/${aid}/approve`); alert('Gesendet: ' + r.message_id); renderCandidate(cid);}catch(e){alert(e.message);} }
+async function doDraftOutreach(id){ try{ await post(`/candidates/${id}/outreach/draft`); loadOutreachArea(id);}catch(e){alert(e.message);} }
+async function doPrepareFollowup(id){ try{ await post(`/candidates/${id}/prepare-followup`); renderCandidate(id);}catch(e){alert(e.message);} }
+async function approveOutreach(cid, aid){ try{ const r = await post(`/candidates/${cid}/outreach/${aid}/approve`); alert('Gesendet: ' + r.message_id); loadOutreachArea(cid); loadInviteArea(cid); }catch(e){alert(e.message);} }
+async function rejectOutreach(cid, aid){ if(!confirm('Diesen Entwurf ablehnen (nicht senden)?')) return; try{ await post(`/candidates/${cid}/outreach/${aid}/reject`); loadOutreachArea(cid);}catch(e){alert(e.message);} }
 
-async function doNdaDraft(id){ try{ await post(`/candidates/${id}/nda/draft`); loadNdaArea(id);}catch(e){alert(e.message);} }
+async function loadOutreachArea(candId){
+  const area = document.getElementById('outreach-area');
+  try {
+    const actions = await api(`/candidates/${candId}/outreach`);
+    if (!actions.length) { area.innerHTML = '<div class="empty">Noch keine Erstkontakt-/Erinnerungs-/Einladungs-Entwuerfe.</div>'; return; }
+    area.innerHTML = actions.map(a => `
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <span>${badge(a.status)} <b>${esc(OUTREACH_KIND_LABELS[a.kind]||a.kind)}</b> an ${esc(a.recipient_email)}</span>
+          <span class="mono" style="font-size:11px;color:var(--text-dim)">${new Date(a.created_at).toLocaleString('de-DE')}</span>
+        </div>
+        <div style="margin:8px 0"><b>${esc(a.rendered_subject)}</b>
+          <pre style="white-space:pre-wrap;font-family:'DM Sans',sans-serif;font-size:13px;margin:6px 0">${esc(a.rendered_body)}</pre>
+        </div>
+        ${a.status === 'draft' ? `
+          <div class="row-actions" style="padding:0">
+            <button class="btn primary" onclick="approveOutreach('${candId}','${a.id}')">Freigeben &amp; senden</button>
+            <button class="btn" onclick="rejectOutreach('${candId}','${a.id}')">Ablehnen</button>
+          </div>` : ''}
+      </div>`).join('');
+  } catch(e) { area.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+async function loadInviteArea(candId){
+  const area = document.getElementById('invite-area');
+  try {
+    const inv = await api(`/candidates/${candId}/onboarding-invite`);
+    area.innerHTML = `<div style="padding:14px 18px">${badge(inv.status)} ${inv.status === 'completed' ? `bestaetigt von <b>${esc(inv.confirmed_by_name||'—')}</b> am ${new Date(inv.confirmed_at).toLocaleString('de-DE')}` : 'Einladung wurde erstellt/verschickt, Lieferant hat das Formular noch nicht ausgefuellt.'}</div>
+      <div class="disclaimer">Den Einladungslink selbst findet man im Text der "Stammdaten-Einladung"-Mail oben (Erstkontakt-Panel) — er wird nur als Hash gespeichert und kann hier aus Sicherheitsgruenden nicht erneut angezeigt werden.</div>`;
+  } catch(e) {
+    area.innerHTML = `<div class="empty">Noch keine Stammdaten-Einladung fuer diesen Kandidaten. Entsteht automatisch, sobald der Agent Interesse erkennt — oder ueber "Stammdaten-/Angebots-Vorbereitung nachholen" oben.</div>`;
+  }
+}
+
+function ndaStepHint(status){
+  return {
+    draft: 'Entwurf wartet auf Freigabe zum Versand.',
+    sent: 'Versendet, wartet auf Ruecklauf vom Lieferanten.',
+    returned: 'Ruecklauf eingegangen, wartet auf menschliche Pruefung (Checkliste unten).',
+    review_required: 'Abweichung zum versendeten Text erkannt — Pruefung durch Legal/Mensch erforderlich.',
+    verified: 'Geprueft, wartet auf finale Freigabe.',
+    approved: 'Final freigegeben.',
+    rejected: 'Abgelehnt.',
+  }[status] || status;
+}
 
 async function loadNdaArea(candId){
   const area = document.getElementById('nda-area');
   try {
-    const cand = await api(`/candidates/${candId}`);
-    // NDA ist 1:1 an Kandidat gebunden; ohne eigene "get by candidate"-Route
-    // ueber den Kandidaten-Status navigieren (Demo-UI, siehe Bericht).
-    area.innerHTML = `<div class="empty">NDA-Status wird im Kandidatenstatus gespiegelt: ${badge(cand.status)}. Volle NDA-Timeline (Entwurf/Zustellung/Ruecklauf/Pruefung/Freigabe) ueber die API-Endpunkte unter /api/v1/sourcing/nda/{id}.</div>`;
-  } catch(e) { area.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+    const nda = await api(`/candidates/${candId}/nda`);
+    let controls = '';
+    if (nda.status === 'draft') {
+      controls = `<button class="btn primary" onclick="doNdaApproveSend('${nda.id}','${candId}')">NDA freigeben &amp; versenden</button>`;
+    } else if (nda.status === 'sent') {
+      controls = `
+        <div class="formgrid" style="grid-template-columns:1fr">
+          <textarea id="nda-return-text" rows="4" placeholder="Zurueckgekommenen Vertragstext hier einfuegen..."></textarea>
+        </div>
+        <div class="row-actions"><button class="btn primary" onclick="doNdaReturn('${nda.id}','${candId}')">Ruecklauf eintragen</button></div>`;
+    } else if (nda.status === 'returned' || nda.status === 'review_required') {
+      controls = `
+        <div style="padding:0 18px 10px;font-size:12.5px">
+          ${nda.redline_detected ? '<b style="color:var(--status-bad)">Abweichung zum Original erkannt.</b>' : 'Keine Abweichung zum Original erkannt.'}
+          ${nda.apparent_signature_claim ? '<br>Hinweis: Rueckmeldetext enthaelt eine Unterschrifts-Behauptung — das allein setzt keinen Status.' : ''}
+          ${nda.returned_text ? `<pre style="white-space:pre-wrap;font-family:'DM Sans',sans-serif;margin-top:8px">${esc(nda.returned_text)}</pre>` : ''}
+        </div>
+        <div class="formgrid">
+          <label><input type="checkbox" id="chk-version"> Version stimmt ueberein</label>
+          <label><input type="checkbox" id="chk-parties"> Parteien stimmen ueberein</label>
+          <label><input type="checkbox" id="chk-signatory"> Signatar ist unterschriftsberechtigt</label>
+          <label><input type="checkbox" id="chk-counter"> Gegenzeichnung liegt vor</label>
+        </div>
+        <div class="row-actions"><button class="btn primary" onclick="doNdaVerify('${nda.id}','${candId}')">Pruefung abschliessen</button></div>`;
+    } else if (nda.status === 'verified') {
+      controls = `<button class="btn primary" onclick="doNdaApprove('${nda.id}','${candId}')">NDA final freigeben</button>`;
+    }
+    area.innerHTML = `
+      <div style="padding:14px 18px">${badge(nda.status)} <span style="color:var(--text-muted)">${esc(ndaStepHint(nda.status))}</span></div>
+      <div style="padding:0 18px 14px"><pre style="white-space:pre-wrap;font-family:'DM Sans',sans-serif;font-size:13px">${esc(nda.draft_text)}</pre></div>
+      ${controls}`;
+  } catch(e) {
+    area.innerHTML = `<div class="empty">Noch keine NDA fuer diesen Kandidaten.</div>
+      <div class="row-actions"><button class="btn" onclick="doNdaDraft('${candId}')">NDA-Entwurf erstellen</button></div>`;
+  }
 }
+
+async function doNdaDraft(id){ try{ await post(`/candidates/${id}/nda/draft`); loadNdaArea(id);}catch(e){alert(e.message);} }
+async function doNdaApproveSend(ndaId, candId){ try{ await post(`/nda/${ndaId}/approve-send`); loadNdaArea(candId);}catch(e){alert(e.message);} }
+async function doNdaReturn(ndaId, candId){
+  const text = document.getElementById('nda-return-text').value;
+  if (!text.trim()) { alert('Bitte Ruecklauftext einfuegen.'); return; }
+  try{ await post(`/nda/${ndaId}/return`, {returned_text: text}); loadNdaArea(candId);}catch(e){alert(e.message);}
+}
+async function doNdaVerify(ndaId, candId){
+  const payload = {
+    version_matches: document.getElementById('chk-version').checked,
+    parties_match: document.getElementById('chk-parties').checked,
+    signatory_authorized: document.getElementById('chk-signatory').checked,
+    countersignature_present: document.getElementById('chk-counter').checked,
+  };
+  try{ await post(`/nda/${ndaId}/verify`, payload); loadNdaArea(candId);}catch(e){alert(e.message);}
+}
+async function doNdaApprove(ndaId, candId){ if(!confirm('NDA final freigeben?')) return; try{ await post(`/nda/${ndaId}/approve`); loadNdaArea(candId);}catch(e){alert(e.message);} }
 
 async function route() {
   const hash = location.hash;
