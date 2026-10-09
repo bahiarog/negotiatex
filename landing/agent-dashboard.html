@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NegotiateX.ai — Agent-Uebersicht</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/theme.css">
+<style>
+:root{--hh:56px}
+body{font-size:14px;line-height:1.5}
+header{position:fixed;top:0;left:0;right:0;z-index:300;height:var(--hh);background:rgba(247,246,241,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:10px}
+.logo{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--text);text-decoration:none;flex-shrink:0}
+.logo em{color:var(--gold);font-style:normal}
+.hdr-sep{width:1px;height:20px;background:var(--border)}
+.hdr-pg{font-size:12px;color:var(--text-muted)}
+.hdr-r{margin-left:auto;display:flex;align-items:center;gap:10px}
+.phase-note{font-family:'DM Mono',monospace;font-size:10.5px;color:var(--text-muted);background:var(--bg-card2);border:1px solid var(--border);padding:5px 10px;border-radius:7px;letter-spacing:.3px}
+.h-btn{font-size:12px;color:var(--text-muted);background:transparent;border:1px solid var(--border);padding:5px 11px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;text-decoration:none}
+.h-btn:hover{border-color:var(--gold-border);color:var(--text)}
+main{padding:calc(var(--hh) + 28px) 28px 60px;max-width:1200px;margin:0 auto}
+h1{font-family:'Playfair Display',serif;font-size:26px;font-weight:700;margin-bottom:4px}
+.sub{color:var(--text-muted);font-size:13px;margin-bottom:22px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px}
+.kpi{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:0 20px 48px rgba(22,32,28,0.04)}
+.kpi .l{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.kpi .v{font-family:'DM Mono',monospace;font-size:22px;font-weight:500}
+.kpi .v.warn{color:var(--gold)}
+.kpi .v.bad{color:var(--status-bad)}
+.panel{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px;overflow:hidden;box-shadow:0 20px 48px rgba(22,32,28,0.04)}
+.panel-h{padding:14px 18px;border-bottom:1px solid var(--border);font-size:13px;font-weight:500;display:flex;justify-content:space-between;align-items:center}
+.panel-h .cnt{font-family:'DM Mono',monospace;font-size:11px;color:var(--text-muted)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:10px 18px;color:var(--text-muted);font-weight:400;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+td{padding:10px 18px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:3px 9px;border-radius:6px;font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.3px;white-space:nowrap}
+.b-negotiation{background:rgba(46,110,181,.1);color:#2E6EB5}
+.b-exception{background:rgba(216,90,48,.1);color:var(--status-bad)}
+.b-outreach{background:var(--gold-dim);color:var(--gold)}
+.b-nda{background:rgba(29,158,117,.1);color:var(--status-good)}
+.b-rfq{background:rgba(46,110,181,.1);color:#2E6EB5}
+.b-contract{background:rgba(120,90,200,.12);color:#785AC8}
+.mono{font-family:'DM Mono',monospace}
+.empty{padding:28px 18px;color:var(--text-muted);font-size:13px;text-align:center}
+.loading{padding:40px;text-align:center;color:var(--text-muted)}
+.activity{list-style:none;padding:0;margin:0;font-size:12.5px}
+.activity li{padding:10px 18px;border-bottom:1px solid var(--border);color:var(--text-muted)}
+.activity li:last-child{border-bottom:none}
+.activity li b{color:var(--text);font-weight:500}
+.activity .when{float:right;font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim)}
+.open-link{font-size:12px;color:var(--gold);text-decoration:none;white-space:nowrap}
+.open-link:hover{text-decoration:underline}
+.disclaimer{font-size:11.5px;color:var(--text-dim);padding:12px 18px;border-top:1px dashed var(--border)}
+.refresh-note{font-size:11px;color:var(--text-dim);font-family:'DM Mono',monospace}
+</style>
+</head>
+<body>
+<header>
+  <a class="logo" href="/dashboard"><em>Negotiate</em>X.ai</a>
+  <div class="hdr-sep"></div>
+  <span class="hdr-pg">Agent-Uebersicht — Freigaben &amp; Aktivitaet</span>
+  <div class="hdr-r">
+    <span class="phase-note">Der Agent bereitet vor, Freigabe &amp; Versand bleiben immer menschlich</span>
+    <a class="h-btn" href="/cases-dashboard">Faelle</a>
+    <a class="h-btn" href="/sourcing-dashboard">Sourcing</a>
+    <a class="h-btn" href="/rfq-dashboard">RFQ</a>
+    <a class="h-btn" href="/dashboard">Zurueck zum Dashboard</a>
+  </div>
+</header>
+<main id="app"><div class="loading">Lade Agent-Uebersicht...</div></main>
+
+<script>
+const token = localStorage.getItem('nx_token');
+const user  = JSON.parse(localStorage.getItem('nx_user') || 'null');
+if (!token || !user) location.href = '/login';
+
+const API = '/api/v1';
+const app = document.getElementById('app');
+
+async function api(path) {
+  const res = await fetch(API + path, { headers: { 'Authorization': 'Bearer ' + token } });
+  if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.detail || ('HTTP ' + res.status)); }
+  return res.json();
+}
+
+function esc(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmtWhen(iso){ return iso ? new Date(iso).toLocaleString('de-DE') : '—'; }
+
+const CATEGORY_LABELS = {
+  negotiation: 'Verhandlung (Teil A)', exception: 'Ausnahme', outreach: 'Erstkontakt/Sourcing (B4)',
+  nda: 'NDA (B6)', rfq: 'RFQ (B7)', contract: 'Vertrag (B9)',
+};
+
+let tenantEnsured = false;
+async function ensureTenant() {
+  if (tenantEnsured) return;
+  try { await api('/tenants/me'); }
+  catch (e) {
+    const companyName = (user && (user.company_name || user.name)) || 'Mein Unternehmen';
+    try { await fetch(API + '/tenants', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ company_name: companyName }) }); }
+    catch (e2) { /* Race mit anderem Tab, oder echter Fehler -- naechster Call zeigt ihn. */ }
+  }
+  tenantEnsured = true;
+}
+
+async function render() {
+  await ensureTenant();
+  let data;
+  try { data = await api('/agent/overview'); }
+  catch (e) { app.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(e.message)}</div></div>`; return; }
+
+  const pending = data.pending || [];
+  const activity = data.recent_activity || [];
+  const exceptionCount = pending.filter(p => p.category === 'exception').length;
+  const approvalCount = pending.length - exceptionCount;
+
+  const pendingRows = pending.map(p => `
+    <tr>
+      <td><span class="badge b-${esc(p.category)}">${esc(CATEGORY_LABELS[p.category] || p.category)}</span></td>
+      <td><b>${esc(p.label)}</b></td>
+      <td>${esc(p.subject)}</td>
+      <td style="max-width:360px">${esc(p.detail)}</td>
+      <td class="mono">${fmtWhen(p.created_at)}</td>
+      <td><a class="open-link" href="${esc(p.link)}">Oeffnen &rarr;</a></td>
+    </tr>`).join('');
+
+  const activityRows = activity.map(a => `
+    <li>${esc(a.text)} <span class="mono">[${esc(a.actor)}]</span><span class="when">${fmtWhen(a.when)}</span></li>`).join('');
+
+  app.innerHTML = `
+    <h1>Agent-Uebersicht</h1>
+    <p class="sub">Alles, was der Agent vorbereitet hat und worauf eine menschliche Entscheidung wartet — ueber Verhandlung (Teil A), Sourcing/Erstkontakt/NDA (Teil B) und Vertraege hinweg. Kein Eintrag hier wurde automatisch versendet oder freigegeben.</p>
+
+    <div class="kpis">
+      <div class="kpi"><div class="l">Wartet auf Freigabe</div><div class="v ${approvalCount ? 'warn' : ''}">${approvalCount}</div></div>
+      <div class="kpi"><div class="l">Offene Ausnahmen</div><div class="v ${exceptionCount ? 'bad' : ''}">${exceptionCount}</div></div>
+      <div class="kpi"><div class="l">Gesamt zu pruefen</div><div class="v ${pending.length ? 'warn' : ''}">${pending.length}</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h">Wartet auf deine Entscheidung <span class="cnt">${pending.length}</span></div>
+      ${pending.length ? `<table><thead><tr><th>Bereich</th><th>Art</th><th>Firma / Fall</th><th>Detail</th><th>Erstellt</th><th></th></tr></thead><tbody>${pendingRows}</tbody></table>`
+                       : '<div class="empty">Nichts offen — der Agent hat aktuell nichts vorbereitet, das auf eine Entscheidung wartet.</div>'}
+      <div class="disclaimer">Jede Zeile ist ein vom Agenten erstellter Entwurf bzw. eine erkannte Ausnahme. "Oeffnen" fuehrt zur bestehenden Freigabe-Ansicht im jeweiligen Modul — Versand/Freigabe geschieht ausschliesslich dort, durch einen Menschen, nie automatisch von dieser Seite aus.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h">Letzte Agent-Aktivitaet <span class="refresh-note">aktualisiert sich alle 30s</span></div>
+      ${activity.length ? `<ul class="activity">${activityRows}</ul>` : '<div class="empty">Noch keine Aktivitaet protokolliert.</div>'}
+    </div>`;
+}
+
+render();
+setInterval(() => { render().catch(() => {}); }, 30000);
+</script>
+</body>
+</html>

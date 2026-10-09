@@ -11,7 +11,7 @@ import models_invoices  # noqa: F401 -- registers invoice/line-item tables on Ba
 import models_negotiation  # noqa: F401 -- registers Teil A negotiation tables on Base.metadata
 import models_sourcing  # noqa: F401 -- registers Teil B sourcing/outreach/NDA tables on Base.metadata
 import models_contracts  # noqa: F401 -- registers Teil B7-B9 RFQ/offer/contract tables on Base.metadata
-from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers, chat, requisitions, invoices, negotiation, sourcing
+from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers, chat, requisitions, invoices, negotiation, sourcing, agent_overview
 from routers.rfq_contracts import rfq_router, contracts_router
 
 limiter = Limiter(key_func=get_remote_address)
@@ -61,6 +61,7 @@ app.include_router(negotiation.router, prefix="/api/v1/negotiation", tags=["Teil
 app.include_router(sourcing.router, prefix="/api/v1/sourcing", tags=["Teil B - Sourcing"])
 app.include_router(rfq_router, prefix="/api/v1/rfq", tags=["Teil B7-B8 - RFQ & Angebote"])
 app.include_router(contracts_router, prefix="/api/v1/contracts", tags=["Teil B9 - Vertraege"])
+app.include_router(agent_overview.router, prefix="/api/v1/agent", tags=["Agent-Uebersicht (Freigaben & Aktivitaet)"])
 
 @app.get("/health")
 async def health_root():
