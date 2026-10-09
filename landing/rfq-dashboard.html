@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NegotiateX.ai — RFQ &amp; Vertraege (Teil B7-B9)</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/theme.css">
+<style>
+:root{--hh:56px;--bl:#2E6EB5;}
+body{font-size:14px;line-height:1.5}
+header{position:fixed;top:0;left:0;right:0;z-index:300;height:var(--hh);background:rgba(247,246,241,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:10px}
+.logo{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--text);text-decoration:none;flex-shrink:0}
+.logo em{color:var(--gold);font-style:normal}
+.hdr-sep{width:1px;height:20px;background:var(--border)}
+.hdr-pg{font-size:12px;color:var(--text-muted)}
+.hdr-r{margin-left:auto;display:flex;align-items:center;gap:10px}
+.phase-note{font-family:'DM Mono',monospace;font-size:10.5px;color:var(--text-muted);background:var(--bg-card2);border:1px solid var(--border);padding:5px 10px;border-radius:7px;letter-spacing:.3px}
+.h-btn{font-size:12px;color:var(--text-muted);background:transparent;border:1px solid var(--border);padding:5px 11px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;text-decoration:none}
+.h-btn:hover{border-color:var(--gold-border);color:var(--text)}
+main{padding:calc(var(--hh) + 28px) 28px 60px;max-width:1200px;margin:0 auto}
+h1{font-family:'Playfair Display',serif;font-size:26px;font-weight:700;margin-bottom:4px}
+.sub{color:var(--text-muted);font-size:13px;margin-bottom:22px}
+.panel{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px;overflow:hidden;box-shadow:0 20px 48px rgba(22,32,28,0.04)}
+.panel-h{padding:14px 18px;border-bottom:1px solid var(--border);font-size:13px;font-weight:500;display:flex;justify-content:space-between;align-items:center}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:10px 18px;color:var(--text-muted);font-weight:400;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+td{padding:10px 18px;border-bottom:1px solid var(--border)}
+tr.row{cursor:pointer}
+tr.row:hover{background:var(--bg-card2)}
+.badge{display:inline-block;padding:3px 9px;border-radius:6px;font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.3px}
+.b-draft,.b-sent{background:var(--gold-dim);color:var(--gold)}
+.b-collecting_offers,.b-comparison_ready{background:rgba(46,110,181,.1);color:var(--bl)}
+.b-awarded,.b-approved_by_buyer,.b-returned{background:rgba(29,158,117,.1);color:var(--status-good)}
+.b-human_confirmed_signed{background:rgba(29,158,117,.18);color:var(--status-good)}
+.b-legal_review_required,.b-commercial_review_required{background:rgba(216,90,48,.1);color:var(--status-bad)}
+.b-closed,.b-rejected,.b-withdrawn{background:rgba(216,90,48,.1);color:var(--status-bad)}
+.b-comparable{color:var(--status-good)}.b-flagged_different_scope{color:var(--status-bad)}
+.empty{padding:28px 18px;color:var(--text-muted);font-size:13px;text-align:center}
+.back{display:inline-block;margin-bottom:14px;color:var(--text-muted);font-size:12px;text-decoration:none;cursor:pointer}
+.back:hover{color:var(--text)}
+.mono{font-family:'DM Mono',monospace}
+.loading{padding:40px;text-align:center;color:var(--text-muted)}
+.row-actions{display:flex;gap:8px;padding:14px 18px;flex-wrap:wrap}
+.btn{font-size:12px;border:1px solid var(--border);background:var(--bg-card2);padding:6px 12px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif}
+.btn:hover{border-color:var(--gold-border)}
+.btn.primary{background:var(--gold);color:#fff;border:none}
+.btn.danger{border-color:rgba(216,90,48,.4);color:var(--status-bad)}
+.timeline{padding:18px;font-size:12.5px}
+.timeline .step{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+.notice{background:rgba(216,90,48,.06);border:1px solid rgba(216,90,48,.2);color:var(--status-bad);padding:10px 14px;border-radius:8px;font-size:12.5px;margin:12px 18px}
+.formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;padding:14px 18px}
+.formgrid input,.formgrid select,.formgrid textarea{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'DM Sans',sans-serif}
+.disclaimer{font-size:11px;color:var(--text-dim);padding:10px 18px;border-top:1px dashed var(--border)}
+.rank-1{font-weight:600}
+.delta{font-size:12px;color:var(--status-good)}
+.signbox{background:rgba(216,90,48,.06);border:1px solid rgba(216,90,48,.25);border-radius:8px;padding:14px 18px;margin:12px 18px;font-size:12.5px}
+</style>
+</head>
+<body>
+<header>
+  <a class="logo" href="/dashboard"><em>Negotiate</em>X.ai</a>
+  <div class="hdr-sep"></div>
+  <span class="hdr-pg">RFQ, Angebotsvergleich &amp; Vertraege (Teil B7-B9)</span>
+  <div class="hdr-r">
+    <span class="phase-note">Status-Bestaetigung — keine rechtsverbindliche E-Signatur im System</span>
+    <a class="h-btn" href="/sourcing-dashboard">Sourcing</a>
+    <a class="h-btn" href="/cases-dashboard">Faelle</a>
+    <a class="h-btn" href="/dashboard">Zurueck zum Dashboard</a>
+  </div>
+</header>
+<main id="app"><div class="loading">Lade...</div></main>
+
+<script>
+const token = localStorage.getItem('nx_token');
+const user  = JSON.parse(localStorage.getItem('nx_user') || 'null');
+if (!token || !user) location.href = '/login';
+
+const API_RFQ = '/api/v1/rfq';
+const API_CONTRACTS = '/api/v1/contracts';
+const API_SOURCING = '/api/v1/sourcing';
+const app = document.getElementById('app');
+
+async function api(base, path, opts) {
+  const res = await fetch(base + path, { ...opts, headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', ...(opts && opts.headers || {}) } });
+  if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.detail || ('HTTP ' + res.status)); }
+  return res.json();
+}
+const rfqApi = (p, o) => api(API_RFQ, p, o);
+const contractApi = (p, o) => api(API_CONTRACTS, p, o);
+const sourcingApi = (p, o) => api(API_SOURCING, p, o);
+function post(fn, path, body) { return fn(path, { method: 'POST', body: body !== undefined ? JSON.stringify(body) : undefined }); }
+
+function badge(v){ return `<span class="badge b-${(v||'').toLowerCase()}">${esc(v)}</span>`; }
+function esc(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function money(v,c){ return (v===null||v===undefined) ? '—' : Number(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ' + (c||'EUR'); }
+
+let tenantEnsured = false;
+async function ensureTenant() {
+  if (tenantEnsured) return;
+  const authHeaders = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+  try {
+    const r = await fetch('/api/v1/tenants/me', { headers: authHeaders });
+    if (!r.ok) throw new Error('no-membership');
+  } catch (e) {
+    const companyName = (user && (user.company_name || user.name)) || 'Mein Unternehmen';
+    try {
+      await fetch('/api/v1/tenants', { method: 'POST', headers: authHeaders, body: JSON.stringify({ company_name: companyName }) });
+    } catch (e2) {
+      // Race with another tab, or genuinely failed -- let the caller's own request surface the real error.
+    }
+  }
+  tenantEnsured = true;
+}
+
+// ---------------------------------------------------------------------------
+// RFQ comparison view (zeigt Worked-Example-Layout: Stueckpreis/Warenwert/
+// Fracht/Gesamtkosten je Bieter, plus Verbesserungs-Deltas)
+// ---------------------------------------------------------------------------
+
+async function renderRfq(id) {
+  app.innerHTML = '<div class="loading">Lade...</div>';
+  const [rfq, comparison] = await Promise.all([rfqApi(`/${id}`), rfqApi(`/${id}/comparison`)]);
+
+  const allRows = comparison.offers.map(o => `
+    <tr>
+      <td class="mono">${o.supplier_candidate_id.slice(0,8)}</td>
+      <td class="mono">v${o.version}</td>
+      <td class="mono">${money(o.unit_price_net, o.currency)}</td>
+      <td class="mono">${money(o.goods_value_net, o.currency)}</td>
+      <td class="mono">${money(o.freight_cost, o.currency)}</td>
+      <td class="mono ${o.rank===1?'rank-1':''}">${money(o.total_cost_net, o.currency)}</td>
+      <td>${badge(o.comparability_flag)}${o.rank?(' #' + o.rank):''}</td>
+      <td class="mono">${esc(o.comparability_note||'—')}</td>
+    </tr>`).join('');
+
+  const deltaRows = (comparison.negotiation_deltas||[]).map(d => `
+    <li>Bieter <span class="mono">${d.supplier_candidate_id.slice(0,8)}</span>:
+      Verbesserung ggue. eigenem Ursprungsangebot <span class="delta">${money(d.improvement_vs_own_original_eur,'EUR')}</span>
+      ${d.advantage_vs_best_other_as_submitted_eur ? ` &middot; Vorteil ggue. bestem Fremdangebot (as-submitted) <span class="delta">${money(d.advantage_vs_best_other_as_submitted_eur,'EUR')}</span>` : ''}
+    </li>`).join('');
+
+  app.innerHTML = `
+    <a class="back" onclick="location.hash=''">&larr; Zurueck</a>
+    <h1>RFQ ${esc(id.slice(0,8))}</h1>
+    <p class="sub">${badge(rfq.status)} &middot; Frist ${new Date(rfq.deadline).toLocaleDateString('de-DE')} ${rfq.test_mode?'&middot; TEST-Modus':''}</p>
+
+    <div class="panel"><div class="panel-h">Spezifikation</div><div style="padding:14px 18px;white-space:pre-wrap">${esc(rfq.spec_text)}</div></div>
+
+    <div class="panel">
+      <div class="panel-h">Angebotsvergleich (Bewertungsgewichtung Preis/Qualitaet/Lieferf.: ${comparison.evaluation_weights.price}/${comparison.evaluation_weights.quality}/${comparison.evaluation_weights.delivery})</div>
+      ${comparison.offers.length ? `<table><thead><tr><th>Bieter</th><th>Vers.</th><th>Stueckpreis</th><th>Warenwert</th><th>Fracht</th><th>Gesamtkosten</th><th>Vergleichbarkeit</th><th>Hinweis</th></tr></thead><tbody>${allRows}</tbody></table>` : '<div class="empty">Noch keine Angebote erfasst.</div>'}
+      ${deltaRows ? `<ul class="timeline">${deltaRows}</ul>` : ''}
+      <div class="disclaimer">${esc(comparison.note)}</div>
+    </div>
+
+    <div class="panel"><div class="panel-h">Zuschlag (nur menschliche Entscheidung)</div>
+      <div class="row-actions">
+        <input id="award-offer-id" placeholder="Offer-ID" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px">
+        <button class="btn primary" onclick="doAward('${rfq.id}')">Zuschlag erteilen &amp; Teil-A-Verhandlung starten</button>
+      </div>
+      ${rfq.awarded_case_id ? `<div class="disclaimer">Vergeben -- Fall <span class="mono">${rfq.awarded_case_id}</span>, Verhandlung laeuft ueber /cases-dashboard (Teil A).</div>` : ''}
+    </div>`;
+}
+
+async function doAward(rfqId) {
+  const offerId = document.getElementById('award-offer-id').value.trim();
+  if (!offerId) { alert('Bitte Offer-ID angeben.'); return; }
+  try {
+    const r = await post(rfqApi, `/${rfqId}/award`, { offer_id: offerId });
+    alert('Zuschlag erteilt. Case: ' + r.case_id + ' / Strategy: ' + r.strategy_id);
+    location.hash = location.hash;
+    renderRfq(rfqId);
+  } catch(e) { alert(e.message); }
+}
+
+// ---------------------------------------------------------------------------
+// Contract view -- Status-Zeitstrahl mit klarer Trennung kaufm./rechtl. Flag
+// ---------------------------------------------------------------------------
+
+async function renderContract(id) {
+  app.innerHTML = '<div class="loading">Lade...</div>';
+  const [c, events] = await Promise.all([contractApi(`/${id}`), contractApi(`/${id}/events`)]);
+
+  const evRows = events.map(e => `<li><b>${esc(e.to_status)}</b> <span class="mono">(${new Date(e.created_at).toLocaleString('de-DE')})</span> — ${esc(e.reason||'')}</li>`).join('');
+
+  app.innerHTML = `
+    <a class="back" onclick="location.hash=''">&larr; Zurueck</a>
+    <h1>Vertrag v${c.version}${c.superseded_by_version ? ' (ersetzt durch v'+c.superseded_by_version+')' : ''}</h1>
+    <p class="sub">${badge(c.status)} ${c.legal_review_required ? '<span class="badge b-legal_review_required">Legal-Review</span>' : ''} ${c.commercial_review_required ? '<span class="badge b-commercial_review_required">Kaufm.-Review</span>' : ''}</p>
+
+    <div class="panel"><div class="panel-h">Vertragstext (aktuelle Version)</div><div style="padding:14px 18px;white-space:pre-wrap;font-size:12.5px">${esc(c.body_text)}</div></div>
+
+    <div class="panel"><div class="panel-h">Mandat (kaufmaennischer Rahmen)</div>
+      <div style="padding:14px 18px" class="mono">Preisobergrenze: ${money(c.mandate_price_cap,'EUR')} &middot; max. Zahlungsziel: ${c.mandate_payment_terms_days_max||'—'} Tage &middot; spaetester Liefertermin: ${esc(c.mandate_delivery_date_latest||'—')}</div>
+    </div>
+
+    ${c.redline_detected ? `<div class="notice">Redline erkannt beim letzten Ruecklauf. Klauselkategorien: ${esc((c.redline_clause_categories||[]).join(', ')||'keine rechtlich relevanten')}. (Einfacher Textvergleich, kein juristisches Verstehen.)</div>` : ''}
+
+    <div class="panel"><div class="panel-h">Status-Verlauf</div><ul class="timeline">${evRows||'<div class="empty">Keine Ereignisse.</div>'}</ul></div>
+
+    <div class="panel"><div class="panel-h">Abschluss (B9)</div>
+      <div class="row-actions">
+        <button class="btn" onclick="doFinalize('${c.id}')">Finalisieren (konsolidierte Version + Signaturpaket)</button>
+        <button class="btn danger" onclick="doSign('${c.id}')">Menschlich bestaetigt: signiert (ausserhalb des Systems)</button>
+      </div>
+      <div class="signbox">Diese Schaltflaeche ist eine reine <b>Status-Bestaetigung</b>, <b>keine rechtsverbindliche Unterschrift im System</b>. Im Test und in Version 1 keine autonome rechtsverbindliche Annahme.</div>
+    </div>`;
+}
+
+async function doFinalize(id){ try{ const r = await post(contractApi, `/${id}/finalize`); alert('Finalisiert. Offene Punkte: ' + (r.open_points||[]).join('; ')); location.hash = location.hash; renderContract(id);}catch(e){alert(e.message);} }
+async function doSign(id){
+  const name = prompt('Name der Person, die die Unterschrift ausserhalb des Systems bestaetigt:');
+  if (!name) return;
+  try{ await post(contractApi, `/${id}/human-confirmed-signed`, { confirmed_by_name: name }); renderContract(id);}catch(e){alert(e.message);}
+}
+
+// ---------------------------------------------------------------------------
+// List view
+// ---------------------------------------------------------------------------
+
+async function renderList() {
+  app.innerHTML = '<div class="loading">Lade...</div>';
+  app.innerHTML = `
+    <h1>RFQ &amp; Vertraege</h1>
+    <p class="sub">B7-B9: Angebotsanfrage, Angebotsvergleich/-verhandlung (reused Teil-A-Engine), Vertragsentwurf bis Signatur-Bereitschaft.</p>
+    <div class="panel">
+      <div class="panel-h">RFQ oder Vertrag oeffnen</div>
+      <div class="formgrid">
+        <input id="goto-rfq" placeholder="RFQ-ID">
+        <button class="btn primary" onclick="const v=document.getElementById('goto-rfq').value.trim(); if(v) location.hash='#rfq/'+v">RFQ oeffnen</button>
+        <input id="goto-contract" placeholder="Vertrags-ID">
+        <button class="btn primary" onclick="const v=document.getElementById('goto-contract').value.trim(); if(v) location.hash='#contract/'+v">Vertrag oeffnen</button>
+      </div>
+      <div class="disclaimer">Anlage von RFQs/Vertraegen erfolgt derzeit per API (POST /api/v1/rfq, POST /api/v1/contracts) -- Navigation hier ueber die jeweilige ID.</div>
+    </div>`;
+}
+
+async function route() {
+  const hash = location.hash;
+  try {
+    await ensureTenant();
+    if (hash.startsWith('#rfq/')) await renderRfq(hash.slice(5));
+    else if (hash.startsWith('#contract/')) await renderContract(hash.slice(10));
+    else await renderList();
+  } catch (e) { app.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(e.message)}</div></div>`; }
+}
+window.addEventListener('hashchange', route);
+route();
+</script>
+</body>
+</html>
