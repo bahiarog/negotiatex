@@ -69,18 +69,33 @@ def _compute_hash(*parts) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-async def require_nda_approved(tenant_id, candidate_id, db: AsyncSession) -> NDA:
+async def require_nda_approved(tenant_id, candidate_id, db: AsyncSession) -> Optional[NDA]:
     """Identische Guard-Logik wie routers/sourcing.require_nda_approved
     (hier dupliziert statt importiert, um den bestehenden Sourcing-Router
     unangetastet zu lassen -- siehe Bericht). Eine RFQ mit echter Spezifikation
-    darf NIE an einen Kandidaten ohne freigegebene NDA gehen."""
+    darf NIE an einen Kandidaten ohne freigegebene NDA gehen -- AUSSER die KI
+    hat per assess_nda_necessity() explizit needs_nda=false eingeschaetzt und
+    es existiert noch gar keine NDA-Zeile (siehe routers/sourcing.py fuer die
+    ausfuehrliche Begruendung dieser Ausnahme, identisch hier gehalten)."""
     r = await db.execute(select(NDA).where(NDA.supplier_candidate_id == candidate_id, NDA.tenant_id == tenant_id))
     nda = r.scalar_one_or_none()
-    if not nda or nda.status != NDAStatus.approved:
-        raise HTTPException(403, "Zugriff verweigert: Fuer diesen Kandidaten liegt keine freigegebene NDA vor "
-                                   "(status muss 'approved' sein, menschlich per /sourcing/nda/{id}/approve gesetzt). "
-                                   "Eine RFQ mit echter Spezifikation darf nur an NDA-freigegebene Kandidaten gehen.")
-    return nda
+    if nda:
+        if nda.status != NDAStatus.approved:
+            raise HTTPException(403, "Zugriff verweigert: Fuer diesen Kandidaten liegt keine freigegebene NDA vor "
+                                       "(status muss 'approved' sein, menschlich per /sourcing/nda/{id}/approve gesetzt). "
+                                       "Eine RFQ mit echter Spezifikation darf nur an NDA-freigegebene Kandidaten gehen.")
+        return nda
+
+    from models_sourcing import SupplierCandidate
+    cand_r = await db.execute(select(SupplierCandidate).where(SupplierCandidate.id == candidate_id, SupplierCandidate.tenant_id == tenant_id))
+    cand = cand_r.scalar_one_or_none()
+    assessment = (cand.nda_assessment_json if cand else None) or {}
+    if assessment.get("needs_nda") is False:
+        return None
+
+    raise HTTPException(403, "Zugriff verweigert: Fuer diesen Kandidaten liegt keine freigegebene NDA vor "
+                               "(status muss 'approved' sein, menschlich per /sourcing/nda/{id}/approve gesetzt). "
+                               "Eine RFQ mit echter Spezifikation darf nur an NDA-freigegebene Kandidaten gehen.")
 
 
 async def _get_rfq_or_404(rfq_id: str, tenant_id, db: AsyncSession) -> RFQ:

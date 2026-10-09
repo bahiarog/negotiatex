@@ -151,9 +151,37 @@ class SupplierCandidate(Base):
 
     stammblatt_json = Column(JSON, default=dict)  # per-Feld {status: fehlt|eingegangen|geprueft|freigegeben, source, reviewer, updated_at}
 
+    # KI-Einschaetzung, ob vor der vollen Briefing-Weitergabe ein NDA noetig
+    # ist (nutzerseitig gefordert: "muss der Agent abwaegen") -- Vorschlag,
+    # kein autonomer Beschluss: {needs_nda, reasoning, assessed_at}. Ein NDA
+    # wird dadurch nie automatisch versendet, nur vorbereitet/markiert.
+    nda_assessment_json = Column(JSON, nullable=True)
+
     created_by = Column(String(100), nullable=False)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class CandidateOnboardingInviteStatus(str, enum.Enum):
+    pending = "pending"
+    completed = "completed"
+
+
+class CandidateOnboardingInvite(Base):
+    """Selbstauskunfts-Link fuer einen interessierten Kandidaten, analog zum
+    bestehenden (nicht mandantenfaehigen) SupplierInvite-Muster in
+    routers/suppliers.py, aber an SupplierCandidate + tenant_id gebunden.
+    Token wird nur gehasht gespeichert; einmal verwendet -> completed."""
+    __tablename__ = "candidate_onboarding_invites"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    supplier_candidate_id = Column(UUID(as_uuid=True), ForeignKey("supplier_candidates.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True)
+    status = Column(SAEnum(CandidateOnboardingInviteStatus, name="candidate_onboarding_invite_status"),
+                     default=CandidateOnboardingInviteStatus.pending, nullable=False)
+    confirmed_by_name = Column(String(255), nullable=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
 
 
 class SupplierCertificate(Base):

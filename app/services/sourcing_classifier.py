@@ -135,6 +135,58 @@ def detect_redline(sent_text: str, returned_text: str) -> bool:
     return _norm(sent_text) != _norm(returned_text)
 
 
+NDA_ASSESSMENT_SYSTEM_PROMPT = """Du schaetzt ein, ob vor der Weitergabe eines vollstaendigen \
+Beschaffungs-Briefings an einen interessierten Lieferanten eine Vertraulichkeitsvereinbarung (NDA) \
+sinnvoll ist. Du bist AUSSCHLIESSLICH ein Einschaetzungs-Hilfsmittel -- deine Ausgabe loest selbst \
+keine Aktion aus, ein Mensch sieht deinen Vorschlag und entscheidet/prueft weiter.
+
+Gib AUSSCHLIESSLICH ein JSON-Objekt zurueck, exakt in dieser Form, kein Text davor/danach:
+{"needs_nda": true oder false, "reasoning": "kurze Begruendung auf Deutsch, 1-2 Saetze"}
+
+Fuer needs_nda=true sprechen z.B.: technische Zeichnungen/Spezifikationen, interne Preisstrukturen, \
+Stueckzahlen/Mengen mit strategischer Bedeutung, Erwaehnung von "vertraulich"/"intern"/"Zeichnung", \
+ein als vertraulich gekennzeichneter Hinweistext in der Anfrage selbst.
+Fuer needs_nda=false sprechen z.B.: reine Standardware/Katalogware, rein oeffentliche Informationen, \
+ein bereits vorhandener oeffentlicher Teaser-Text, der schon alles Noetige enthaelt.
+
+Bei Unsicherheit waehle needs_nda=true (der vorsichtigere Default)."""
+
+
+def assess_nda_necessity(bedarf_text: str, must_criteria_text: str, confidential_notice: str, public_teaser_text: str) -> dict:
+    """Nutzerseitig gefordert: 'ob ein NDA abgeschlossen werden sollte, muss
+    der Agent abwaegen'. Ergebnis ist ein VORSCHLAG (gespeichert in
+    SupplierCandidate.nda_assessment_json), kein autonomer Beschluss -- es
+    gibt keinen Code-Pfad, der daraus direkt ein NDA versendet; das bleibt
+    immer ein separater, menschlich freigegebener Schritt (B6)."""
+    context = (
+        f"Bedarf: {bedarf_text or '(keine Angabe)'}\n"
+        f"Muss-Kriterien: {must_criteria_text or '(keine Angabe)'}\n"
+        f"Vertraulichkeitshinweis des Auftraggebers: {confidential_notice or '(keiner hinterlegt)'}\n"
+        f"Oeffentlicher Teaser-Text: {public_teaser_text or '(keiner hinterlegt)'}"
+    )
+    try:
+        client = anthropic.Anthropic()
+        resp = client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=300,
+            system=NDA_ASSESSMENT_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": context}],
+            # Bewusst KEIN `tools=` Parameter -- siehe Moduldoc oben.
+        )
+        raw = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+        m = re.search(r"\{.*\}", raw, re.DOTALL)
+        import json
+        data = json.loads(m.group(0) if m else raw)
+        return {
+            "needs_nda": bool(data.get("needs_nda", True)),
+            "reasoning": str(data.get("reasoning") or "")[:1000],
+            "assessed_at": None,  # vom Aufrufer gesetzt (DB-Zeitstempel)
+        }
+    except Exception:
+        logger.exception("assess_nda_necessity: LLM-Aufruf fehlgeschlagen, vorsichtiger Default needs_nda=true")
+        return {"needs_nda": True, "reasoning": "Automatische Einschaetzung fehlgeschlagen -- vorsichtiger Default, bitte manuell pruefen.", "assessed_at": None}
+
+
 def detect_signature_claim(text: str) -> bool:
     """Reines Textsignal ('unterschrieben'/'signed' im Rueckmeldetext
     gefunden) -- wird NIRGENDS im Code verwendet, um status automatisch auf

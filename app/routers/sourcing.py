@@ -25,6 +25,7 @@ tatsaechlichen Versand aus dem aktuellen Inhalt neu berechnet und verglichen.
 import hashlib
 import logging
 import re
+import secrets
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -36,7 +37,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, desc, func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import get_db
+from database import get_db, get_admin_db
 from deps import get_current_user, get_current_membership
 from models_v2 import SupplierV2
 from models_sourcing import (
@@ -46,9 +47,11 @@ from models_sourcing import (
     OutreachAction, OutreachApproval, OutreachActionStatus,
     OutreachMessage, OutreachDirection, OutreachReminderTimer,
     NDA, NDAEvent, NDAStatus,
+    CandidateOnboardingInvite, CandidateOnboardingInviteStatus,
 )
+from models_contracts import RFQ, RFQInvitation, RFQAction, RFQActionStatus
 from services.email_sender import send_negotiation_email
-from services.sourcing_classifier import classify_outreach_reply, detect_redline, detect_signature_claim
+from services.sourcing_classifier import classify_outreach_reply, detect_redline, detect_signature_claim, assess_nda_necessity
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -663,6 +666,146 @@ async def get_candidate_messages(candidate_id: str, membership=Depends(get_curre
 
 
 # ---------------------------------------------------------------------------
+# Nutzeranforderung (9.10.2026): sobald ein Kandidat Interesse zeigt, soll das
+# System proaktiv vorbereiten statt nur den Status zu setzen -- Stammdaten-
+# Selbstauskunftslink, KI-Einschaetzung ob ein NDA noetig ist, und ein
+# konkretes Briefing mit 3-Tage-Frist (RFQ), das um ein PDF-Angebot inkl.
+# Firmendaten sowie Zusatzdokumente (Ratecards/Preislisten) bittet. ALLES
+# hier Erzeugte ist ein DRAFT -- nichts wird automatisch versendet, jede
+# Aktion braucht weiterhin die bestehende menschliche Freigabe (Hash-Bindung,
+# siehe _compute_outreach_hash/approve-Endpunkte). Was automatisiert wird, ist
+# ausschliesslich die VORBEREITUNG, nicht der tatsaechliche Versand.
+# ---------------------------------------------------------------------------
+
+STAMMDATEN_INVITE_SUBJECT_TMPL = "Vielen Dank fuer Ihr Interesse -- naechste Schritte / {vorgangs_id}"
+STAMMDATEN_INVITE_BODY_TMPL = (
+    "Guten Tag,\n\n"
+    "vielen Dank fuer Ihre Rueckmeldung und Ihr Interesse. Als naechsten Schritt bitten wir Sie, "
+    "Ihre Unternehmensdaten ueber den folgenden persoenlichen Link zu hinterlegen (ca. 5 Minuten):\n\n"
+    "{link}\n\n"
+    "Der Link ist nur fuer Sie bestimmt und laeuft nach einmaliger Nutzung ab.\n\n"
+    "Freundliche Gruesse,\nNegotiateX – KI-gestuetzte Beschaffungskoordination.\n{testnote}"
+)
+
+RFQ_BRIEFING_SUBJECT_TMPL = "{prefix}Angebotsanfrage {bedarf} / {vorgangs_id}"
+RFQ_BRIEFING_BODY_TMPL = (
+    "Guten Tag,\n\n"
+    "im Anschluss an Ihr Interesse erhalten Sie hiermit das konkrete Briefing zu unserer Anfrage:\n\n"
+    "{bedarf}\n\n"
+    "Spezifikation / Muss-Kriterien:\n{spec}\n\n"
+    "Wir bitten Sie, bis zum {frist} ein Angebot abzugeben. Bitte reichen Sie Ihr Angebot als "
+    "PDF-Dokument ein, das auch Ihre Firmendaten (Name, Anschrift, USt-IdNr.) enthaelt, sowie: "
+    "Stueckpreis netto, Gesamtwarenwert, Fracht, weitere Kosten, Liefertermin, Zahlungsbedingungen "
+    "und Angebotsgueltigkeit. Bestaetigen Sie die Spezifikation ausdruecklich und kennzeichnen Sie "
+    "jede Abweichung.\n\n"
+    "Gerne koennen Sie zusaetzlich zu Ihrem Angebot weitere Unterlagen beifuegen, die uns die "
+    "Bewertung erleichtern -- z.B. Ratecards, Preislisten oder Referenzprojekte.\n\n"
+    "{nda_note}"
+    "Diese Anfrage begruendet keine Bestellung.\n\n"
+    "Freundliche Gruesse,\nNegotiateX – KI-gestuetzte Beschaffungskoordination.\n{testnote}"
+)
+RFQ_NDA_PENDING_NOTE = (
+    "Da diese Anfrage vertrauliche Informationen beruehrt, erhalten Sie zunaechst eine "
+    "Vertraulichkeitsvereinbarung (NDA) zur Pruefung und Unterzeichnung; das vollstaendige "
+    "Briefing folgt im Anschluss daran.\n\n"
+)
+
+
+async def _auto_prepare_after_interest(db: AsyncSession, cand: SupplierCandidate, tenant_id) -> None:
+    """Siehe Moduldoc oben. Wird aus dem 'interest'-Zweig von
+    ingest_inbound_outreach_message aufgerufen, NACH dem commit von
+    Statusaenderung/stammblatt_json (damit diese Funktion bei einem Fehler
+    die eigentliche Klassifikation/den Status-Uebergang nicht gefaehrdet --
+    sie ist additive Vorbereitung, kein kritischer Pfad)."""
+    req = (await db.execute(select(SourcingRequest).where(SourcingRequest.id == cand.sourcing_request_id))).scalar_one_or_none()
+    if not req or not cand.contact_email:
+        return
+    vorgangs_id = str(cand.id)[:8]
+
+    # 1) Stammdaten-Selbstauskunftslink (einmalig pro Kandidat).
+    existing_invite = await db.execute(select(CandidateOnboardingInvite).where(CandidateOnboardingInvite.supplier_candidate_id == cand.id))
+    if not existing_invite.scalars().first():
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        db.add(CandidateOnboardingInvite(tenant_id=tenant_id, supplier_candidate_id=cand.id, token_hash=token_hash))
+        link = f"https://negotiatex.ai/supplier-onboarding?token={raw_token}"
+        db.add(OutreachAction(
+            tenant_id=tenant_id, supplier_candidate_id=cand.id, kind="stammdaten_invite",
+            recipient_email=cand.contact_email,
+            rendered_subject=STAMMDATEN_INVITE_SUBJECT_TMPL.format(vorgangs_id=vorgangs_id),
+            rendered_body=STAMMDATEN_INVITE_BODY_TMPL.format(link=link, testnote="Testlauf, keine Beauftragung."),
+            status=OutreachActionStatus.draft, created_by="system",
+        ))
+
+    # 2) KI-Einschaetzung: ist ein NDA vor dem vollen Briefing sinnvoll?
+    #    Vorschlag, kein autonomer Beschluss -- siehe require_nda_approved().
+    if cand.nda_assessment_json is None:
+        must_criteria_text = "; ".join(str(v) for v in (cand.must_criteria_check_json or {}).values()) or (req.must_criteria_json and str(req.must_criteria_json)) or ""
+        assessment = assess_nda_necessity(
+            bedarf_text=req.bedarf_text, must_criteria_text=must_criteria_text,
+            confidential_notice=req.confidential_notice, public_teaser_text=req.public_teaser_text,
+        )
+        assessment["assessed_at"] = datetime.utcnow().isoformat()
+        cand.nda_assessment_json = assessment
+    needs_nda = bool((cand.nda_assessment_json or {}).get("needs_nda", True))
+
+    # 3) RFQ fuer diesen Suchauftrag sicherstellen (3-Tage-Frist, idempotent).
+    existing_rfq = await db.execute(select(RFQ).where(RFQ.sourcing_request_id == req.id))
+    rfq = existing_rfq.scalars().first()
+    if not rfq:
+        spec_parts = [req.bedarf_text]
+        if req.must_criteria_json:
+            spec_parts.append(f"Muss-Kriterien: {req.must_criteria_json}")
+        rfq = RFQ(
+            tenant_id=tenant_id, sourcing_request_id=req.id, spec_text="\n".join(spec_parts),
+            currency=req.currency, deadline=datetime.utcnow() + timedelta(days=3), test_mode=True,
+            created_by="system",
+        )
+        db.add(rfq)
+        await db.flush()
+
+    if needs_nda:
+        # 4a) NDA-Pfad: Entwurf vorbereiten (identische Kernlogik wie der
+        # manuelle /nda/draft-Endpunkt), RFQ-Einladung folgt erst nach
+        # menschlicher NDA-Freigabe (require_nda_approved blockt das ohnehin).
+        existing_nda = await db.execute(select(NDA).where(NDA.supplier_candidate_id == cand.id))
+        if not existing_nda.scalars().first():
+            sb = cand.stammblatt_json or {}
+            signatory = (sb.get("unterzeichnungsberechtigt_vertrag") or {}).get("value")
+            authorized_confirmed = bool(signatory) and sb.get("unterzeichnungsberechtigt_vertrag", {}).get("status") in ("geprueft", "freigegeben")
+            draft_text = NDA_TEMPLATE_TEXT.format(
+                party_a="Auftraggeber (vertreten durch NegotiateX.ai)", party_b=cand.company_name,
+                bedarf=cand.service_match_note or cand.company_name, signatory=signatory or "(noch nicht benannt)",
+            )
+            nda = NDA(
+                tenant_id=tenant_id, supplier_candidate_id=cand.id, party_b_name=cand.company_name,
+                signatory_name=signatory, signatory_authorized_confirmed=authorized_confirmed,
+                draft_text=draft_text, draft_hash=_compute_hash(draft_text), status=NDAStatus.draft,
+                created_by="system",
+            )
+            db.add(nda)
+            await db.flush()
+            db.add(NDAEvent(nda_id=nda.id, tenant_id=tenant_id, from_status=None, to_status=NDAStatus.draft.value,
+                             actor="system", reason="Automatisch vorbereitet nach KI-Einschaetzung needs_nda=true (Interesse-Antwort)."))
+            cand.status = CandidateStatus.nda_review
+    else:
+        # 4b) Kein NDA noetig: RFQ-Einladung mit vollem Briefing direkt entwerfen.
+        existing_rfq_invite = await db.execute(select(RFQInvitation).where(RFQInvitation.rfq_id == rfq.id, RFQInvitation.supplier_candidate_id == cand.id))
+        if not existing_rfq_invite.scalars().first():
+            db.add(RFQInvitation(tenant_id=tenant_id, rfq_id=rfq.id, supplier_candidate_id=cand.id))
+            subject = RFQ_BRIEFING_SUBJECT_TMPL.format(prefix="[TEST – ]", bedarf=req.bedarf_text[:60], vorgangs_id=vorgangs_id)
+            body = RFQ_BRIEFING_BODY_TMPL.format(
+                bedarf=req.bedarf_text, spec=rfq.spec_text, frist=rfq.deadline.strftime("%d.%m.%Y"),
+                nda_note="", testnote="Testlauf, keine Beauftragung.",
+            )
+            db.add(RFQAction(
+                tenant_id=tenant_id, rfq_id=rfq.id, supplier_candidate_id=cand.id, kind="invite",
+                recipient_email=cand.contact_email, rendered_subject=subject, rendered_body=body,
+                status=RFQActionStatus.draft, created_by="system",
+            ))
+
+
+# ---------------------------------------------------------------------------
 # Inbound outreach reply handling -- shared by IMAP poller
 # (services/email_poller.py) and the test-inject endpoint below.
 # ---------------------------------------------------------------------------
@@ -752,6 +895,11 @@ async def ingest_inbound_outreach_message(db: AsyncSession, email_record: dict, 
         }
         cand.stammblatt_json = sb
         cand.status = CandidateStatus.onboarding_pending
+        await db.flush()
+        try:
+            await _auto_prepare_after_interest(db, cand, tenant_id)
+        except Exception:
+            logger.exception(f"_auto_prepare_after_interest fehlgeschlagen fuer Kandidat {cand.id} -- Status/Klassifikation bleiben trotzdem gueltig, manuelle Nachbereitung noetig.")
     elif classification == "question":
         # Rueckfrage: NUR aus dem bestaetigten must_criteria_text der
         # SourcingRequest beantworten, nie erfinden. Ohne eindeutigen
@@ -1196,17 +1344,37 @@ async def reject_nda(
 # B6 Schritt 5 -- Zugangsschranke fuer vertrauliche Unterlagen
 # ---------------------------------------------------------------------------
 
-async def require_nda_approved(tenant_id, candidate_id, db: AsyncSession) -> NDA:
+async def require_nda_approved(tenant_id, candidate_id, db: AsyncSession) -> Optional[NDA]:
     """Guard-Funktion: wirft HTTPException(403), solange die NDA des
     Kandidaten nicht status==approved hat. Ueberall dort zu verwenden, wo
     vertrauliche Unterlagen sonst freigegeben wuerden (hier demonstriert
-    durch den /confidential-documents Endpunkt unten)."""
+    durch den /confidential-documents Endpunkt unten).
+
+    Ausnahme (nutzerseitig gefordert: 'ob ein NDA abgeschlossen werden
+    sollte, muss der Agent abwaegen'): Wenn fuer diesen Kandidaten explizit
+    per assess_nda_necessity() needs_nda=false eingeschaetzt wurde (siehe
+    SupplierCandidate.nda_assessment_json) UND noch gar keine NDA-Zeile
+    existiert, gilt das als legitimer 'kein NDA noetig'-Fall und der Zugriff
+    wird erlaubt (gibt dann None statt einer NDA zurueck). Sobald irgendeine
+    NDA-Zeile fuer den Kandidaten existiert (z.B. weil doch manuell
+    entschieden wurde, eine zu entwerfen), gilt wieder die strikte Regel:
+    dann MUSS sie approved sein."""
     r = await db.execute(select(NDA).where(NDA.supplier_candidate_id == candidate_id, NDA.tenant_id == tenant_id))
     nda = r.scalar_one_or_none()
-    if not nda or nda.status != NDAStatus.approved:
-        raise HTTPException(403, "Zugriff verweigert: Es liegt keine freigegebene NDA fuer diesen Kandidaten vor "
-                                   "(status muss 'approved' sein, menschlich per /nda/{id}/approve gesetzt).")
-    return nda
+    if nda:
+        if nda.status != NDAStatus.approved:
+            raise HTTPException(403, "Zugriff verweigert: Es liegt keine freigegebene NDA fuer diesen Kandidaten vor "
+                                       "(status muss 'approved' sein, menschlich per /nda/{id}/approve gesetzt).")
+        return nda
+
+    cand_r = await db.execute(select(SupplierCandidate).where(SupplierCandidate.id == candidate_id, SupplierCandidate.tenant_id == tenant_id))
+    cand = cand_r.scalar_one_or_none()
+    assessment = (cand.nda_assessment_json if cand else None) or {}
+    if assessment.get("needs_nda") is False:
+        return None
+
+    raise HTTPException(403, "Zugriff verweigert: Es liegt keine freigegebene NDA fuer diesen Kandidaten vor "
+                               "(status muss 'approved' sein, menschlich per /nda/{id}/approve gesetzt).")
 
 
 @router.get("/candidates/{candidate_id}/confidential-documents")
@@ -1223,3 +1391,92 @@ async def get_confidential_documents(candidate_id: str, membership=Depends(get_c
         "must_criteria_full": req.must_criteria_json,
         "confidential_notice": req.confidential_notice,
     }
+
+
+# ---------------------------------------------------------------------------
+# Self-Service Stammdaten-Eingabe (oeffentlich, token-basiert, kein Login)
+# ---------------------------------------------------------------------------
+# Kein authentifizierter Request -> kein app.tenant_id/app.user_id aus einer
+# Session verfuegbar, daher get_admin_db (siehe Docstring dort). Die
+# Tenant-Eingrenzung erfolgt stattdessen explizit ueber den per Token
+# gefundenen Invite-/Kandidaten-Datensatz. Bankdaten werden hier bewusst
+# NICHT abgefragt (B5-Entscheidung: Bankdaten laufen ausschliesslich ueber
+# die eigenen /bank-data-Endpunkte mit separater Verifikation, nie per
+# gewoehnlichem Formular/Mail-Link).
+
+ONBOARDING_FIELD_LABELS = {
+    "firmenname": "Firmenname",
+    "rechtsform": "Rechtsform",
+    "anschrift": "Anschrift",
+    "ansprechpartner_angebot": "Ansprechpartner fuer das Angebot",
+    "unterzeichnungsberechtigt_vertrag": "Unterschriftsberechtigte Person fuer Vertraege",
+    "steuernummer": "Steuernummer",
+    "ust_id": "USt-IdNr.",
+    "handelsregisternummer": "Handelsregisternummer",
+    "mitarbeiterzahl": "Mitarbeiterzahl",
+}
+
+
+class OnboardingSubmitPayload(BaseModel):
+    token: str
+    fields: dict  # {field_name: value}
+    confirmed_accurate: bool
+    confirmed_by_name: str
+
+
+async def _get_invite_and_candidate_by_token(token: str, db: AsyncSession):
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    r = await db.execute(select(CandidateOnboardingInvite).where(CandidateOnboardingInvite.token_hash == token_hash))
+    invite = r.scalar_one_or_none()
+    if not invite:
+        raise HTTPException(404, "Dieser Link ist ungueltig.")
+    if invite.status == CandidateOnboardingInviteStatus.completed:
+        raise HTTPException(400, "Dieser Link wurde bereits verwendet.")
+    cand_r = await db.execute(select(SupplierCandidate).where(SupplierCandidate.id == invite.supplier_candidate_id))
+    cand = cand_r.scalar_one_or_none()
+    if not cand:
+        raise HTTPException(404, "Zugehoeriger Kandidat nicht gefunden.")
+    return invite, cand
+
+
+@router.get("/onboarding/status")
+async def onboarding_status(token: str, db: AsyncSession = Depends(get_admin_db)):
+    _invite, cand = await _get_invite_and_candidate_by_token(token, db)
+    sb = cand.stammblatt_json or {}
+    return {
+        "company_name": cand.company_name,
+        "contact_name": cand.contact_name,
+        "fields": {
+            k: {"label": v, "current_value": (sb.get(k) or {}).get("value")}
+            for k, v in ONBOARDING_FIELD_LABELS.items()
+        },
+    }
+
+
+@router.post("/onboarding/submit")
+async def onboarding_submit(payload: OnboardingSubmitPayload, db: AsyncSession = Depends(get_admin_db)):
+    if not payload.confirmed_accurate:
+        raise HTTPException(400, "Bitte bestaetigen Sie die Richtigkeit der Angaben.")
+    if not payload.confirmed_by_name.strip():
+        raise HTTPException(400, "Bitte Ihren Namen zur Bestaetigung angeben.")
+
+    invite, cand = await _get_invite_and_candidate_by_token(payload.token, db)
+
+    sb = dict(cand.stammblatt_json or {})
+    now_iso = datetime.utcnow().isoformat()
+    for field_name, value in payload.fields.items():
+        if field_name not in ONBOARDING_FIELD_LABELS:
+            continue
+        sb[field_name] = {
+            "value": (str(value).strip() or None) if value is not None else None,
+            "status": "eingegangen", "source": "self_service_portal", "reviewer": None,
+            "updated_at": now_iso,
+        }
+    cand.stammblatt_json = sb
+
+    invite.status = CandidateOnboardingInviteStatus.completed
+    invite.confirmed_by_name = payload.confirmed_by_name
+    invite.confirmed_at = datetime.utcnow()
+    await db.commit()
+
+    return {"message": "Vielen Dank! Ihre Angaben wurden uebermittelt und werden nun geprueft."}

@@ -61,3 +61,18 @@ async def get_db():
             yield session
         finally:
             await session.close()
+
+
+async def get_admin_db():
+    """Zweite, enge Ausnahme neben den Background-Jobs (siehe oben): die
+    oeffentlichen, tokenbasierten Self-Service-Endpunkte (z.B. Stammdaten-
+    Onboarding per Einladungslink) haben keinen authentifizierten Request und
+    damit kein app.tenant_id. Die Tenant-Eingrenzung erfolgt dort stattdessen
+    explizit per WHERE-Klausel ueber den im Token gefundenen Datensatz, nicht
+    per RLS. Darf nie fuer normale, eingeloggte Request-Pfade verwendet
+    werden."""
+    async with AdminSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
