@@ -9,7 +9,8 @@ import models_v2  # noqa: F401 -- registers Phase 1 tables (tenants, cases, docu
 import models_requisitions  # noqa: F401 -- registers requisition/approval tables on Base.metadata
 import models_invoices  # noqa: F401 -- registers invoice/line-item tables on Base.metadata
 import models_negotiation  # noqa: F401 -- registers Teil A negotiation tables on Base.metadata
-from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers, chat, requisitions, invoices, negotiation
+import models_sourcing  # noqa: F401 -- registers Teil B sourcing/outreach/NDA tables on Base.metadata
+from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers, chat, requisitions, invoices, negotiation, sourcing
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -55,6 +56,7 @@ app.include_router(tenants.router, prefix="/api/v1", tags=["Phase 1 - Tenants"])
 app.include_router(cases.router, prefix="/api/v1", tags=["Phase 1 - Cases"])
 app.include_router(policies.router, prefix="/api/v1", tags=["Phase 1 - Policies"])
 app.include_router(negotiation.router, prefix="/api/v1/negotiation", tags=["Teil A - Negotiation"])
+app.include_router(sourcing.router, prefix="/api/v1/sourcing", tags=["Teil B - Sourcing"])
 
 @app.get("/health")
 async def health_root():

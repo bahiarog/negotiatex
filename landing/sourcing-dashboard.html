@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NegotiateX.ai — Sourcing (Teil B)</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/theme.css">
+<style>
+:root{--hh:56px;--bl:#2E6EB5;}
+body{font-size:14px;line-height:1.5}
+header{position:fixed;top:0;left:0;right:0;z-index:300;height:var(--hh);background:rgba(247,246,241,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:10px}
+.logo{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--text);text-decoration:none;flex-shrink:0}
+.logo em{color:var(--gold);font-style:normal}
+.hdr-sep{width:1px;height:20px;background:var(--border)}
+.hdr-pg{font-size:12px;color:var(--text-muted)}
+.hdr-r{margin-left:auto;display:flex;align-items:center;gap:10px}
+.phase-note{font-family:'DM Mono',monospace;font-size:10.5px;color:var(--text-muted);background:var(--bg-card2);border:1px solid var(--border);padding:5px 10px;border-radius:7px;letter-spacing:.3px}
+.h-btn{font-size:12px;color:var(--text-muted);background:transparent;border:1px solid var(--border);padding:5px 11px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;text-decoration:none}
+.h-btn:hover{border-color:var(--gold-border);color:var(--text)}
+main{padding:calc(var(--hh) + 28px) 28px 60px;max-width:1200px;margin:0 auto}
+h1{font-family:'Playfair Display',serif;font-size:26px;font-weight:700;margin-bottom:4px}
+.sub{color:var(--text-muted);font-size:13px;margin-bottom:22px}
+.panel{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px;overflow:hidden;box-shadow:0 20px 48px rgba(22,32,28,0.04)}
+.panel-h{padding:14px 18px;border-bottom:1px solid var(--border);font-size:13px;font-weight:500;display:flex;justify-content:space-between;align-items:center}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:10px 18px;color:var(--text-muted);font-weight:400;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+td{padding:10px 18px;border-bottom:1px solid var(--border)}
+tr.row{cursor:pointer}
+tr.row:hover{background:var(--bg-card2)}
+.badge{display:inline-block;padding:3px 9px;border-radius:6px;font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.3px}
+.b-found,.b-shortlisted{background:rgba(46,110,181,.1);color:var(--bl)}
+.b-contacted,.b-responded{background:var(--gold-dim);color:var(--gold)}
+.b-interested,.b-onboarding_pending,.b-nda_review{background:rgba(29,158,117,.1);color:var(--status-good)}
+.b-nda_approved,.b-qualified{background:rgba(29,158,117,.18);color:var(--status-good)}
+.b-declined,.b-rejected{background:rgba(216,90,48,.1);color:var(--status-bad)}
+.b-draft,.b-sent,.b-returned,.b-review_required{background:var(--gold-dim);color:var(--gold)}
+.b-verified,.b-approved{background:rgba(29,158,117,.1);color:var(--status-good)}
+.b-met{color:var(--status-good)}.b-unmet{color:var(--status-bad)}.b-unknown{color:var(--text-dim)}
+.empty{padding:28px 18px;color:var(--text-muted);font-size:13px;text-align:center}
+.back{display:inline-block;margin-bottom:14px;color:var(--text-muted);font-size:12px;text-decoration:none;cursor:pointer}
+.back:hover{color:var(--text)}
+.mono{font-family:'DM Mono',monospace}
+.events{list-style:none;padding:18px;font-size:12.5px}
+.events li{padding:7px 0;border-bottom:1px solid var(--border);color:var(--text-muted)}
+.events li b{color:var(--text)}
+.loading{padding:40px;text-align:center;color:var(--text-muted)}
+.row-actions{display:flex;gap:8px;padding:14px 18px;flex-wrap:wrap}
+.btn{font-size:12px;border:1px solid var(--border);background:var(--bg-card2);padding:6px 12px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif}
+.btn:hover{border-color:var(--gold-border)}
+.btn.primary{background:var(--gold);color:#fff;border:none}
+.timeline{padding:18px;font-size:12.5px}
+.timeline .step{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)}
+.notice{background:rgba(216,90,48,.06);border:1px solid rgba(216,90,48,.2);color:var(--status-bad);padding:10px 14px;border-radius:8px;font-size:12.5px;margin:12px 18px}
+.formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;padding:14px 18px}
+.formgrid input,.formgrid select,.formgrid textarea{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'DM Sans',sans-serif}
+.disclaimer{font-size:11px;color:var(--text-dim);padding:10px 18px;border-top:1px dashed var(--border)}
+</style>
+</head>
+<body>
+<header>
+  <a class="logo" href="/dashboard"><em>Negotiate</em>X.ai</a>
+  <div class="hdr-sep"></div>
+  <span class="hdr-pg">Sourcing, Erstkontakt, Stammblatt &amp; NDA (Teil B)</span>
+  <div class="hdr-r">
+    <span class="phase-note">Status-Tracking — keine rechtsverbindliche E-Signatur</span>
+    <a class="h-btn" href="/cases-dashboard">Faelle</a>
+    <a class="h-btn" href="/dashboard">Zurueck zum Dashboard</a>
+  </div>
+</header>
+<main id="app"><div class="loading">Lade...</div></main>
+
+<script>
+const token = localStorage.getItem('nx_token');
+const user  = JSON.parse(localStorage.getItem('nx_user') || 'null');
+if (!token || !user) location.href = '/login';
+
+const API = '/api/v1/sourcing';
+const app = document.getElementById('app');
+
+async function api(path, opts) {
+  const res = await fetch(API + path, { ...opts, headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', ...(opts && opts.headers || {}) } });
+  if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.detail || ('HTTP ' + res.status)); }
+  return res.json();
+}
+function post(path, body) { return api(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }); }
+function put(path, body) { return api(path, { method: 'PUT', body: JSON.stringify(body) }); }
+
+function badge(v){ return `<span class="badge b-${(v||'').toLowerCase()}">${esc(v)}</span>`; }
+function esc(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function money(v,c){ return (v===null||v===undefined) ? '—' : Number(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ' + (c||'EUR'); }
+
+async function renderList() {
+  app.innerHTML = '<div class="loading">Lade Suchauftraege...</div>';
+  let reqs = [];
+  try { reqs = await api('/requests'); } catch(e) { app.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(e.message)}</div></div>`; return; }
+
+  const rows = reqs.map(r => `
+    <tr class="row" onclick="location.hash='#req/${r.id}'">
+      <td class="mono">${esc(r.title)}</td>
+      <td>${badge(r.status)}</td>
+      <td class="mono">${money(r.budget_ceiling, r.currency)}</td>
+      <td class="mono">${r.max_candidates_total}/${r.max_contacted}</td>
+      <td class="mono">${new Date(r.created_at).toLocaleString('de-DE')}</td>
+    </tr>`).join('');
+
+  app.innerHTML = `
+    <h1>Sourcing — Suchauftraege</h1>
+    <p class="sub">B2-B6: Suchauftrag, Lieferantensuche (kein Live-Scraping), Erstkontakt, Stammblatt-Aufnahme, NDA-Statusverfolgung.</p>
+    <div class="panel">
+      <div class="panel-h">Alle Suchauftraege (${reqs.length})</div>
+      ${reqs.length ? `<table><thead><tr><th>Titel</th><th>Status</th><th>Budget (Obergrenze)</th><th>Limit (ges./kontakt.)</th><th>Erstellt</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="empty">Noch keine Suchauftraege. Anlage erfolgt derzeit per API (POST /api/v1/sourcing/requests).</div>'}
+    </div>`;
+}
+
+async function renderRequest(id) {
+  app.innerHTML = '<div class="loading">Lade...</div>';
+  const [req, candidates] = await Promise.all([api(`/requests/${id}`), api(`/requests/${id}/candidates`)]);
+
+  const candRows = candidates.map(c => {
+    const checks = Object.entries(c.must_criteria_check_json||{}).map(([k,v]) => `<span class="mono b-${v}">${esc(k)}:${esc(v)}</span>`).join(' ');
+    return `<tr class="row" onclick="location.hash='#candidate/${c.id}'">
+      <td>${esc(c.company_name)}</td><td>${esc(c.location||'—')}</td>
+      <td>${badge(c.status)}</td><td style="max-width:260px">${checks||'—'}</td>
+      <td class="mono">${esc(c.source_url||'—')}</td></tr>`;
+  }).join('');
+
+  app.innerHTML = `
+    <a class="back" onclick="location.hash=''">&larr; Zurueck zur Liste</a>
+    <h1>${esc(req.title)}</h1>
+    <p class="sub">${badge(req.status)} &middot; Budget-Obergrenze ${money(req.budget_ceiling, req.currency)} &middot; Gewichtung Preis/Qualitaet/Lieferf.: ${req.weights.price}/${req.weights.quality}/${req.weights.delivery}</p>
+    <div class="panel"><div class="panel-h">Bedarf &amp; Muss-Kriterien</div>
+      <div style="padding:14px 18px">${esc(req.bedarf_text)}</div>
+      <div class="disclaimer">Verantwortlich — Einkauf: ${esc(req.responsible.procurement||'—')} · Legal: ${esc(req.responsible.legal||'—')} · Finance: ${esc(req.responsible.finance||'—')}</div>
+    </div>
+    <div class="panel">
+      <div class="panel-h">Kandidaten (${candidates.length} / max. ${req.max_candidates_total}, kontaktiert max. ${req.max_contacted})</div>
+      ${candidates.length ? `<table><thead><tr><th>Firma</th><th>Standort</th><th>Status</th><th>Muss-Kriterien</th><th>Quelle</th></tr></thead><tbody>${candRows}</tbody></table>` : '<div class="empty">Keine Kandidaten erfasst. Kandidaten werden von einem menschlichen Operator eingetragen (keine automatische Websuche) -- per API POST /requests/{id}/candidates.</div>'}
+    </div>`;
+}
+
+async function renderCandidate(id) {
+  app.innerHTML = '<div class="loading">Lade...</div>';
+  const cand = await api(`/candidates/${id}`);
+  let nda = null;
+  try {
+    const events = [];
+  } catch(e) {}
+
+  const checks = Object.entries(cand.must_criteria_check_json||{}).map(([k,v]) => `<li><b>${esc(k)}</b>: <span class="b-${v}">${esc(v)}</span></li>`).join('');
+  const stamm = Object.entries(cand.stammblatt_json||{}).map(([k,v]) => `<li><b>${esc(k)}</b>: ${esc(v.status)} ${v.value?('— '+esc(v.value)):''} <span class="mono">[${esc(v.source||'')}, ${esc(v.reviewer||'')}]</span></li>`).join('');
+
+  app.innerHTML = `
+    <a class="back" onclick="history.back()">&larr; Zurueck</a>
+    <h1>${esc(cand.company_name)}</h1>
+    <p class="sub">${badge(cand.status)} &middot; ${esc(cand.location||'')} &middot; Quelle: <span class="mono">${esc(cand.source_url||'—')}</span> (erfasst ${cand.retrieved_at ? new Date(cand.retrieved_at).toLocaleDateString('de-DE') : '—'})</p>
+
+    <div class="panel"><div class="panel-h">Muss-Kriterien-Pruefung</div>
+      ${checks ? `<ul class="events">${checks}</ul>` : '<div class="empty">Keine Kriterien hinterlegt.</div>'}
+      <div class="disclaimer">Fehlende Angaben werden explizit "unknown" markiert, nie geraten.</div>
+    </div>
+
+    <div class="panel"><div class="panel-h">Erstkontakt (B4)</div>
+      <div class="row-actions">
+        <button class="btn" onclick="doShortlist('${cand.id}')">Shortlist</button>
+        <button class="btn primary" onclick="doDraftOutreach('${cand.id}')">Erstkontakt entwerfen</button>
+      </div>
+      <div id="outreach-area"></div>
+    </div>
+
+    <div class="panel"><div class="panel-h">Stammblatt (B5)</div>
+      ${stamm ? `<ul class="events">${stamm}</ul>` : '<div class="empty">Noch keine Stammblatt-Felder erfasst.</div>'}
+      <div class="disclaimer">Bankdaten werden ausschliesslich ueber den dedizierten /bank-data-Endpunkt erfasst, niemals per gewoehnlicher Outreach-E-Mail. Eine Aenderung von IBAN/BIC erzwingt automatisch eine erneute Verifikation.</div>
+    </div>
+
+    <div class="panel"><div class="panel-h">NDA (B6) — Status-Tracking, keine rechtsverbindliche E-Signatur</div>
+      <div class="row-actions">
+        <button class="btn" onclick="doNdaDraft('${cand.id}')">NDA-Entwurf erstellen</button>
+      </div>
+      <div id="nda-area" class="timeline"></div>
+    </div>`;
+
+  loadNdaArea(cand.id);
+}
+
+async function doShortlist(id){ try{ await post(`/candidates/${id}/shortlist`); location.hash = location.hash; renderCandidate(id); }catch(e){ alert(e.message);} }
+async function doDraftOutreach(id){
+  try {
+    const a = await post(`/candidates/${id}/outreach/draft`);
+    document.getElementById('outreach-area').innerHTML = `
+      <div style="padding:14px 18px"><b>${esc(a.rendered_subject)}</b><pre style="white-space:pre-wrap;font-family:'DM Sans',sans-serif;font-size:13px">${esc(a.rendered_body)}</pre>
+      <button class="btn primary" onclick="approveOutreach('${id}','${a.id}')">Freigeben &amp; senden</button></div>`;
+  } catch(e){ alert(e.message); }
+}
+async function approveOutreach(cid, aid){ try{ const r = await post(`/candidates/${cid}/outreach/${aid}/approve`); alert('Gesendet: ' + r.message_id); renderCandidate(cid);}catch(e){alert(e.message);} }
+
+async function doNdaDraft(id){ try{ await post(`/candidates/${id}/nda/draft`); loadNdaArea(id);}catch(e){alert(e.message);} }
+
+async function loadNdaArea(candId){
+  const area = document.getElementById('nda-area');
+  try {
+    const cand = await api(`/candidates/${candId}`);
+    // NDA ist 1:1 an Kandidat gebunden; ohne eigene "get by candidate"-Route
+    // ueber den Kandidaten-Status navigieren (Demo-UI, siehe Bericht).
+    area.innerHTML = `<div class="empty">NDA-Status wird im Kandidatenstatus gespiegelt: ${badge(cand.status)}. Volle NDA-Timeline (Entwurf/Zustellung/Ruecklauf/Pruefung/Freigabe) ueber die API-Endpunkte unter /api/v1/sourcing/nda/{id}.</div>`;
+  } catch(e) { area.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+async function route() {
+  const hash = location.hash;
+  try {
+    if (hash.startsWith('#req/')) await renderRequest(hash.slice(5));
+    else if (hash.startsWith('#candidate/')) await renderCandidate(hash.slice(11));
+    else await renderList();
+  } catch (e) { app.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(e.message)}</div></div>`; }
+}
+window.addEventListener('hashchange', route);
+route();
+</script>
+</body>
+</html>
