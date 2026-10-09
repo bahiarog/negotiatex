@@ -47,7 +47,7 @@ DECLARE
     'rfq_invitations','rfq_offers','rfqs','savings_records','sourcing_requests',
     'supplier_candidates','supplier_certificates','suppliers_v2',
     'mdc_categories','mdc_suppliers','mdc_documents','mdc_document_versions','mdc_line_items',
-    'mdc_retrieval_chunks','mdc_analysis_snapshots'
+    'mdc_retrieval_chunks','mdc_analysis_snapshots','mdc_audit_events'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -104,3 +104,11 @@ DROP POLICY IF EXISTS tenant_isolation ON contract_approvals;
 CREATE POLICY tenant_isolation ON contract_approvals USING (
   action_id IN (SELECT id FROM contract_actions WHERE tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
 );
+
+-- Audit-Protokoll bleibt append-only, auch nach dem pauschalen GRANT oben.
+DO $$
+BEGIN
+  IF to_regclass('public.mdc_audit_events') IS NOT NULL THEN
+    REVOKE UPDATE, DELETE, TRUNCATE ON mdc_audit_events FROM negotiatex_app;
+  END IF;
+END $$;

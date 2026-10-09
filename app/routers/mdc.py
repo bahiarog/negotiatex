@@ -14,9 +14,11 @@ und bewusst noch nicht gebaut -- Versionen bleiben nach dem Parsen im
 Status 'parsed', nicht 'approved'.
 """
 import asyncio
+import copy
 import hashlib
 import logging
 import os
+import time
 import uuid
 from datetime import date, datetime
 from pathlib import Path
@@ -33,11 +35,15 @@ from deps import get_current_user, get_current_membership
 from models_mdc import (
     MDCCategory, MDCSupplier, MDCDocument, MDCDocumentVersion, MDCImportStatus, MDCDocumentType,
     MDCLineItem, MDCReviewStatus, MDCPriceStatus, MDCTaxBasis, MDCRetrievalChunk,
+    MDCAnalysisSnapshot, MDCAuditEvent,
 )
+from services.mdc_governance import require_owner, audit, usage_block_reason, require_usable
 from services.pdf_parser import extract_text
 from services.mdc_search import build_chunks, CHUNKING_VERSION
 from services.mdc_embeddings import embed_texts, to_pgvector, MODEL_NAME as EMBEDDING_MODEL, DIM as EMBEDDING_DIM
-from services.mdc_extractor import extract_line_items, normalize_and_check, ANCILLARY_KEYS, _to_decimal
+from services.mdc_extractor import (
+    extract_line_items, normalize_and_check, verified_quote, resolve_hours_evidence, ANCILLARY_KEYS, _to_decimal,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -66,11 +72,14 @@ def _category_to_dict(c: MDCCategory) -> dict:
 @router.post("/categories")
 async def create_category(payload: CategoryCreate, user=Depends(get_current_user),
                            membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+    require_owner(membership)
     if not payload.name.strip():
         raise HTTPException(400, "Name ist ein Pflichtfeld.")
     cat = MDCCategory(tenant_id=membership.tenant_id, name=payload.name.strip(),
                        must_criteria_json=payload.must_criteria_json or {}, created_by=str(user.id))
     db.add(cat)
+    await db.flush()
+    await audit(db, membership.tenant_id, user.id, "category_created", "category", cat.id, name=cat.name)
     await db.commit()
     await db.refresh(cat)
     return _category_to_dict(cat)
@@ -128,6 +137,12 @@ def _document_to_dict(d: MDCDocument, versions: list[MDCDocumentVersion]) -> dic
         "supplier_id": str(d.supplier_id) if d.supplier_id else None,
         "document_type": d.document_type.value if hasattr(d.document_type, "value") else d.document_type,
         "title": d.title, "created_at": d.created_at,
+        "rights": {
+            "usage_purpose": d.usage_purpose, "usage_scope": d.usage_scope,
+            "valid_until": d.rights_valid_until, "revoked_at": d.rights_revoked_at,
+            "revoked_reason": d.rights_revoked_reason, "legal_hold": d.legal_hold,
+            "legal_hold_reason": d.legal_hold_reason, "blocked_reason": usage_block_reason(d),
+        },
         "versions": [_version_to_dict(v) for v in versions],
     }
 
@@ -142,6 +157,8 @@ async def upload_document(
     source: Optional[str] = Form(None),
     rights_note: Optional[str] = Form(None),
     revision_of_document_id: Optional[uuid.UUID] = Form(None),
+    usage_purpose: Optional[str] = Form(None),
+    rights_valid_until: Optional[date] = Form(None),
     user=Depends(get_current_user), membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db),
 ):
     """Schritte 1-3: autorisieren (ueber get_current_membership, Mandant aus
@@ -191,11 +208,13 @@ async def upload_document(
         doc = (await db.execute(select(MDCDocument).where(MDCDocument.id == revision_of_document_id, MDCDocument.tenant_id == tenant_id))).scalar_one_or_none()
         if not doc:
             raise HTTPException(404, "Zu revisionierendes Dokument nicht gefunden.")
+        require_usable(doc)
         prior_versions = (await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.document_id == doc.id).order_by(desc(MDCDocumentVersion.version_number)))).scalars().all()
         next_version_number = (prior_versions[0].version_number + 1) if prior_versions else 1
     else:
         doc = MDCDocument(tenant_id=tenant_id, category_id=cat_uuid, supplier_id=supplier_id,
-                           document_type=doc_type, title=title or file.filename, created_by=str(user.id))
+                           document_type=doc_type, title=title or file.filename, created_by=str(user.id),
+                           usage_purpose=(usage_purpose or "").strip()[:255] or None, rights_valid_until=rights_valid_until)
         db.add(doc)
         await db.flush()
         prior_versions = []
@@ -242,6 +261,9 @@ async def upload_document(
         prior_versions[0].superseded_by_version_id = version.id
         await db.execute(sa_delete(MDCRetrievalChunk).where(MDCRetrievalChunk.document_version_id == prior_versions[0].id))
 
+    await audit(db, tenant_id, user.id, "revision_uploaded" if prior_versions else "document_uploaded", "document_version",
+                version.id, document_id=str(doc.id), version_number=version.version_number, file_hash=file_hash,
+                import_status=_enum_val(version.import_status))
     await db.commit()
     all_versions = (await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.document_id == doc.id).order_by(MDCDocumentVersion.version_number))).scalars().all()
     result = _document_to_dict(doc, all_versions)
@@ -278,6 +300,7 @@ async def get_document(document_id: uuid.UUID, membership=Depends(get_current_me
 @router.get("/documents/{document_id}/versions/{version_id}/text")
 async def get_version_text(document_id: uuid.UUID, version_id: uuid.UUID, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
     doc = await _get_document_or_404(document_id, membership.tenant_id, db)
+    require_usable(doc)
     r = await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.id == version_id, MDCDocumentVersion.document_id == doc.id))
     v = r.scalar_one_or_none()
     if not v:
@@ -286,16 +309,212 @@ async def get_version_text(document_id: uuid.UUID, version_id: uuid.UUID, member
 
 
 @router.get("/documents/{document_id}/versions/{version_id}/download")
-async def download_version(document_id: uuid.UUID, version_id: uuid.UUID, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+async def download_version(document_id: uuid.UUID, version_id: uuid.UUID, user=Depends(get_current_user),
+                           membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
     """Sichere, authentifizierte Download-Route statt frei waehlbarer
     Dateipfade -- das Original wird nie ueber einen direkt erratbaren Pfad
-    ausgeliefert, sondern nur ueber Version-ID nach Mandantenpruefung."""
+    ausgeliefert, sondern nur ueber Version-ID nach Mandantenpruefung. Jeder
+    Download wird protokolliert; nach Widerruf/Ablauf der Rechte gesperrt."""
     doc = await _get_document_or_404(document_id, membership.tenant_id, db)
+    require_usable(doc)
     r = await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.id == version_id, MDCDocumentVersion.document_id == doc.id))
     v = r.scalar_one_or_none()
     if not v or not os.path.exists(v.file_path):
         raise HTTPException(404, "Originaldatei nicht gefunden.")
+    await audit(db, membership.tenant_id, user.id, "original_downloaded", "document_version", v.id, document_id=str(doc.id))
+    await db.commit()
     return FileResponse(v.file_path, filename=v.file_name)
+
+
+# ---------------------------------------------------------------------------
+# Etappe 4 -- Nutzungsrechte, Widerruf, Aufbewahrungssperre, Loeschung, Audit
+# ---------------------------------------------------------------------------
+
+class RightsUpdate(BaseModel):
+    usage_purpose: Optional[str] = None
+    usage_scope: Optional[str] = None
+    rights_valid_until: Optional[date] = None
+
+
+@router.put("/documents/{document_id}/rights")
+async def update_rights(document_id: uuid.UUID, payload: RightsUpdate, user=Depends(get_current_user),
+                        membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+    require_owner(membership)
+    doc = await _get_document_or_404(document_id, membership.tenant_id, db)
+    if doc.rights_revoked_at is not None:
+        raise HTTPException(409, "Nutzungsrecht ist widerrufen -- ein Widerruf wird nicht durch Bearbeiten aufgehoben.")
+    data = payload.model_dump(exclude_unset=True)
+    before = {k: getattr(doc, k) for k in data}
+    for k, v in data.items():
+        setattr(doc, k, v.strip()[:255] if isinstance(v, str) else v)
+    await _sync_index_with_rights(db, doc)
+    await audit(db, membership.tenant_id, user.id, "rights_updated", "document", doc.id,
+                before={k: (str(v) if v is not None else None) for k, v in before.items()},
+                after={k: (str(getattr(doc, k)) if getattr(doc, k) is not None else None) for k in data})
+    await db.commit()
+    return await get_document(document_id, membership, db)
+
+
+class ReasonPayload(BaseModel):
+    reason: str
+
+
+@router.post("/documents/{document_id}/revoke")
+async def revoke_rights(document_id: uuid.UUID, payload: ReasonPayload, user=Depends(get_current_user),
+                        membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+    """Widerruf der Nutzung: wirkt sofort auf Vergleich, Suche (Abschnitte und
+    Vektoren werden geloescht) und Belegzugriff. Originale und strukturierte
+    Daten bleiben bis zur Loeschentscheidung erhalten."""
+    require_owner(membership)
+    if not payload.reason.strip():
+        raise HTTPException(400, "Bitte einen Grund fuer den Widerruf angeben.")
+    doc = await _get_document_or_404(document_id, membership.tenant_id, db)
+    if doc.rights_revoked_at is not None:
+        raise HTTPException(409, "Nutzungsrecht ist bereits widerrufen.")
+    doc.rights_revoked_at = datetime.utcnow()
+    doc.rights_revoked_by = str(user.id)
+    doc.rights_revoked_reason = payload.reason.strip()[:1000]
+    removed = await _sync_index_with_rights(db, doc)
+    await audit(db, membership.tenant_id, user.id, "rights_revoked", "document", doc.id,
+                reason=doc.rights_revoked_reason, removed_search_chunks=removed)
+    await db.commit()
+    return await get_document(document_id, membership, db)
+
+
+class LegalHoldPayload(BaseModel):
+    active: bool
+    reason: str
+
+
+@router.post("/documents/{document_id}/legal-hold")
+async def set_legal_hold(document_id: uuid.UUID, payload: LegalHoldPayload, user=Depends(get_current_user),
+                         membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+    """Gesetzliche oder vertragliche Aufbewahrung: solange aktiv, kann das
+    Dokument nicht geloescht werden (Nutzung bleibt davon unabhaengig)."""
+    require_owner(membership)
+    if not payload.reason.strip():
+        raise HTTPException(400, "Bitte die Grundlage der Aufbewahrung angeben.")
+    doc = await _get_document_or_404(document_id, membership.tenant_id, db)
+    doc.legal_hold = payload.active
+    doc.legal_hold_reason = payload.reason.strip()[:1000]
+    await audit(db, membership.tenant_id, user.id, "legal_hold_set" if payload.active else "legal_hold_released",
+                "document", doc.id, reason=doc.legal_hold_reason)
+    await db.commit()
+    return await get_document(document_id, membership, db)
+
+
+REDACTED = "[geloescht]"
+
+
+def _redact_refs(entries: list, item_ids: set, names: set) -> int:
+    n = 0
+    for e in entries or []:
+        if e.get("line_item_id") in item_ids:
+            for key in ("document_title", "supplier_name", "source_evidence", "role_or_item"):
+                if key in e:
+                    if key in ("document_title", "supplier_name") and e[key] and e[key] != REDACTED:
+                        names.add(e[key])
+                    e[key] = REDACTED
+            e["source_deleted"] = True
+            n += 1
+    return n
+
+
+@router.delete("/documents/{document_id}")
+async def delete_document(document_id: uuid.UUID, payload: ReasonPayload, user=Depends(get_current_user),
+                          membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+    """Loeschung wirkt auf Originale, strukturierte Daten, Suchabschnitte,
+    Vektoren -- und auf die Belegstellen in bestehenden Analyse-Akten: dort
+    werden Titel, Lieferant und Zitat geschwaerzt, die damals berechneten
+    Zahlen bleiben als Nachweis der damaligen Entscheidung stehen (Umfang mit
+    Legal/Datenschutz abzustimmen). Gesperrt, solange eine
+    Aufbewahrungspflicht (legal_hold) besteht."""
+    require_owner(membership)
+    if not payload.reason.strip():
+        raise HTTPException(400, "Bitte einen Loeschgrund angeben.")
+    doc = await _get_document_or_404(document_id, membership.tenant_id, db)
+    if doc.legal_hold:
+        raise HTTPException(409, f"Aufbewahrungspflicht aktiv ({doc.legal_hold_reason}) -- Loeschen nicht zulaessig.")
+
+    versions = (await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.document_id == doc.id))).scalars().all()
+    version_ids = [v.id for v in versions]
+    item_ids = {str(i) for i in (await db.execute(select(MDCLineItem.id).where(MDCLineItem.document_version_id.in_(version_ids)))).scalars().all()} if version_ids else set()
+
+    redacted_snapshots = 0
+    if item_ids:
+        snapshots = (await db.execute(select(MDCAnalysisSnapshot).where(MDCAnalysisSnapshot.tenant_id == membership.tenant_id))).scalars().all()
+        for s in snapshots:
+            result = copy.deepcopy(s.result_json or {})
+            names: set = set()
+            n = sum(_redact_refs(c.get("references"), item_ids, names) for c in result.get("classes") or [])
+            n += _redact_refs(result.get("historical"), item_ids, names) + _redact_refs(result.get("excluded"), item_ids, names)
+            target_hit = (result.get("target") or {}).get("line_item_id") in item_ids
+            if n or target_hit:
+                if target_hit:
+                    result["target"]["source_deleted"] = True
+                result.setdefault("redactions", []).append({"at": datetime.utcnow().isoformat(), "document_id": str(doc.id), "entries": n})
+                s.result_json = result
+                explanation = s.explanation or ""
+                for name in sorted(names, key=len, reverse=True):
+                    explanation = explanation.replace(name, REDACTED)
+                s.explanation = explanation
+                if target_hit:
+                    inp = copy.deepcopy(s.input_json or {})
+                    for key in ("document_title", "supplier_name", "source_evidence"):
+                        if key in (inp.get("target") or {}):
+                            inp["target"][key] = REDACTED
+                    s.input_json = inp
+                redacted_snapshots += 1
+
+    paths = {v.file_path for v in versions}
+    file_hashes = [v.file_hash for v in versions]
+    await audit(db, membership.tenant_id, user.id, "document_deleted", "document", doc.id,
+                reason=payload.reason.strip()[:1000], versions=len(versions), line_items=len(item_ids),
+                redacted_snapshots=redacted_snapshots, file_hashes=file_hashes)
+    await db.delete(doc)  # Versionen, Positionen, Suchabschnitte und Vektoren per ON DELETE CASCADE
+    await db.flush()
+
+    still_used = set((await db.execute(select(MDCDocumentVersion.file_path).where(MDCDocumentVersion.file_path.in_(paths)))).scalars().all()) if paths else set()
+    await db.commit()
+    removed_files = 0
+    for p in paths - still_used:
+        try:
+            os.remove(p)
+            removed_files += 1
+        except FileNotFoundError:
+            pass
+    return {"deleted": True, "versions": len(versions), "line_items": len(item_ids),
+            "redacted_snapshots": redacted_snapshots, "removed_files": removed_files}
+
+
+async def _sync_index_with_rights(db: AsyncSession, doc: MDCDocument) -> int:
+    """Gesperrte Dokumente verlieren sofort ihre Suchabschnitte; wird eine
+    Sperre (z.B. Ablauf) durch neue Rechte aufgehoben, wird neu indexiert."""
+    versions = (await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.document_id == doc.id))).scalars().all()
+    removed = 0
+    for v in versions:
+        if usage_block_reason(doc):
+            res = await db.execute(sa_delete(MDCRetrievalChunk).where(MDCRetrievalChunk.document_version_id == v.id))
+            removed += res.rowcount or 0
+            if v.import_status == MDCImportStatus.indexed:
+                v.import_status = MDCImportStatus.approved
+        elif v.import_status == MDCImportStatus.approved:
+            await _refresh_version_status(db, v)
+    return removed
+
+
+@router.get("/audit")
+async def list_audit(object_id: Optional[str] = None, action: Optional[str] = None, limit: int = 200,
+                     membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+    require_owner(membership)
+    q = select(MDCAuditEvent).where(MDCAuditEvent.tenant_id == membership.tenant_id)
+    if object_id:
+        q = q.where(MDCAuditEvent.object_id == object_id)
+    if action:
+        q = q.where(MDCAuditEvent.action == action)
+    rows = (await db.execute(q.order_by(desc(MDCAuditEvent.created_at)).limit(max(1, min(limit, 1000))))).scalars().all()
+    return [{"id": str(e.id), "actor": e.actor, "action": e.action, "object_type": e.object_type,
+             "object_id": e.object_id, "details": e.details_json, "created_at": e.created_at} for e in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -371,7 +590,9 @@ def _fields_of(item: MDCLineItem) -> dict:
         "original_amount_raw": item.original_amount_raw, "amount_confirmed": item.amount_confirmed,
         "original_currency": item.original_currency, "original_unit": item.original_unit,
         "tax_basis": _enum_val(item.tax_basis), "tax_rate_pct": item.tax_rate_pct,
+        "tax_evidence": item.tax_evidence, "tax_confirmed": item.tax_confirmed,
         "billable_hours_per_day": item.billable_hours_per_day,
+        "hours_evidence": item.hours_evidence, "hours_confirmed": item.hours_confirmed,
         "ancillary_costs_json": item.ancillary_costs_json, "source_evidence": item.source_evidence,
         "offer_date": item.offer_date, "valid_from": item.valid_from, "valid_to": item.valid_to,
     }
@@ -409,6 +630,8 @@ def _line_item_to_dict(i: MDCLineItem) -> dict:
         "original_amount": _money(i.original_amount), "original_amount_raw": i.original_amount_raw,
         "amount_confirmed": i.amount_confirmed, "original_currency": i.original_currency,
         "tax_basis": _enum_val(i.tax_basis), "tax_rate_pct": _money(i.tax_rate_pct),
+        "tax_evidence": i.tax_evidence, "tax_confirmed": i.tax_confirmed,
+        "hours_evidence": i.hours_evidence, "hours_confirmed": i.hours_confirmed,
         "normalized_amount_net": _money(i.normalized_amount_net), "normalization_version": i.normalization_version,
         "original_unit": i.original_unit, "canonical_unit": i.canonical_unit,
         "quantity": _money(i.quantity), "min_quantity": _money(i.min_quantity),
@@ -451,6 +674,10 @@ async def _refresh_version_status(db: AsyncSession, version: MDCDocumentVersion)
     if version.import_status == MDCImportStatus.indexed:
         return
     await db.execute(sa_delete(MDCRetrievalChunk).where(MDCRetrievalChunk.document_version_id == version.id))
+    doc = (await db.execute(select(MDCDocument).where(MDCDocument.id == version.document_id))).scalar_one()
+    if usage_block_reason(doc):
+        version.import_status = MDCImportStatus.approved  # entschieden, aber wegen Rechten nicht durchsuchbar
+        return
     chunks = []
     for idx, (anchor, chunk_text) in enumerate(build_chunks(version.extracted_text or "")):
         chunk = MDCRetrievalChunk(tenant_id=version.tenant_id, document_version_id=version.id, chunk_index=idx,
@@ -502,6 +729,7 @@ async def extract_lines(
     ungepruefte Vorschlaege -- sobald eine Position entschieden wurde, ist
     erneutes Extrahieren gesperrt."""
     doc = await _get_document_or_404(document_id, membership.tenant_id, db)
+    require_usable(doc)
     v = await _get_version_or_404(doc, version_id, db)
     if v.import_status == MDCImportStatus.superseded:
         raise HTTPException(400, "Diese Version ist superseded -- bitte die aktuelle Version extrahieren.")
@@ -524,8 +752,12 @@ async def extract_lines(
         must = cat.must_criteria_json if cat else None
 
     doc_type = _enum_val(doc.document_type)
+    started = time.monotonic()
     try:
-        raw_items = await asyncio.to_thread(extract_line_items, v.extracted_text, doc_type, must)
+        raw_items, usage = await asyncio.to_thread(extract_line_items, v.extracted_text, doc_type, must)
+        v.extraction_input_tokens = usage.get("input_tokens")
+        v.extraction_output_tokens = usage.get("output_tokens")
+        v.extraction_seconds = round(time.monotonic() - started, 2)
     except Exception as e:
         logger.exception(f"MDC-Extraktion fehlgeschlagen fuer Version {v.id}")
         v.import_error = f"Extraktion fehlgeschlagen: {e}"
@@ -544,8 +776,10 @@ async def extract_lines(
             original_amount=_dec(r.get("amount")), original_amount_raw=_s(r.get("amount_raw"), "original_amount_raw"),
             original_currency=_s(r.get("currency"), "original_currency"),
             tax_basis=_coerce_tax_basis(r.get("tax_basis")), tax_rate_pct=_dec(r.get("tax_rate_pct")),
+            tax_evidence=verified_quote(r.get("tax_evidence"), v.extracted_text),
             original_unit=_s(r.get("unit"), "original_unit"),
             billable_hours_per_day=_dec(r.get("billable_hours_per_day")),
+            hours_evidence=resolve_hours_evidence(r.get("hours_evidence"), v.extracted_text) if r.get("billable_hours_per_day") not in (None, "") else None,
             quantity=_dec(r.get("quantity")), min_quantity=_dec(r.get("min_quantity")),
             ancillary_costs_json=_clean_ancillary(r.get("ancillary_costs")),
             payment_terms=_s(r.get("payment_terms"), "payment_terms"),
@@ -577,6 +811,10 @@ async def extract_lines(
 
     v.import_error = None
     await _refresh_version_status(db, v)
+    await audit(db, membership.tenant_id, user.id, "lines_extracted", "document_version", v.id,
+                document_id=str(doc.id), positions=len(new_items),
+                needs_review=sum(1 for i in new_items if i.review_status == MDCReviewStatus.needs_review),
+                input_tokens=v.extraction_input_tokens, output_tokens=v.extraction_output_tokens, replaced=bool(existing))
     await db.commit()
     items = (await db.execute(select(MDCLineItem).where(MDCLineItem.document_version_id == v.id).order_by(MDCLineItem.created_at))).scalars().all()
     return {"version_import_status": _enum_val(v.import_status), "line_items": [_line_item_to_dict(i) for i in items]}
@@ -693,6 +931,9 @@ async def update_line_item(item_id: uuid.UUID, payload: LineItemUpdate, user=Dep
         if data["tax_basis"] not in ("net", "gross", "unknown"):
             raise HTTPException(400, "tax_basis muss net, gross oder unknown sein.")
         item.tax_basis = MDCTaxBasis(data["tax_basis"])
+        item.tax_confirmed = data["tax_basis"] != "unknown"  # vom Menschen gesetzt = bestaetigt
+    if "billable_hours_per_day" in data:
+        item.hours_confirmed = item.billable_hours_per_day is not None
     if "price_status" in data:
         try:
             item.price_status = MDCPriceStatus(data["price_status"])
@@ -705,6 +946,7 @@ async def update_line_item(item_id: uuid.UUID, payload: LineItemUpdate, user=Dep
     if data.get("confirm_amount"):
         item.amount_confirmed = True
 
+    previous_status = _enum_val(item.review_status)
     if item.review_status in (MDCReviewStatus.approved, MDCReviewStatus.rejected):
         item.review_status = MDCReviewStatus.extracted
         item.review_note = f"Nach Entscheidung von {item.reviewed_by} geaendert durch {user.id} -- erneute Pruefung noetig."
@@ -714,6 +956,8 @@ async def update_line_item(item_id: uuid.UUID, payload: LineItemUpdate, user=Dep
     _apply_check(item)
     version = (await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.id == item.document_version_id))).scalar_one()
     await _refresh_version_status(db, version)
+    await audit(db, membership.tenant_id, user.id, "line_item_updated", "line_item", item.id,
+                fields=sorted(data), previous_status=previous_status, new_status=_enum_val(item.review_status))
     await db.commit()
     await db.refresh(item)
     return _line_item_to_dict(item)
@@ -728,7 +972,8 @@ async def approve_line_item(item_id: uuid.UUID, payload: ReviewDecision, user=De
                              membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
     """Einziger Weg nach APPROVED -- immer menschlich ausgeloest. Gesperrt,
     solange der deterministische Check blockierende Punkte meldet ('unklare
-    Werte blockiert', Abnahmekriterium Etappe 2)."""
+    Werte blockiert', Abnahmekriterium Etappe 2). Nur Owner."""
+    require_owner(membership)
     item = await _get_line_item_or_404(item_id, membership.tenant_id, db)
     if item.review_status not in (MDCReviewStatus.extracted, MDCReviewStatus.needs_review):
         raise HTTPException(400, f"Position im Status '{_enum_val(item.review_status)}' kann nicht freigegeben werden.")
@@ -742,6 +987,9 @@ async def approve_line_item(item_id: uuid.UUID, payload: ReviewDecision, user=De
     item.review_note = payload.note
     version = (await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.id == item.document_version_id))).scalar_one()
     await _refresh_version_status(db, version)
+    await audit(db, membership.tenant_id, user.id, "line_item_approved", "line_item", item.id,
+                value=str(item.normalized_amount_per_canonical_unit) if item.normalized_amount_per_canonical_unit is not None else None,
+                unit=item.canonical_unit, note=payload.note)
     await db.commit()
     await db.refresh(item)
     return _line_item_to_dict(item)
@@ -750,6 +998,7 @@ async def approve_line_item(item_id: uuid.UUID, payload: ReviewDecision, user=De
 @router.post("/line-items/{item_id}/reject")
 async def reject_line_item(item_id: uuid.UUID, payload: ReviewDecision, user=Depends(get_current_user),
                             membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+    require_owner(membership)
     item = await _get_line_item_or_404(item_id, membership.tenant_id, db)
     if item.review_status not in (MDCReviewStatus.extracted, MDCReviewStatus.needs_review):
         raise HTTPException(400, f"Position im Status '{_enum_val(item.review_status)}' kann nicht abgelehnt werden.")
@@ -761,6 +1010,7 @@ async def reject_line_item(item_id: uuid.UUID, payload: ReviewDecision, user=Dep
     item.review_note = payload.note.strip()
     version = (await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.id == item.document_version_id))).scalar_one()
     await _refresh_version_status(db, version)
+    await audit(db, membership.tenant_id, user.id, "line_item_rejected", "line_item", item.id, reason=item.review_note)
     await db.commit()
     await db.refresh(item)
     return _line_item_to_dict(item)

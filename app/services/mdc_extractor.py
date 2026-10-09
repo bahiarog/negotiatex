@@ -20,7 +20,9 @@ import anthropic
 
 logger = logging.getLogger(__name__)
 
-NORMALIZATION_VERSION = "v1"
+# v2 (09.10.2026): Steuerbasis und Stundenzahl zaehlen nur mit im Dokument
+# nachgewiesenem Zitat oder menschlicher Bestaetigung.
+NORMALIZATION_VERSION = "v2"
 
 HOUR_UNITS = {"stunde", "stunden", "std", "std.", "h", "hour", "hours", "stundensatz"}
 DAY_UNITS = {"tag", "tage", "day", "days", "tagessatz", "pt", "personentag", "personentage"}
@@ -39,8 +41,10 @@ Gib AUSSCHLIESSLICH ein JSON-Objekt zurueck, kein Text davor/danach:
   {"role_or_item": "...", "seniority": "...", "region": "...", "scope_text": "...",
    "amount_raw": "Betrag exakt wie im Dokument geschrieben", "amount": 0.0, "currency": "EUR",
    "tax_basis": "net|gross|unknown", "tax_rate_pct": null,
+   "tax_evidence": "woertliches Zitat aus dem Dokument, das netto/brutto belegt, sonst null",
    "unit": "Einheit exakt wie im Dokument (z.B. Tag, Stunde, Stueck)",
-   "billable_hours_per_day": null, "quantity": null, "min_quantity": null,
+   "billable_hours_per_day": null, "hours_evidence": "woertliches Zitat, das die Stundenzahl pro Tag belegt, sonst null",
+   "quantity": null, "min_quantity": null,
    "ancillary_costs": {"fracht": {"status": "inclusive|exclusive|unknown", "amount": null},
                         "setup": {"status": "unknown", "amount": null},
                         "reise": {"status": "unknown", "amount": null},
@@ -53,13 +57,16 @@ Regeln:
 - Erfinde NIEMALS Werte. Was nicht ausdruecklich im Dokument steht: null bzw. "unknown".
 - tax_basis nur "net" bei ausdruecklichem Hinweis (z.B. "netto", "zzgl. MwSt."), nur "gross" bei "brutto"/"inkl. MwSt."; sonst "unknown".
 - billable_hours_per_day NUR wenn die Zahl abrechenbarer Stunden pro Tag ausdruecklich genannt ist. Nimm NIE pauschal 8 an.
+- tax_evidence und hours_evidence sind exakte Zitate (Zeichen fuer Zeichen aus dem Dokumenttext, ohne "Zeile N:"-Praefix);
+  ohne Zitat bleiben tax_basis "unknown" bzw. billable_hours_per_day null. Zitate werden automatisch gegen das Dokument geprueft.
 - Datumsangaben im Format YYYY-MM-DD, nur wenn eindeutig im Dokument; Upload-/Heutedatum ist KEIN Angebotsdatum.
 - amount als Zahl mit Punkt als Dezimaltrenner; amount_raw unveraendert wie im Dokument.
 - Eine Zeile pro bepreister Position. Ueberschriften, Summen und Fusszeilen sind keine Positionen.
 - Paketpreise bleiben Paketpreise (nicht auf Komponenten aufteilen)."""
 
 
-def extract_line_items(document_text: str, document_type: str, must_criteria: Optional[dict]) -> list[dict]:
+def extract_line_items(document_text: str, document_type: str, must_criteria: Optional[dict]) -> tuple[list[dict], dict]:
+    """Rueckgabe: (vorgeschlagene Positionen, Token-Verbrauch)."""
     context = (
         f"Dokumenttyp: {document_type}\n"
         f"Pflichtmerkmale der Kategorie: {json.dumps(must_criteria or {}, ensure_ascii=False)}\n\n"
@@ -79,7 +86,10 @@ def extract_line_items(document_text: str, document_type: str, must_criteria: Op
     items = data.get("line_items") if isinstance(data, dict) else None
     if not isinstance(items, list):
         raise ValueError("Extraktion lieferte keine line_items-Liste.")
-    return [i for i in items if isinstance(i, dict)]
+    usage = getattr(resp, "usage", None)
+    return [i for i in items if isinstance(i, dict)], {
+        "input_tokens": getattr(usage, "input_tokens", None), "output_tokens": getattr(usage, "output_tokens", None),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +148,58 @@ def _q(d: Decimal) -> Decimal:
     return d.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
 
 
+def _squash(s: str) -> str:
+    return " ".join((s or "").split()).lower()
+
+
+def verified_quote(quote, document_text: str) -> Optional[str]:
+    """Gibt das Zitat nur zurueck, wenn es (Leerraum-normalisiert) wirklich
+    im Dokumenttext steht -- sonst None. So kann das Modell keinen Beleg
+    erfinden."""
+    q = _squash(str(quote or ""))
+    if len(q) < 2:
+        return None
+    return str(quote).strip()[:500] if q in _squash(document_text) else None
+
+
+_TAX_NOUN = r"(mwst|mws?t\.?|ust|umsatzsteuer|mehrwertsteuer|vat)"
+_NET_RE = re.compile(rf"netto|\bnet\b|(zzgl|zuzu?e?gl|zuzügl|exkl|excl|plus|ohne)\w*\.?\s*(\d+\s*%\s*)?(gesetzl\w*\.?\s*)?{_TAX_NOUN}", re.I)
+_GROSS_RE = re.compile(rf"brutto|\bgross\b|(inkl|incl|einschl)\w*\.?\s*(\d+\s*%\s*)?(gesetzl\w*\.?\s*)?{_TAX_NOUN}", re.I)
+_HOUR_WORD = re.compile(r"std|stunde|hour|\bh\b", re.I)
+
+
+_ROW_PREFIX = re.compile(r"^Zeile \d+:\s*")
+
+
+def resolve_hours_evidence(model_quote, document_text: str) -> Optional[str]:
+    """Stunden-Beleg: bevorzugt das (verifizierte) Zitat des Modells; spricht
+    es nicht von Stunden, sucht das System selbst die erste Dokumentzeile mit
+    einer Stunden-Angabe (typisch: Tabellenkopf 'Std./Tag'). Ob die Zahl
+    selbst belegt ist, prueft danach _hours_supported anhand der Belegzeile
+    der Position -- die Suche hier liefert nur den Kontext."""
+    quote = verified_quote(model_quote, document_text)
+    if quote and _HOUR_WORD.search(quote):
+        return quote
+    for line in (document_text or "").splitlines():
+        clean = _ROW_PREFIX.sub("", line).strip()
+        if clean and _HOUR_WORD.search(clean):
+            return clean[:500]
+    return quote
+
+
+def _hours_supported(hours: Decimal, hours_evidence: Optional[str], source_evidence: Optional[str]) -> bool:
+    """Stundenzahl gilt nur, wenn ein (verifiziertes) Zitat von Stunden
+    spricht und die Zahl als eigenes Token im Zitat oder in der Belegzeile
+    der Position steht."""
+    if not hours_evidence or not _HOUR_WORD.search(hours_evidence):
+        return False
+    variants = {str(hours.normalize()), f"{hours:.1f}", f"{hours:.1f}".replace(".", ",")}
+    tokens = set(re.split(r"[\s,;|:()]+", f"{hours_evidence} {source_evidence or ''}"))
+    if variants & tokens:
+        return True
+    return any(re.search(rf"(?<![\d.,]){re.escape(v)}(?!\d)", hours_evidence) for v in variants if "," in v or "." in v)
+
+
 def normalize_and_check(fields: dict, today: Optional[date] = None) -> dict:
     """Erwartet die (ggf. menschlich korrigierten) Felder einer Position und
     liefert normalisierte Werte + offene Punkte. Blockierende Punkte
@@ -181,9 +243,21 @@ def normalize_and_check(fields: dict, today: Optional[date] = None) -> dict:
         elif parsed is not None and parsed != amount:
             block("amount_mismatch", f"Betrag im Dokument ('{amount_raw}') weicht vom extrahierten Wert ({amount}) ab.")
 
+    tax_evidence = fields.get("tax_evidence")
+    if tax_basis in ("net", "gross") and not fields.get("tax_confirmed"):
+        pattern = _NET_RE if tax_basis == "net" else _GROSS_RE
+        if not (tax_evidence and pattern.search(tax_evidence)):
+            block("tax_unverified", f"Steuerbasis '{tax_basis}' ist im Dokument nicht belegt -- bitte bestaetigen.")
+            tax_basis = "unverified"
+    if hours is not None and not fields.get("hours_confirmed") and not _hours_supported(hours, fields.get("hours_evidence"), fields.get("source_evidence")):
+        block("hours_unverified", f"Stundenzahl {hours} pro Tag ist im Dokument nicht belegt -- keine Umrechnung ohne Bestaetigung.")
+        hours = None
+
     net = None
     if amount is not None and amount > 0:
-        if tax_basis == "net":
+        if tax_basis == "unverified":
+            pass
+        elif tax_basis == "net":
             net = _q(amount)
         elif tax_basis == "gross":
             if tax_rate is None:

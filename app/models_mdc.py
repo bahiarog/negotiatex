@@ -123,6 +123,18 @@ class MDCDocument(Base):
     document_type = Column(SAEnum(MDCDocumentType, name="mdc_document_type"), default=MDCDocumentType.other, nullable=False)
     title = Column(String(255), nullable=True)
     rfq_offer_id = Column(UUID(as_uuid=True), ForeignKey("rfq_offers.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # Nutzungsfreigabe (Anleitung Abschnitt 03/15). Abgelaufene oder
+    # widerrufene Rechte nehmen das Dokument aus Vergleich, Suche und
+    # Belegzugriff; legal_hold verhindert das Loeschen (Aufbewahrungspflicht).
+    usage_purpose = Column(String(255), nullable=True)
+    usage_scope = Column(String(255), nullable=True)
+    rights_valid_until = Column(Date, nullable=True)
+    rights_revoked_at = Column(DateTime, nullable=True)
+    rights_revoked_by = Column(String(100), nullable=True)
+    rights_revoked_reason = Column(Text, nullable=True)
+    legal_hold = Column(Boolean, default=False, nullable=False, server_default="false")
+    legal_hold_reason = Column(Text, nullable=True)
     created_by = Column(String(100), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
@@ -151,6 +163,11 @@ class MDCDocumentVersion(Base):
     import_error = Column(Text, nullable=True)
     superseded_by_version_id = Column(UUID(as_uuid=True), ForeignKey("mdc_document_versions.id", ondelete="SET NULL"), nullable=True)
 
+    # Betriebskennzahlen der Extraktion (Kosten pro Dokument, Latenz).
+    extraction_input_tokens = Column(Integer, nullable=True)
+    extraction_output_tokens = Column(Integer, nullable=True)
+    extraction_seconds = Column(Numeric(8, 2), nullable=True)
+
     created_by = Column(String(100), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
@@ -178,6 +195,13 @@ class MDCLineItem(Base):
     original_currency = Column(String(10), nullable=True)
     tax_basis = Column(SAEnum(MDCTaxBasis, name="mdc_tax_basis"), default=MDCTaxBasis.unknown, nullable=False)
     tax_rate_pct = Column(Numeric(5, 2), nullable=True)
+    # Woertliche, im Dokumenttext nachgewiesene Belege fuer Steuerbasis und
+    # Stundenzahl -- ohne Beleg oder menschliche Bestaetigung rechnet das
+    # System damit nicht (Schutz gegen erfundene Werte).
+    tax_evidence = Column(Text, nullable=True)
+    tax_confirmed = Column(Boolean, default=False, nullable=False, server_default="false")
+    hours_evidence = Column(Text, nullable=True)
+    hours_confirmed = Column(Boolean, default=False, nullable=False, server_default="false")
     normalized_amount_net = Column(Numeric(18, 4), nullable=True)
     normalization_version = Column(String(50), nullable=True)
 
@@ -228,6 +252,22 @@ class MDCRetrievalChunk(Base):
     embedding_dim = Column(Integer, nullable=True)
     index_status = Column(String(30), nullable=False, default="fts_indexed")
     created_at = Column(DateTime, server_default=func.now())
+
+
+class MDCAuditEvent(Base):
+    """Append-only Audit-Trail (audit_event der Anleitung): Akteur, Aktion,
+    Objekt. Die App-Rolle hat auf dieser Tabelle kein UPDATE/DELETE
+    (migrations/mdc_etappe4.sql) -- Eintraege lassen sich ueber die
+    Anwendung nicht nachtraeglich aendern."""
+    __tablename__ = "mdc_audit_events"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    actor = Column(String(100), nullable=False)
+    action = Column(String(60), nullable=False, index=True)
+    object_type = Column(String(40), nullable=False)
+    object_id = Column(String(64), nullable=True, index=True)
+    details_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, server_default=func.now(), index=True)
 
 
 class MDCAnalysisSnapshot(Base):

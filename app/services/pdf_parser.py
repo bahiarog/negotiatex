@@ -40,5 +40,20 @@ async def _csv(path):
     return "\n".join(f"Zeile {i}: {l}" for i, l in enumerate(lines, start=1) if l.strip()) or "[No data]"
 
 async def _docx(path):
+    # Absaetze UND Tabellen in Dokumentreihenfolge -- Ratecards stehen in Word fast immer in Tabellen.
     from docx import Document
-    return "\n".join(p.text for p in Document(path).paragraphs if p.text.strip()) or "[No text]"
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+    doc = Document(path)
+    parts = []
+    for child in doc.element.body.iterchildren():
+        tag = child.tag.rsplit("}", 1)[-1]
+        if tag == "p":
+            t = Paragraph(child, doc).text.strip()
+            if t:
+                parts.append(t)
+        elif tag == "tbl":
+            rows = [" | ".join(c.text.strip() for c in row.cells) for row in Table(child, doc).rows]
+            if rows:
+                parts.append("[TABLE]\n" + "\n".join(rows) + "\n[/TABLE]")
+    return "\n".join(parts) or "[No text]"

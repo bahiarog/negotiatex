@@ -23,7 +23,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, desc, text as sql_text
+from sqlalchemy import select, desc, or_, text as sql_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -33,6 +33,7 @@ from models_mdc import (
     MDCReviewStatus, MDCImportStatus, MDCDocumentType,
 )
 from services.mdc_analytics import compare, explain, POLICIES, DEFAULT_POLICY_ID
+from services.mdc_governance import audit, require_usable, USABLE_SQL
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -89,10 +90,12 @@ def _snapshot_to_dict(s: MDCAnalysisSnapshot) -> dict:
 async def run_offer_analysis(db: AsyncSession, tenant_id, target_item_id, as_of: date, policy_id: str,
                              purpose: str, user_id: str, rfq_offer_id=None) -> MDCAnalysisSnapshot:
     """compare_offer. Referenzen: nur APPROVED-Positionen derselben
-    Kategorie desselben Mandanten aus nicht ersetzten Dokumentversionen."""
+    Kategorie desselben Mandanten aus nicht ersetzten Dokumentversionen mit
+    gueltigem, nicht widerrufenem Nutzungsrecht."""
     if policy_id not in POLICIES:
         raise HTTPException(400, f"Unbekannte Policy. Verfuegbar: {sorted(POLICIES)}.")
     item, version, doc, supplier = await _load_item(db, target_item_id, tenant_id)
+    require_usable(doc)
     if item.review_status in (MDCReviewStatus.superseded, MDCReviewStatus.rejected):
         raise HTTPException(400, f"Position im Status '{_ev(item.review_status)}' kann nicht analysiert werden.")
     target = _item_dict(item, version, doc, supplier)
@@ -108,6 +111,8 @@ async def run_offer_analysis(db: AsyncSession, tenant_id, target_item_id, as_of:
                 MDCLineItem.tenant_id == tenant_id, MDCLineItem.category_id == item.category_id,
                 MDCLineItem.review_status == MDCReviewStatus.approved,
                 MDCDocumentVersion.import_status != MDCImportStatus.superseded,
+                MDCDocument.rights_revoked_at.is_(None),
+                or_(MDCDocument.rights_valid_until.is_(None), MDCDocument.rights_valid_until >= date.today()),
             )
         )).all()
         candidates = [_item_dict(*r) for r in rows]
@@ -122,7 +127,40 @@ async def run_offer_analysis(db: AsyncSession, tenant_id, target_item_id, as_of:
     )
     db.add(snapshot)
     await db.flush()
+    await audit(db, tenant_id, user_id, "analysis_created", "analysis_snapshot", snapshot.id,
+                target_line_item_id=str(item.id), status=result["status"], purpose=purpose,
+                rfq_offer_id=str(rfq_offer_id) if rfq_offer_id else None, references_checked=len(candidates))
     return snapshot
+
+
+async def _snapshot_currency(db: AsyncSession, s: MDCAnalysisSnapshot) -> dict:
+    """Ist der Bestand seit der Analyse noch derselbe? Die Akte selbst bleibt
+    eingefroren; hier wird nur angezeigt, welche damals verwendeten
+    Referenzen inzwischen nicht mehr gelten (Anleitung Abschnitt 15:
+    'Korrekturen invalidieren betroffene Analysen')."""
+    result = s.result_json or {}
+    used = {r["line_item_id"] for c in result.get("classes") or [] for r in c.get("references") or []}
+    if not used:
+        return {"changed": False, "details": []}
+    rows = (await db.execute(
+        select(MDCLineItem.id, MDCLineItem.review_status, MDCDocument.rights_revoked_at, MDCDocument.rights_valid_until)
+        .join(MDCDocumentVersion, MDCLineItem.document_version_id == MDCDocumentVersion.id)
+        .join(MDCDocument, MDCDocumentVersion.document_id == MDCDocument.id)
+        .where(MDCLineItem.id.in_([uuid.UUID(i) for i in used]), MDCLineItem.tenant_id == s.tenant_id)
+    )).all()
+    now = {str(r.id): r for r in rows}
+    details = []
+    for ref_id in sorted(used):
+        r = now.get(ref_id)
+        if r is None:
+            details.append({"line_item_id": ref_id, "change": "Quelle geloescht"})
+        elif r.rights_revoked_at is not None:
+            details.append({"line_item_id": ref_id, "change": "Nutzungsrecht widerrufen"})
+        elif r.rights_valid_until is not None and r.rights_valid_until < date.today():
+            details.append({"line_item_id": ref_id, "change": "Nutzungsrecht abgelaufen"})
+        elif r.review_status != MDCReviewStatus.approved:
+            details.append({"line_item_id": ref_id, "change": f"nicht mehr freigegeben ({_ev(r.review_status)})"})
+    return {"changed": bool(details), "details": details}
 
 
 class AnalysisRequest(BaseModel):
@@ -166,7 +204,9 @@ async def get_analysis(snapshot_id: uuid.UUID, membership=Depends(get_current_me
     ))).scalar_one_or_none()
     if not s:
         raise HTTPException(404, "Analyse nicht gefunden.")
-    return _snapshot_to_dict(s)
+    d = _snapshot_to_dict(s)
+    d["currency"] = await _snapshot_currency(db, s)
+    return d
 
 
 @router.get("/offer-targets")
@@ -181,6 +221,8 @@ async def list_offer_targets(membership=Depends(get_current_membership), db: Asy
             MDCLineItem.tenant_id == membership.tenant_id, MDCDocument.document_type == MDCDocumentType.offer,
             MDCLineItem.review_status.in_([MDCReviewStatus.extracted, MDCReviewStatus.needs_review, MDCReviewStatus.approved]),
             MDCDocumentVersion.import_status != MDCImportStatus.superseded,
+            MDCDocument.rights_revoked_at.is_(None),
+            or_(MDCDocument.rights_valid_until.is_(None), MDCDocument.rights_valid_until >= date.today()),
         ).order_by(desc(MDCLineItem.created_at))
     )).all()
     return [_item_dict(*r) for r in rows]
@@ -189,8 +231,10 @@ async def list_offer_targets(membership=Depends(get_current_membership), db: Asy
 @router.get("/evidence/{line_item_id}")
 async def get_evidence(line_item_id: uuid.UUID, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
     """Exakt die zugelassene Belegstelle einer Position plus wenige Zeilen
-    Kontext -- keine frei waehlbaren Dateipfade."""
+    Kontext -- keine frei waehlbaren Dateipfade. Nach Widerruf oder Ablauf
+    des Nutzungsrechts gesperrt."""
     item, version, doc, supplier = await _load_item(db, line_item_id, membership.tenant_id)
+    require_usable(doc)
     evidence = (item.source_evidence or "").strip()
     lines = (version.extracted_text or "").splitlines()
     context, found = [], False
@@ -223,6 +267,7 @@ _SEARCH_SCOPE = """
         WHERE c.tenant_id = :tenant_id
           AND v.import_status = 'indexed'
           AND (CAST(:category_id AS uuid) IS NULL OR d.category_id = CAST(:category_id AS uuid))
+          AND """ + USABLE_SQL + """
 """
 
 
@@ -332,5 +377,7 @@ async def request_data_review(line_item_id: uuid.UUID, payload: ReviewRequest, u
     issues.append({"code": "review_requested", "message": f"Pruefanfrage: {payload.reason.strip()[:300]}", "blocking": True})
     item.open_issues_json = issues
     await _refresh_version_status(db, version)
+    await audit(db, membership.tenant_id, user.id, "review_requested", "line_item", item.id,
+                previous_status=previous, reason=payload.reason.strip()[:500])
     await db.commit()
     return {"line_item_id": str(item.id), "review_status": "needs_review", "previous_status": previous}

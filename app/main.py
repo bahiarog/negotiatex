@@ -14,7 +14,7 @@ import models_negotiation  # noqa: F401 -- registers Teil A negotiation tables o
 import models_sourcing  # noqa: F401 -- registers Teil B sourcing/outreach/NDA tables on Base.metadata
 import models_contracts  # noqa: F401 -- registers Teil B7-B9 RFQ/offer/contract tables on Base.metadata
 import models_mdc  # noqa: F401 -- registers Master Data Center (Etappe 1) tables on Base.metadata
-from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers, chat, requisitions, invoices, negotiation, sourcing, agent_overview, mdc, mdc_analysis
+from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers, chat, requisitions, invoices, negotiation, sourcing, agent_overview, mdc, mdc_analysis, mdc_ops
 from routers.rfq_contracts import rfq_router, contracts_router
 
 limiter = Limiter(key_func=get_remote_address)
@@ -29,6 +29,8 @@ async def lifespan(app: FastAPI):
     scheduler = start_scheduler()
     from services.email_poller import register_negotiation_jobs
     register_negotiation_jobs(scheduler)
+    from services.mdc_maintenance import register_mdc_jobs
+    register_mdc_jobs(scheduler)
     # Embedding-Modell im Hintergrund vorladen, damit die erste Suche nicht wartet; blockiert den Start nicht.
     from services.mdc_embeddings import warm_up
     asyncio.get_running_loop().run_in_executor(None, warm_up)
@@ -72,6 +74,7 @@ app.include_router(contracts_router, prefix="/api/v1/contracts", tags=["Teil B9 
 app.include_router(agent_overview.router, prefix="/api/v1/agent", tags=["Agent-Uebersicht (Freigaben & Aktivitaet)"])
 app.include_router(mdc.router, prefix="/api/v1/mdc", tags=["Master Data Center"])
 app.include_router(mdc_analysis.router, prefix="/api/v1/mdc", tags=["Master Data Center - Analyse"])
+app.include_router(mdc_ops.router, prefix="/api/v1/mdc", tags=["Master Data Center - Betrieb"])
 
 @app.get("/health")
 async def health_root():

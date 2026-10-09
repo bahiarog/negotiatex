@@ -113,7 +113,7 @@ async function api(path, opts) {
 function postJson(path, body) { return api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }
 function putJson(path, body) { return api(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }
 function tabs(active) {
-  const t = [['inbox', 'Dokumenten-Inbox'], ['review', 'Review-Queue'], ['compare', 'Angebotsvergleich'], ['search', 'Belegsuche']];
+  const t = [['inbox', 'Dokumenten-Inbox'], ['review', 'Review-Queue'], ['compare', 'Angebotsvergleich'], ['search', 'Belegsuche'], ['metrics', 'Kennzahlen']];
   return `<div class="nav-tabs">${t.map(([k, l]) => `<a href="#${k}" class="${active === k ? 'on' : ''}">${l}</a>`).join('')}</div>`;
 }
 
@@ -138,17 +138,25 @@ function esc(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&am
 function badge(v){ return `<span class="badge b-${esc(v)}">${esc(v)}</span>`; }
 
 let tenantEnsured = false;
+let myRole = 'member';  // nur fuer die Anzeige; durchgesetzt wird serverseitig
+const isOwner = () => myRole === 'owner';
 async function ensureTenant() {
   if (tenantEnsured) return;
   const authHeaders = { 'Authorization': 'Bearer ' + token };
-  try { const r = await fetch('/api/v1/tenants/me', { headers: authHeaders }); if (!r.ok) throw new Error('no-membership'); }
-  catch (e) {
+  try {
+    const r = await fetch('/api/v1/tenants/me', { headers: authHeaders });
+    if (!r.ok) throw new Error('no-membership');
+    myRole = (await r.json()).role || 'member';
+  } catch (e) {
     const companyName = (user && (user.company_name || user.name)) || 'Mein Unternehmen';
-    try { await fetch('/api/v1/tenants', { method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({ company_name: companyName }) }); }
-    catch (e2) {}
+    try {
+      const c = await fetch('/api/v1/tenants', { method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({ company_name: companyName }) });
+      if (c.ok) myRole = (await c.json()).role || 'member';
+    } catch (e2) {}
   }
   tenantEnsured = true;
 }
+function ownerOnlyNote() { return '<div class="disclaimer">Entscheidungen (Freigabe, Rechte, Loeschen) trifft ein Owner des Mandanten.</div>'; }
 
 let categories = [];
 
@@ -187,6 +195,8 @@ async function renderList() {
         <input id="f-supplier" placeholder="Lieferant (optional)">
         <input id="f-title" placeholder="Titel (optional)">
         <input id="f-source" placeholder="Quelle (optional)">
+        <input id="f-purpose" placeholder="Zulaessiger Nutzungszweck (optional)">
+        <label style="font-size:11px;color:var(--text-muted);display:flex;flex-direction:column;gap:3px">Nutzungsrecht gueltig bis (optional)<input type="date" id="f-valid-until"></label>
       </div>
       <div class="row-actions">
         <button class="btn primary" onclick="doUpload()">Hochladen</button>
@@ -217,6 +227,8 @@ async function doUpload() {
   if (document.getElementById('f-supplier').value) fd.append('supplier_name', document.getElementById('f-supplier').value);
   if (document.getElementById('f-title').value) fd.append('title', document.getElementById('f-title').value);
   if (document.getElementById('f-source').value) fd.append('source', document.getElementById('f-source').value);
+  if (document.getElementById('f-purpose').value) fd.append('usage_purpose', document.getElementById('f-purpose').value);
+  if (document.getElementById('f-valid-until').value) fd.append('rights_valid_until', document.getElementById('f-valid-until').value);
   msg.innerHTML = '<div class="loading">Lade hoch...</div>';
   try {
     const res = await fetch(API + '/documents/upload', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd });
@@ -225,6 +237,69 @@ async function doUpload() {
     msg.innerHTML = data.duplicate ? '<div class="empty">Exaktes Duplikat erkannt -- bereits vorhanden, kein neuer Import.</div>' : '<div class="empty">Importiert.</div>';
     renderList();
   } catch (e) { msg.innerHTML = `<div class="empty">Fehler: ${esc(e.message)}</div>`; }
+}
+
+function rightsPanel(doc) {
+  const r = doc.rights || {};
+  const status = r.blocked_reason
+    ? `<span class="badge b-rejected">gesperrt</span> ${esc(r.blocked_reason)}${r.revoked_reason ? ' — ' + esc(r.revoked_reason) : ''}`
+    : '<span class="badge b-approved">nutzbar</span>';
+  const owner = isOwner() ? `
+    <div class="formgrid">
+      <input id="r-purpose" placeholder="Zulaessiger Nutzungszweck" value="${esc(r.usage_purpose || '')}" ${r.revoked_at ? 'disabled' : ''}>
+      <input id="r-scope" placeholder="Empfaengerkreis / Reichweite" value="${esc(r.usage_scope || '')}" ${r.revoked_at ? 'disabled' : ''}>
+      <label style="font-size:11px;color:var(--text-muted);display:flex;flex-direction:column;gap:3px">Gueltig bis<input type="date" id="r-valid" value="${esc(r.valid_until || '')}" ${r.revoked_at ? 'disabled' : ''}></label>
+    </div>
+    <div class="row-actions">
+      ${r.revoked_at ? '' : `<button class="btn" onclick="saveRights('${doc.id}')">Rechte speichern</button>
+      <button class="btn" onclick="revokeRights('${doc.id}')">Nutzung widerrufen</button>`}
+      <button class="btn" onclick="toggleLegalHold('${doc.id}', ${!r.legal_hold})">${r.legal_hold ? 'Aufbewahrungssperre aufheben' : 'Aufbewahrungssperre setzen'}</button>
+      <button class="btn" style="color:var(--status-bad)" onclick="deleteDocument('${doc.id}')" ${r.legal_hold ? 'disabled title="Aufbewahrungssperre aktiv"' : ''}>Dokument loeschen</button>
+    </div>
+    <div id="rights-msg"></div>` : ownerOnlyNote();
+  return `<div class="panel">
+    <div class="panel-h">Nutzungsrechte &amp; Aufbewahrung</div>
+    <div style="padding:14px 18px;font-size:13px">${status}
+      <div class="mono" style="font-size:11.5px;color:var(--text-dim);margin-top:6px">Zweck: ${esc(r.usage_purpose || '—')} &middot; Reichweite: ${esc(r.usage_scope || '—')} &middot; gueltig bis: ${esc(r.valid_until || 'unbefristet')}
+      ${r.legal_hold ? ` &middot; <b>Aufbewahrungssperre</b>: ${esc(r.legal_hold_reason || '')}` : ''}</div>
+    </div>
+    ${owner}
+    <div class="disclaimer">Widerruf oder Ablauf nehmen das Dokument sofort aus Vergleich, Suche und Belegzugriff. Loeschen entfernt Original, Positionen, Suchindex und Vektoren und schwaerzt die Belegstellen in alten Analyse-Akten; die damals berechneten Zahlen bleiben als Nachweis stehen.</div>
+  </div>`;
+}
+
+async function rightsAction(docId, fn) {
+  const msg = document.getElementById('rights-msg');
+  try { await fn(); renderDocument(docId); }
+  catch (e) { if (msg) msg.innerHTML = `<div class="empty" style="color:var(--status-bad)">${esc(e.message)}</div>`; }
+}
+function saveRights(docId) {
+  return rightsAction(docId, () => putJson(`/documents/${docId}/rights`, {
+    usage_purpose: document.getElementById('r-purpose').value.trim() || null,
+    usage_scope: document.getElementById('r-scope').value.trim() || null,
+    rights_valid_until: document.getElementById('r-valid').value || null,
+  }));
+}
+function revokeRights(docId) {
+  const reason = prompt('Grund des Widerrufs (Pflicht). Das Dokument wird sofort aus Vergleich, Suche und Belegzugriff genommen:');
+  if (!reason || !reason.trim()) return;
+  return rightsAction(docId, () => postJson(`/documents/${docId}/revoke`, { reason }));
+}
+function toggleLegalHold(docId, active) {
+  const reason = prompt(active ? 'Rechtsgrundlage der Aufbewahrung (Pflicht):' : 'Grund fuer das Aufheben der Aufbewahrungssperre (Pflicht):');
+  if (!reason || !reason.trim()) return;
+  return rightsAction(docId, () => postJson(`/documents/${docId}/legal-hold`, { active, reason }));
+}
+async function deleteDocument(docId) {
+  const reason = prompt('Loeschgrund (Pflicht). Original, Positionen, Suchindex und Vektoren werden endgueltig entfernt:');
+  if (!reason || !reason.trim()) return;
+  if (!confirm('Endgueltig loeschen? Das kann nicht rueckgaengig gemacht werden.')) return;
+  const msg = document.getElementById('rights-msg');
+  try {
+    const r = await api(`/documents/${docId}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) });
+    alert(`Geloescht: ${r.versions} Version(en), ${r.line_items} Position(en), ${r.removed_files} Datei(en); ${r.redacted_snapshots} Analyse-Akte(n) geschwaerzt.`);
+    location.hash = '#inbox';
+  } catch (e) { if (msg) msg.innerHTML = `<div class="empty" style="color:var(--status-bad)">${esc(e.message)}</div>`; }
 }
 
 async function renderDocument(id) {
@@ -249,6 +324,8 @@ async function renderDocument(id) {
     <a class="back" onclick="location.hash=''">&larr; Zurueck zur Inbox</a>
     <h1>${esc(doc.title || 'Dokument')}</h1>
     <p class="sub">Typ: <span class="mono">${esc(doc.document_type)}</span> &middot; erstellt ${new Date(doc.created_at).toLocaleString('de-DE')}</p>
+
+    ${rightsPanel(doc)}
 
     <div class="panel">
       <div class="panel-h">Neue Revision hochladen</div>
@@ -397,13 +474,19 @@ async function renderItem(id) {
             ${select('price_status', 'Preisstatus', i.price_status, ['list_price', 'quoted', 'negotiated_quote', 'contracted', 'invoiced'])}
             ${ancFields}
             <label class="full">Belegstelle<input id="fi-source_evidence" value="${esc(i.source_evidence ?? '')}" ${editable ? '' : 'disabled'}></label>
+            <div class="full" style="font-size:11.5px;color:var(--text-muted);line-height:1.6">
+              Beleg Steuerbasis: ${i.tax_confirmed ? '<b>vom Menschen bestaetigt</b>' : (i.tax_evidence ? `"${esc(i.tax_evidence)}"` : '<span style="color:var(--status-bad)">kein Beleg im Dokument</span>')}<br>
+              Beleg Stundenzahl: ${i.billable_hours_per_day == null ? '—' : (i.hours_confirmed ? '<b>vom Menschen bestaetigt</b>' : (i.hours_evidence ? `"${esc(i.hours_evidence)}"` : '<span style="color:var(--status-bad)">kein Beleg im Dokument</span>'))}
+              <div style="color:var(--text-dim)">Wer Steuerbasis oder Stundenzahl hier selbst setzt und speichert, bestaetigt den Wert.</div>
+            </div>
             <label class="full" style="flex-direction:row;align-items:center;gap:8px;text-transform:none"><input type="checkbox" id="fi-confirm_amount" ${i.amount_confirmed ? 'checked' : ''} ${editable ? '' : 'disabled'} style="width:auto"> Betrag gegen das Original geprueft und bestaetigt</label>
           </div>
           ${editable ? `<div class="row-actions">
             <button class="btn" onclick="saveItem('${i.id}')">Aenderungen speichern</button>
-            ${decidable ? `<button class="btn primary" onclick="decideItem('${i.id}','approve')">Freigeben</button>
+            ${decidable && isOwner() ? `<button class="btn primary" onclick="decideItem('${i.id}','approve')">Freigeben</button>
             <button class="btn" onclick="decideItem('${i.id}','reject')">Ablehnen</button>` : ''}
-          </div>` : '<div class="empty">Diese Position wurde durch eine neuere Dokumentversion ersetzt und ist schreibgeschuetzt.</div>'}
+            <button class="btn" onclick="requestReview('${i.id}')">Pruefanfrage stellen</button>
+          </div>${decidable && !isOwner() ? ownerOnlyNote() : ''}` : '<div class="empty">Diese Position wurde durch eine neuere Dokumentversion ersetzt und ist schreibgeschuetzt.</div>'}
           <div id="item-msg"></div>
           ${i.review_status === 'approved' || i.review_status === 'rejected' ? '<div class="disclaimer">Jede Aenderung an einer entschiedenen Position hebt die Entscheidung auf -- sie muss danach erneut geprueft werden.</div>' : ''}
         </div>
@@ -445,6 +528,13 @@ async function saveItem(id) {
     await putJson(`/line-items/${id}`, changes);
     renderItem(id);
   } catch (e) { msg.innerHTML = `<div class="empty" style="color:var(--status-bad)">${esc(e.message)}</div>`; }
+}
+
+async function requestReview(id) {
+  const reason = prompt('Was ist unklar? (Die Position verlaesst sofort den Vergleichsbestand, bis sie erneut freigegeben ist.)');
+  if (!reason || !reason.trim()) return;
+  try { await postJson(`/line-items/${id}/request-review`, { reason }); renderItem(id); }
+  catch (e) { document.getElementById('item-msg').innerHTML = `<div class="empty" style="color:var(--status-bad)">${esc(e.message)}</div>`; }
 }
 
 async function decideItem(id, action) {
@@ -596,6 +686,12 @@ async function renderAnalysis(id) {
     <p class="sub">${abadge(s.status)} &middot; Angebot ${t.value != null ? fmtAmount(t.value, cur) + ' netto / ' + esc(t.canonical_unit) : 'ohne Nettowert'} &middot; ${esc([t.seniority, t.region].filter(Boolean).join(' · '))}
       &middot; Stichtag ${esc(s.as_of)} &middot; Regelwerk ${esc(s.policy_id)} v${esc(s.policy_version)}</p>
 
+    ${s.currency && s.currency.changed ? `<div class="panel" style="border-color:rgba(216,90,48,.35)">
+      <div class="panel-h" style="color:var(--status-bad)">Bestand hat sich seit dieser Analyse geaendert</div>
+      <ul class="issues">${s.currency.details.map(d => `<li class="block">Referenz ${esc(d.line_item_id.slice(0, 8))}: ${esc(d.change)}</li>`).join('')}</ul>
+      <div class="disclaimer">Diese Akte bleibt als Nachweis unveraendert. Fuer eine aktuelle Bewertung bitte neu vergleichen.</div>
+    </div>` : ''}
+
     <div class="panel">
       <div class="panel-h">Einordnung</div>
       <pre class="explain">${esc(s.explanation)}</pre>
@@ -650,6 +746,72 @@ async function showEvidence(itemId) {
   } catch (err) { panel.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(err.message)}</div></div>`; }
 }
 
+const AUDIT_LABELS = {
+  document_uploaded: 'Dokument hochgeladen', revision_uploaded: 'Revision hochgeladen', lines_extracted: 'Positionen extrahiert',
+  line_item_updated: 'Position geaendert', line_item_approved: 'Position freigegeben', line_item_rejected: 'Position abgelehnt',
+  review_requested: 'Pruefanfrage', analysis_created: 'Analyse erstellt', rights_updated: 'Rechte geaendert',
+  rights_revoked: 'Nutzung widerrufen', legal_hold_set: 'Aufbewahrungssperre gesetzt', legal_hold_released: 'Aufbewahrungssperre aufgehoben',
+  document_deleted: 'Dokument geloescht', original_downloaded: 'Original heruntergeladen', category_created: 'Kategorie angelegt',
+  rights_expired_deindexed: 'Rechte abgelaufen (aus Suche entfernt)', rules_recheck: 'Neupruefung nach Regelaenderung',
+};
+
+async function renderMetrics() {
+  app.innerHTML = '<div class="loading">Lade Kennzahlen...</div>';
+  let m, h, audit = null;
+  try { [m, h] = await Promise.all([api('/metrics'), api('/health')]); }
+  catch (e) { app.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(e.message)}</div></div>`; return; }
+  if (isOwner()) { try { audit = await api('/audit?limit=60'); } catch (e) { audit = null; } }
+  const stat = (l, v) => `<div class="stat"><div class="l">${l}</div><div class="v" style="font-size:15px">${v == null ? '—' : esc(v)}</div></div>`;
+  const breadth = Object.entries(m.breadth_by_category || {}).map(([cat, classes]) => Object.entries(classes).map(([cls, x]) => `
+    <tr><td>${esc(cat)}</td><td>${esc(cls)}</td><td class="num">${x.observations}</td><td class="num">${x.projects}</td><td class="num">${x.suppliers}</td>
+    <td>${x.benchmark_eligible ? '<span class="badge b-approved">Benchmark</span>' : '<span class="badge b-insufficient_evidence">zu schmal</span>'}</td></tr>`).join('')).join('');
+  const issues = Object.entries(m.open_mandatory_fields.by_issue || {}).map(([k, v]) => `${esc(k)}: ${v}`).join(' &middot; ') || 'keine';
+  const auditRows = (audit || []).map(e => `<tr><td class="mono">${new Date(e.created_at).toLocaleString('de-DE')}</td>
+    <td>${esc(AUDIT_LABELS[e.action] || e.action)}</td><td class="mono">${esc(e.object_type)} ${esc((e.object_id || '').slice(0, 8))}</td>
+    <td class="mono">${esc(e.actor === 'system' ? 'System' : e.actor.slice(0, 8))}</td></tr>`).join('');
+  const healthOk = h.status === 'ok';
+
+  app.innerHTML = `
+    <h1>Kennzahlen &amp; Betrieb</h1>
+    <p class="sub">Betriebsmetriken des Datenbestands (Stand ${esc(m.as_of)}). HTTP-Latenzen aller Endpunkte werden zusaetzlich in Prometheus/Grafana erfasst.</p>
+    ${tabs('metrics')}
+    <div class="panel">
+      <div class="panel-h">Zustand ${healthOk ? '<span class="badge b-approved">ok</span>' : '<span class="badge b-rejected">eingeschraenkt</span>'}</div>
+      <div class="statgrid">
+        ${stat('Datenbank', h.checks.database ? 'erreichbar' : 'FEHLER')}${stat('pgvector', h.checks.pgvector)}
+        ${stat('Suchabschnitte', h.checks.search_index.chunks)}${stat('ohne Vektor', h.checks.search_index.without_vector)}
+        ${stat('fremdes Modell', h.checks.search_index.other_model)}${stat('freigegeben, nicht indexiert', h.checks.approved_but_not_indexed_versions)}
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-h">Datenqualitaet</div>
+      <div class="statgrid">
+        ${stat('Positionen', m.positions.total)}${stat('davon freigegeben', (m.positions.approved_share_pct ?? '—') + ' %')}
+        ${stat('offene Pflichtfelder', m.open_mandatory_fields.positions)}${stat('Belege im Original gefunden', (m.source_coverage.approved_with_evidence_in_text_pct ?? '—') + ' %')}
+        ${stat('abgelehnt', m.corrections.rejected)}${stat('nach Freigabe korrigiert', m.corrections.changed_after_approval)}
+        ${stat('Pruefanfragen', m.corrections.review_requests)}${stat('Datenalter (Median, Tage)', m.data_age.median_days)}
+      </div>
+      <div class="disclaimer">Offene Punkte nach Art: ${issues}</div>
+    </div>
+    <div class="panel">
+      <div class="panel-h">Datenbreite je Kategorie und Referenzklasse</div>
+      ${breadth ? `<table><thead><tr><th>Kategorie</th><th>Klasse</th><th>Beobachtungen</th><th>Projekte</th><th>Lieferanten</th><th>Benchmark</th></tr></thead><tbody>${breadth}</tbody></table>` : '<div class="empty">Noch keine freigegebenen Positionen.</div>'}
+    </div>
+    <div class="panel">
+      <div class="panel-h">Extraktion &amp; Rechte</div>
+      <div class="statgrid">
+        ${stat('extrahierte Versionen', m.extraction.versions)}${stat('Dauer Median (s)', m.extraction.median_seconds)}${stat('Dauer p95 (s)', m.extraction.p95_seconds)}
+        ${stat('Tokens ein / aus (Schnitt)', m.extraction.avg_input_tokens == null ? null : m.extraction.avg_input_tokens + ' / ' + m.extraction.avg_output_tokens)}
+        ${stat('Kosten je Dokument', m.extraction.avg_cost_per_document == null ? 'nicht konfiguriert' : m.extraction.avg_cost_per_document)}
+        ${stat('gesperrte Dokumente', m.rights.blocked_documents)}${stat('Suchabschnitte gesperrter Dok.', m.rights.search_chunks_of_blocked_documents)}${stat('Aufbewahrungssperren', m.rights.legal_hold)}
+      </div>
+    </div>
+    ${isOwner() ? `<div class="panel">
+      <div class="panel-h">Audit-Protokoll (letzte 60, unveraenderlich)</div>
+      ${auditRows ? `<table><thead><tr><th>Zeit</th><th>Aktion</th><th>Objekt</th><th>Akteur</th></tr></thead><tbody>${auditRows}</tbody></table>` : '<div class="empty">Keine Eintraege.</div>'}
+    </div>` : ''}`;
+}
+
 function renderSearch() {
   app.innerHTML = `
     <h1>Belegsuche</h1>
@@ -695,6 +857,7 @@ async function route() {
     else if (hash === '#compare') await renderCompare();
     else if (hash.startsWith('#analysis/')) await renderAnalysis(hash.slice(10));
     else if (hash === '#search') renderSearch();
+    else if (hash === '#metrics') await renderMetrics();
     else await renderList();
   } catch (e) { app.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(e.message)}</div></div>`; }
 }
