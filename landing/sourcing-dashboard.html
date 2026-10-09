@@ -91,6 +91,24 @@ function badge(v){ return `<span class="badge b-${(v||'').toLowerCase()}">${esc(
 function esc(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function money(v,c){ return (v===null||v===undefined) ? '—' : Number(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ' + (c||'EUR'); }
 
+let tenantEnsured = false;
+async function ensureTenant() {
+  if (tenantEnsured) return;
+  const authHeaders = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+  try {
+    const r = await fetch('/api/v1/tenants/me', { headers: authHeaders });
+    if (!r.ok) throw new Error('no-membership');
+  } catch (e) {
+    const companyName = (user && (user.company_name || user.name)) || 'Mein Unternehmen';
+    try {
+      await fetch('/api/v1/tenants', { method: 'POST', headers: authHeaders, body: JSON.stringify({ company_name: companyName }) });
+    } catch (e2) {
+      // Race with another tab, or genuinely failed -- let the caller's own request surface the real error.
+    }
+  }
+  tenantEnsured = true;
+}
+
 async function renderList() {
   app.innerHTML = '<div class="loading">Lade Suchauftraege...</div>';
   let reqs = [];
@@ -210,6 +228,7 @@ async function loadNdaArea(candId){
 async function route() {
   const hash = location.hash;
   try {
+    await ensureTenant();
     if (hash.startsWith('#req/')) await renderRequest(hash.slice(5));
     else if (hash.startsWith('#candidate/')) await renderCandidate(hash.slice(11));
     else await renderList();

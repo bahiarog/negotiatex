@@ -101,6 +101,23 @@ function badgeClass(status) { return 'badge b-' + status.toLowerCase(); }
 function fmtMoney(v, cur) { return (v === null || v === undefined) ? '—' : (Number(v).toLocaleString('de-DE', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ' + (cur || 'EUR')); }
 function escapeHtml(s) { return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+let tenantEnsured = false;
+async function ensureTenant() {
+  if (tenantEnsured) return;
+  try {
+    await api('/tenants/me');
+  } catch (e) {
+    // No membership yet -- self-heal by creating one, instead of surfacing a raw API error.
+    const companyName = (user && (user.company_name || user.name)) || 'Mein Unternehmen';
+    try {
+      await api('/tenants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company_name: companyName }) });
+    } catch (e2) {
+      // Someone else may have created it in a race, or it genuinely failed -- let the caller's own request surface the real error.
+    }
+  }
+  tenantEnsured = true;
+}
+
 async function renderList() {
   app.innerHTML = '<div class="loading">Lade Faelle...</div>';
   let cases = [];
@@ -186,6 +203,7 @@ async function renderCase(caseId) {
 }
 
 async function route() {
+  await ensureTenant();
   const hash = location.hash;
   if (hash.startsWith('#case/')) {
     const id = hash.slice('#case/'.length);
