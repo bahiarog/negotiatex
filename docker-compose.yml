@@ -35,7 +35,7 @@ services:
     container_name: negotiatex-backend
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://negotiatex:${DB_PASSWORD}@negotiatex-db:5432/negotiatex
+      DATABASE_URL: postgresql+asyncpg://negotiatex_app:${APP_DB_PASSWORD}@negotiatex-db:5432/negotiatex
       UPLOAD_DIR: /app/uploads/offers
       REDIS_URL: redis://negotiatex-redis:6379/0
     volumes:
