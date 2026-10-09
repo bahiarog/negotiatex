@@ -12,9 +12,8 @@ je Zeile vereinfacht (MVP-Entscheidung, siehe Bericht) -- eine separate
 Feld-fuer-Feld-Historie mit Transformationsschritten kann spaeter ergaenzt
 werden, ohne das Grundschema zu aendern.
 
-Bewusst NICHT Teil von Etappe 1/2 (folgt in Etappe 3):
-  - retrieval_chunk (pgvector-Embeddings)
-  - analysis_snapshot (Vergleichsergebnisse, Agenten-Tools wie compare_offer)
+Etappe 3: MDCRetrievalChunk (Belegsuche) und MDCAnalysisSnapshot
+(eingefrorene, reproduzierbare Vergleichsergebnisse).
 """
 import enum
 import uuid
@@ -114,7 +113,8 @@ class MDCSupplier(Base):
 class MDCDocument(Base):
     """Fachlicher Vorgang mit stabiler ID. Revisionen sind Versionen
     desselben Dokuments (MDCDocumentVersion), nicht eigene Dokumente -- 'eine
-    neue Revision erzeugt keinen zusaetzlichen unabhaengigen Marktbeleg'."""
+    neue Revision erzeugt keinen zusaetzlichen unabhaengigen Marktbeleg'.
+    Ein Dokument gilt in der Preisanalytik als ein Projekt."""
     __tablename__ = "mdc_documents"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -122,6 +122,7 @@ class MDCDocument(Base):
     supplier_id = Column(UUID(as_uuid=True), ForeignKey("mdc_suppliers.id", ondelete="SET NULL"), nullable=True, index=True)
     document_type = Column(SAEnum(MDCDocumentType, name="mdc_document_type"), default=MDCDocumentType.other, nullable=False)
     title = Column(String(255), nullable=True)
+    rfq_offer_id = Column(UUID(as_uuid=True), ForeignKey("rfq_offers.id", ondelete="SET NULL"), nullable=True, index=True)
     created_by = Column(String(100), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
@@ -207,3 +208,44 @@ class MDCLineItem(Base):
     created_by = Column(String(100), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class MDCRetrievalChunk(Base):
+    """Suchabschnitt einer vollstaendig freigegebenen Dokumentversion. Gesucht
+    wird in v1 per PostgreSQL-Volltext (german). embedding_model/-dim sind
+    fuer eine spaetere Vektorsuche vorgesehen und bleiben NULL, bis ein
+    Embedding-Anbieter und pgvector freigegeben sind -- Vektoren
+    verschiedener Modelle werden nie gemischt (Neuindexierung statt Mix)."""
+    __tablename__ = "mdc_retrieval_chunks"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_version_id = Column(UUID(as_uuid=True), ForeignKey("mdc_document_versions.id", ondelete="CASCADE"), nullable=False, index=True)
+    chunk_index = Column(Integer, nullable=False)
+    anchor = Column(String(100), nullable=True)
+    text = Column(Text, nullable=False)
+    chunking_version = Column(String(20), nullable=False)
+    embedding_model = Column(String(100), nullable=True)
+    embedding_dim = Column(Integer, nullable=True)
+    index_status = Column(String(30), nullable=False, default="fts_indexed")
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class MDCAnalysisSnapshot(Base):
+    """Eingefrorener Angebotsvergleich (analysis_snapshot der Anleitung).
+    Wird nie geaendert: Korrekturen am Bestand erzeugen beim naechsten Lauf
+    einen neuen Snapshot, alte behalten ihren dokumentierten Stand."""
+    __tablename__ = "mdc_analysis_snapshots"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    target_line_item_id = Column(UUID(as_uuid=True), ForeignKey("mdc_line_items.id", ondelete="SET NULL"), nullable=True, index=True)
+    rfq_offer_id = Column(UUID(as_uuid=True), ForeignKey("rfq_offers.id", ondelete="SET NULL"), nullable=True, index=True)
+    as_of = Column(Date, nullable=False)
+    policy_id = Column(String(100), nullable=False)
+    policy_version = Column(String(20), nullable=False)
+    purpose = Column(String(100), nullable=False)
+    status = Column(String(40), nullable=False)
+    input_json = Column(JSON, nullable=False)
+    result_json = Column(JSON, nullable=False)
+    explanation = Column(Text, nullable=False)
+    created_by = Column(String(100), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())

@@ -600,6 +600,151 @@ async def get_comparison(rfq_id: str, membership=Depends(get_current_membership)
     return result
 
 
+class ReferenceCheckPayload(BaseModel):
+    category_id: uuid.UUID
+    role_or_item: str
+    seniority: Optional[str] = None
+    region: Optional[str] = None
+    unit: str
+    tax_basis: str = "unknown"
+    tax_rate_pct: Optional[Decimal] = None
+    billable_hours_per_day: Optional[Decimal] = None
+    as_of: Optional[str] = None
+
+
+@rfq_router.post("/{rfq_id}/offers/{offer_id}/reference-check")
+async def reference_check_offer(rfq_id: str, offer_id: str, payload: ReferenceCheckPayload, user=Depends(get_current_user),
+                                membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+    """B8 + Master Data Center: vergleicht ein eingegangenes RFQ-Angebot mit
+    dem geprueften Preisbestand (compare_offer) und speichert den Snapshot
+    am Angebot. Rolle/Senioritaet/Region/Einheit stehen nicht im RFQ-Angebot
+    und werden hier vom Einkauf bestaetigt -- nie geraten.
+
+    Das Angebot wird als strukturierter Originaldatensatz (JSON) in das Data
+    Center uebernommen. Dieselben Angaben erneut -> gleicher Hash -> keine
+    zusaetzliche Preisbeobachtung, nur ein neuer Snapshot. Geaenderte Angaben
+    -> neue Version, die alte Beobachtung wird superseded. Die uebernommene
+    Position ist selbst KEINE Referenz, bis ein Mensch sie im Data Center
+    freigibt."""
+    import json
+    from datetime import date as _date
+    from pathlib import Path
+    from models_mdc import MDCCategory, MDCDocument, MDCDocumentVersion, MDCLineItem, MDCImportStatus, MDCDocumentType, MDCPriceStatus, MDCReviewStatus, MDCTaxBasis
+    from routers.mdc import UPLOAD_DIR, _get_or_create_mdc_supplier, _apply_check, _refresh_version_status, _clean_ancillary
+    from routers.mdc_analysis import run_offer_analysis, _snapshot_to_dict
+
+    rfq = await _get_rfq_or_404(rfq_id, membership.tenant_id, db)
+    offer = await _get_offer_or_404(offer_id, membership.tenant_id, db)
+    if offer.rfq_id != rfq.id:
+        raise HTTPException(404, "Angebot gehoert nicht zu dieser RFQ.")
+    if offer.unit_price is None:
+        raise HTTPException(400, "Angebot hat keinen Stueckpreis -- kein Referenzabgleich moeglich.")
+    if payload.tax_basis not in ("net", "gross", "unknown"):
+        raise HTTPException(400, "tax_basis muss net, gross oder unknown sein.")
+    if not payload.role_or_item.strip() or not payload.unit.strip():
+        raise HTTPException(400, "Rolle/Leistung und Einheit sind Pflicht.")
+    as_of = _date.today()
+    if payload.as_of:
+        try:
+            as_of = _date.fromisoformat(payload.as_of)
+        except ValueError:
+            raise HTTPException(400, "as_of im Format YYYY-MM-DD erwartet.")
+    cat = (await db.execute(select(MDCCategory).where(MDCCategory.id == payload.category_id, MDCCategory.tenant_id == membership.tenant_id))).scalar_one_or_none()
+    if not cat:
+        raise HTTPException(404, "Kategorie nicht gefunden.")
+    cand = await _get_candidate_or_404(offer.supplier_candidate_id, membership.tenant_id, db)
+
+    record = {
+        "quelle": "RFQ-Angebot (NegotiateX)", "rfq_id": str(rfq.id), "rfq_offer_id": str(offer.id), "angebotsversion": offer.version,
+        "anbieter": cand.company_name, "unit_price": str(offer.unit_price), "currency": offer.currency,
+        "quantity": str(offer.quantity) if offer.quantity is not None else None,
+        "freight_cost": str(offer.freight_cost) if offer.freight_cost is not None else None,
+        "other_costs": str(offer.other_costs) if offer.other_costs is not None else None,
+        "received_at": offer.received_at.isoformat() if offer.received_at else None,
+        "offer_validity_until": offer.offer_validity_until.isoformat() if offer.offer_validity_until else None,
+        "payment_terms": offer.payment_terms, "scope_note": offer.scope_note,
+        "bestaetigt_durch_einkauf": {
+            "role_or_item": payload.role_or_item.strip(), "seniority": payload.seniority, "region": payload.region,
+            "unit": payload.unit.strip(), "tax_basis": payload.tax_basis,
+            "tax_rate_pct": str(payload.tax_rate_pct) if payload.tax_rate_pct is not None else None,
+            "billable_hours_per_day": str(payload.billable_hours_per_day) if payload.billable_hours_per_day is not None else None,
+        },
+    }
+    content = json.dumps(record, ensure_ascii=False, indent=2, sort_keys=True).encode()
+    file_hash = hashlib.sha256(content).hexdigest()
+    text_lines = [f"{k}: {v}" for k, v in record.items() if k != "bestaetigt_durch_einkauf"]
+    text_lines += [f"bestaetigt.{k}: {v}" for k, v in record["bestaetigt_durch_einkauf"].items()]
+    extracted_text = "\n".join(f"Zeile {i}: {l}" for i, l in enumerate(text_lines, start=1))
+    price_line = next(l for l in extracted_text.splitlines() if ": unit_price: " in l)
+
+    doc = (await db.execute(select(MDCDocument).where(MDCDocument.rfq_offer_id == offer.id, MDCDocument.tenant_id == membership.tenant_id))).scalar_one_or_none()
+    target = None
+    if doc is None:
+        doc = MDCDocument(tenant_id=membership.tenant_id, category_id=cat.id,
+                          supplier_id=await _get_or_create_mdc_supplier(db, membership.tenant_id, cand.company_name),
+                          document_type=MDCDocumentType.offer, title=f"RFQ-Angebot {cand.company_name} v{offer.version}",
+                          rfq_offer_id=offer.id, created_by=str(user.id))
+        db.add(doc)
+        await db.flush()
+        latest = None
+    else:
+        latest = (await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.document_id == doc.id)
+                                   .order_by(desc(MDCDocumentVersion.version_number)))).scalars().first()
+        if latest and latest.file_hash == file_hash:
+            target = (await db.execute(select(MDCLineItem).where(MDCLineItem.document_version_id == latest.id))).scalars().first()
+
+    if target is None:
+        tenant_dir = UPLOAD_DIR / str(membership.tenant_id)
+        tenant_dir.mkdir(parents=True, exist_ok=True)
+        stored = tenant_dir / f"{file_hash}.json"
+        if not stored.exists():
+            stored.write_bytes(content)
+        version = MDCDocumentVersion(
+            tenant_id=membership.tenant_id, document_id=doc.id, version_number=(latest.version_number + 1) if latest else 1,
+            file_name=f"rfq_offer_{str(offer.id)[:8]}.json", file_path=str(stored), file_hash=file_hash,
+            file_size_bytes=len(content), source=f"RFQ {str(rfq.id)[:8]}, Angebot v{offer.version}",
+            rights_note="Eigenes Angebot im Mandantenbestand", extracted_text=extracted_text,
+            import_status=MDCImportStatus.extracted, created_by=str(user.id),
+        )
+        db.add(version)
+        await db.flush()
+        if latest:
+            latest.import_status = MDCImportStatus.superseded
+            latest.superseded_by_version_id = version.id
+            for old in (await db.execute(select(MDCLineItem).where(MDCLineItem.document_version_id == latest.id))).scalars().all():
+                if old.review_status != MDCReviewStatus.rejected:
+                    old.review_status = MDCReviewStatus.superseded
+            await _refresh_version_status(db, latest)
+        anc = {"fracht": {"status": "exclusive", "amount": str(offer.freight_cost)}} if offer.freight_cost and offer.freight_cost > 0 else {}
+        target = MDCLineItem(
+            tenant_id=membership.tenant_id, document_version_id=version.id, category_id=cat.id, supplier_id=doc.supplier_id,
+            role_or_item=payload.role_or_item.strip()[:255], seniority=(payload.seniority or None), region=(payload.region or None),
+            scope_text=offer.scope_note, original_amount=offer.unit_price, original_amount_raw=str(offer.unit_price),
+            amount_confirmed=True, original_currency=offer.currency, tax_basis=MDCTaxBasis(payload.tax_basis),
+            tax_rate_pct=payload.tax_rate_pct, original_unit=payload.unit.strip()[:50],
+            billable_hours_per_day=payload.billable_hours_per_day, quantity=offer.quantity,
+            ancillary_costs_json=_clean_ancillary(anc), payment_terms=(offer.payment_terms or None) and offer.payment_terms[:255],
+            offer_date=offer.received_at.date() if offer.received_at else None,
+            valid_to=offer.offer_validity_until.date() if offer.offer_validity_until else None,
+            source_evidence=price_line,
+            price_status=MDCPriceStatus.negotiated_quote if offer.version > 1 else MDCPriceStatus.quoted,
+            review_status=MDCReviewStatus.extracted, created_by=str(user.id),
+        )
+        _apply_check(target)
+        db.add(target)
+        await db.flush()
+        await _refresh_version_status(db, version)
+
+    snapshot = await run_offer_analysis(db, membership.tenant_id, target.id, as_of, "RATECARD-PILOT-v1",
+                                        "rfq_offer_review", str(user.id), rfq_offer_id=offer.id)
+    await db.commit()
+    await db.refresh(snapshot)
+    result = _snapshot_to_dict(snapshot)
+    result["mdc_document_id"] = str(doc.id)
+    result["mdc_line_item_id"] = str(target.id)
+    return result
+
+
 class AwardPayload(BaseModel):
     offer_id: str
     note: Optional[str] = None

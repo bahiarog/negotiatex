@@ -25,16 +25,17 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from deps import get_current_user, get_current_membership
 from models_mdc import (
     MDCCategory, MDCSupplier, MDCDocument, MDCDocumentVersion, MDCImportStatus, MDCDocumentType,
-    MDCLineItem, MDCReviewStatus, MDCPriceStatus, MDCTaxBasis,
+    MDCLineItem, MDCReviewStatus, MDCPriceStatus, MDCTaxBasis, MDCRetrievalChunk,
 )
 from services.pdf_parser import extract_text
+from services.mdc_search import build_chunks, CHUNKING_VERSION
 from services.mdc_extractor import extract_line_items, normalize_and_check, ANCILLARY_KEYS, _to_decimal
 
 logger = logging.getLogger(__name__)
@@ -133,13 +134,13 @@ def _document_to_dict(d: MDCDocument, versions: list[MDCDocumentVersion]) -> dic
 @router.post("/documents/upload")
 async def upload_document(
     file: UploadFile = File(...),
-    category_id: Optional[str] = Form(None),
+    category_id: Optional[uuid.UUID] = Form(None),
     supplier_name: Optional[str] = Form(None),
     document_type: str = Form("other"),
     title: Optional[str] = Form(None),
     source: Optional[str] = Form(None),
     rights_note: Optional[str] = Form(None),
-    revision_of_document_id: Optional[str] = Form(None),
+    revision_of_document_id: Optional[uuid.UUID] = Form(None),
     user=Depends(get_current_user), membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db),
 ):
     """Schritte 1-3: autorisieren (ueber get_current_membership, Mandant aus
@@ -238,6 +239,7 @@ async def upload_document(
     if prior_versions:
         prior_versions[0].import_status = MDCImportStatus.superseded
         prior_versions[0].superseded_by_version_id = version.id
+        await db.execute(sa_delete(MDCRetrievalChunk).where(MDCRetrievalChunk.document_version_id == prior_versions[0].id))
 
     await db.commit()
     all_versions = (await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.document_id == doc.id).order_by(MDCDocumentVersion.version_number))).scalars().all()
@@ -266,14 +268,14 @@ async def _get_document_or_404(document_id: str, tenant_id, db: AsyncSession) ->
 
 
 @router.get("/documents/{document_id}")
-async def get_document(document_id: str, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+async def get_document(document_id: uuid.UUID, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
     doc = await _get_document_or_404(document_id, membership.tenant_id, db)
     versions = (await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.document_id == doc.id).order_by(MDCDocumentVersion.version_number))).scalars().all()
     return _document_to_dict(doc, versions)
 
 
 @router.get("/documents/{document_id}/versions/{version_id}/text")
-async def get_version_text(document_id: str, version_id: str, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+async def get_version_text(document_id: uuid.UUID, version_id: uuid.UUID, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
     doc = await _get_document_or_404(document_id, membership.tenant_id, db)
     r = await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.id == version_id, MDCDocumentVersion.document_id == doc.id))
     v = r.scalar_one_or_none()
@@ -283,7 +285,7 @@ async def get_version_text(document_id: str, version_id: str, membership=Depends
 
 
 @router.get("/documents/{document_id}/versions/{version_id}/download")
-async def download_version(document_id: str, version_id: str, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+async def download_version(document_id: uuid.UUID, version_id: uuid.UUID, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
     """Sichere, authentifizierte Download-Route statt frei waehlbarer
     Dateipfade -- das Original wird nie ueber einen direkt erratbaren Pfad
     ausgeliefert, sondern nur ueber Version-ID nach Mandantenpruefung."""
@@ -423,18 +425,35 @@ def _line_item_to_dict(i: MDCLineItem) -> dict:
 
 
 async def _refresh_version_status(db: AsyncSession, version: MDCDocumentVersion) -> None:
+    """Leitet den Versionsstatus aus den Positionen ab. Nur eine vollstaendig
+    entschiedene Version wird in die Belegsuche aufgenommen (APPROVED ->
+    INDEXED); wird eine Position wieder geoeffnet, verschwinden ihre
+    Suchabschnitte sofort wieder."""
     if version.import_status == MDCImportStatus.superseded:
+        await db.execute(sa_delete(MDCRetrievalChunk).where(MDCRetrievalChunk.document_version_id == version.id))
         return
     items = (await db.execute(select(MDCLineItem).where(MDCLineItem.document_version_id == version.id))).scalars().all()
     active = [i for i in items if i.review_status != MDCReviewStatus.superseded]
     if not active:
         return
     if any(i.review_status == MDCReviewStatus.needs_review for i in active):
-        version.import_status = MDCImportStatus.needs_review
+        new_status = MDCImportStatus.needs_review
     elif all(i.review_status in (MDCReviewStatus.approved, MDCReviewStatus.rejected) for i in active):
-        version.import_status = MDCImportStatus.approved
+        new_status = MDCImportStatus.approved
     else:
-        version.import_status = MDCImportStatus.extracted
+        new_status = MDCImportStatus.extracted
+
+    if new_status != MDCImportStatus.approved:
+        await db.execute(sa_delete(MDCRetrievalChunk).where(MDCRetrievalChunk.document_version_id == version.id))
+        version.import_status = new_status
+        return
+    if version.import_status == MDCImportStatus.indexed:
+        return
+    await db.execute(sa_delete(MDCRetrievalChunk).where(MDCRetrievalChunk.document_version_id == version.id))
+    for idx, (anchor, text) in enumerate(build_chunks(version.extracted_text or "")):
+        db.add(MDCRetrievalChunk(tenant_id=version.tenant_id, document_version_id=version.id, chunk_index=idx,
+                                 anchor=anchor or None, text=text, chunking_version=CHUNKING_VERSION))
+    version.import_status = MDCImportStatus.indexed
 
 
 async def _get_version_or_404(doc: MDCDocument, version_id: str, db: AsyncSession) -> MDCDocumentVersion:
@@ -447,7 +466,7 @@ async def _get_version_or_404(doc: MDCDocument, version_id: str, db: AsyncSessio
 
 @router.post("/documents/{document_id}/versions/{version_id}/extract-lines")
 async def extract_lines(
-    document_id: str, version_id: str, replace: bool = False,
+    document_id: uuid.UUID, version_id: uuid.UUID, replace: bool = False,
     user=Depends(get_current_user), membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db),
 ):
     """Schritte 4-6 der Import-Pipeline. Idempotent: eine bereits
@@ -537,7 +556,7 @@ async def extract_lines(
 
 
 @router.get("/documents/{document_id}/versions/{version_id}/line-items")
-async def list_version_line_items(document_id: str, version_id: str, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+async def list_version_line_items(document_id: uuid.UUID, version_id: uuid.UUID, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
     doc = await _get_document_or_404(document_id, membership.tenant_id, db)
     v = await _get_version_or_404(doc, version_id, db)
     items = (await db.execute(select(MDCLineItem).where(MDCLineItem.document_version_id == v.id).order_by(MDCLineItem.created_at))).scalars().all()
@@ -577,7 +596,7 @@ async def _get_line_item_or_404(item_id: str, tenant_id, db: AsyncSession) -> MD
 
 
 @router.get("/line-items/{item_id}")
-async def get_line_item(item_id: str, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+async def get_line_item(item_id: uuid.UUID, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
     item = await _get_line_item_or_404(item_id, membership.tenant_id, db)
     version = (await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.id == item.document_version_id))).scalar_one()
     d = _line_item_to_dict(item)
@@ -611,7 +630,7 @@ class LineItemUpdate(BaseModel):
 
 
 @router.put("/line-items/{item_id}")
-async def update_line_item(item_id: str, payload: LineItemUpdate, user=Depends(get_current_user),
+async def update_line_item(item_id: uuid.UUID, payload: LineItemUpdate, user=Depends(get_current_user),
                             membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
     """Menschliche Korrektur. Eine bereits entschiedene Position, die
     geaendert wird, verliert ihre Freigabe -- eine Freigabe gilt nur fuer
@@ -678,7 +697,7 @@ class ReviewDecision(BaseModel):
 
 
 @router.post("/line-items/{item_id}/approve")
-async def approve_line_item(item_id: str, payload: ReviewDecision, user=Depends(get_current_user),
+async def approve_line_item(item_id: uuid.UUID, payload: ReviewDecision, user=Depends(get_current_user),
                              membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
     """Einziger Weg nach APPROVED -- immer menschlich ausgeloest. Gesperrt,
     solange der deterministische Check blockierende Punkte meldet ('unklare
@@ -702,7 +721,7 @@ async def approve_line_item(item_id: str, payload: ReviewDecision, user=Depends(
 
 
 @router.post("/line-items/{item_id}/reject")
-async def reject_line_item(item_id: str, payload: ReviewDecision, user=Depends(get_current_user),
+async def reject_line_item(item_id: uuid.UUID, payload: ReviewDecision, user=Depends(get_current_user),
                             membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
     item = await _get_line_item_or_404(item_id, membership.tenant_id, db)
     if item.review_status not in (MDCReviewStatus.extracted, MDCReviewStatus.needs_review):

@@ -66,15 +66,26 @@ mark{background:var(--gold-dim);color:var(--text);padding:1px 0;border-radius:2p
 .nav-tabs a{font-size:12.5px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text-muted)}
 .nav-tabs a.on{border-color:var(--gold-border);color:var(--text);background:var(--bg-card)}
 td.num{font-family:'DM Mono',monospace;white-space:nowrap}
+.b-missing_data{background:rgba(216,90,48,.1);color:var(--status-bad)}
+.b-no_comparable_references{background:var(--bg-card2);color:var(--text-muted)}
+.b-insufficient_evidence{background:var(--gold-dim);color:var(--gold)}
+.b-benchmark_eligible{background:rgba(29,158,117,.1);color:var(--status-good)}
+.statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;padding:14px 18px}
+.stat{background:var(--bg-card2);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.stat .l{font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px}
+.stat .v{font-family:'DM Mono',monospace;font-size:17px;margin-top:3px}
+.explain{white-space:pre-wrap;font-family:'DM Sans',sans-serif;font-size:13.5px;line-height:1.6;padding:14px 18px;margin:0}
+.searchbar{display:flex;gap:8px;padding:14px 18px}
+.searchbar input{flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px}
 </style>
 </head>
 <body>
 <header>
   <a class="logo" href="/dashboard"><em>Negotiate</em>X.ai</a>
   <div class="hdr-sep"></div>
-  <span class="hdr-pg">Master Data Center — Datenkern &amp; pruefbare Preise</span>
+  <span class="hdr-pg">Master Data Center — Daten, Preispruefung &amp; Angebotsvergleich</span>
   <div class="hdr-r">
-    <span class="phase-note">Nur Dummy-/Testdaten · Preisanalytik/RAG folgen (Etappe 3)</span>
+    <span class="phase-note">Nur Dummy-/Testdaten · Vektorsuche noch nicht aktiviert</span>
     <a class="h-btn" href="/dashboard">Zurueck zum Dashboard</a>
   </div>
 </header>
@@ -93,7 +104,8 @@ async function api(path, opts) {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const d = body.detail;
-    const msg = d && typeof d === 'object' ? [d.message, ...(d.blocking_issues || [])].filter(Boolean).join(' — ') : d;
+    const msg = Array.isArray(d) ? d.map(x => x.msg).join('; ')
+      : d && typeof d === 'object' ? [d.message, ...(d.blocking_issues || [])].filter(Boolean).join(' — ') : d;
     throw new Error(msg || ('HTTP ' + res.status));
   }
   return res.json();
@@ -101,7 +113,22 @@ async function api(path, opts) {
 function postJson(path, body) { return api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }
 function putJson(path, body) { return api(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }
 function tabs(active) {
-  return `<div class="nav-tabs"><a href="#inbox" class="${active==='inbox'?'on':''}">Dokumenten-Inbox</a><a href="#review" class="${active==='review'?'on':''}">Review-Queue</a></div>`;
+  const t = [['inbox', 'Dokumenten-Inbox'], ['review', 'Review-Queue'], ['compare', 'Angebotsvergleich'], ['search', 'Belegsuche']];
+  return `<div class="nav-tabs">${t.map(([k, l]) => `<a href="#${k}" class="${active === k ? 'on' : ''}">${l}</a>`).join('')}</div>`;
+}
+
+async function downloadOriginal(path) {
+  try {
+    const res = await fetch(path, { headers: { 'Authorization': 'Bearer ' + token } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const cd = res.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename\*=utf-8''([^;]+)/i) || cd.match(/filename="?([^";]+)"?/i);
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url; a.download = m ? decodeURIComponent(m[1]) : 'original';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } catch (e) { alert('Download fehlgeschlagen: ' + e.message); }
 }
 const STATUS_LABELS = { extracted: 'vorgeschlagen', needs_review: 'Pruefung noetig', approved: 'freigegeben', rejected: 'abgelehnt', superseded: 'ersetzt' };
 function rbadge(s) { return `<span class="badge b-${esc(s)}">${esc(STATUS_LABELS[s] || s)}</span>`; }
@@ -148,7 +175,7 @@ async function renderList() {
 
   app.innerHTML = `
     <h1>Master Data Center</h1>
-    <p class="sub">Dokumente importieren, versionieren und Preispositionen pruefen. Nur freigegebene Positionen fliessen spaeter in Preisvergleiche ein (Etappe 3).</p>
+    <p class="sub">Dokumente importieren, versionieren und Preispositionen pruefen. Nur freigegebene Positionen fliessen in Preisvergleiche ein.</p>
     ${tabs('inbox')}
 
     <div class="panel">
@@ -213,7 +240,7 @@ async function renderDocument(id) {
         ${v.import_error ? `<div style="color:var(--status-bad);font-size:11.5px;margin-top:4px">${esc(v.import_error)}</div>` : ''}
       </div>
       <div style="display:flex;gap:8px">
-        <a class="btn" style="text-decoration:none" href="${API}/documents/${doc.id}/versions/${v.id}/download" target="_blank">Original</a>
+        <button class="btn" onclick="downloadOriginal('${API}/documents/${doc.id}/versions/${v.id}/download')">Original</button>
         <button class="btn" onclick="showText('${doc.id}','${v.id}')">Text</button>
       </div>
     </li>`).join('');
@@ -342,7 +369,8 @@ async function renderItem(id) {
       <div class="panel">
         <div class="panel-h">Original (Beleg markiert)</div>
         <pre class="textpreview">${highlightEvidence(i.source_text, i.source_evidence)}</pre>
-        <div style="padding:0 18px 14px"><a class="btn" style="text-decoration:none" href="#doc/${i.document_id}">Zum Dokument</a></div>
+        <div class="row-actions" style="padding-top:0"><a class="btn" style="text-decoration:none" href="#doc/${i.document_id}">Zum Dokument</a>
+          ${editable && i.review_status !== 'rejected' ? `<button class="btn" onclick="runAnalysis('${i.id}', this)">Mit Bestand vergleichen</button>` : ''}</div>
       </div>
       <div>
         <div class="panel">
@@ -469,6 +497,191 @@ async function showText(docId, versionId) {
   } catch (e) { content.textContent = 'Fehler: ' + e.message; }
 }
 
+// ---------------------------------------------------------------------------
+// Etappe 3: Angebotsvergleich, Analyseakte, Belegsuche
+// ---------------------------------------------------------------------------
+
+const ANALYSIS_LABELS = {
+  missing_data: 'Datenmangel', no_comparable_references: 'keine vergleichbaren Referenzen',
+  insufficient_evidence: 'deskriptiv (kleine Datenbasis)', benchmark_eligible: 'Benchmark',
+};
+function abadge(s) { return `<span class="badge b-${esc(s)}">${esc(ANALYSIS_LABELS[s] || s)}</span>`; }
+function pct(v) { return v == null ? '—' : Number(v).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' %'; }
+
+async function runAnalysis(itemId, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Vergleiche...'; }
+  try {
+    const s = await postJson('/analyses', { line_item_id: itemId });
+    location.hash = '#analysis/' + s.id;
+  } catch (e) { alert(e.message); if (btn) { btn.disabled = false; btn.textContent = 'Vergleichen'; } }
+}
+
+async function renderCompare() {
+  app.innerHTML = '<div class="loading">Lade Angebotsvergleich...</div>';
+  let targets = [], analyses = [];
+  try { [targets, analyses] = await Promise.all([api('/offer-targets'), api('/analyses')]); }
+  catch (e) { app.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(e.message)}</div></div>`; return; }
+
+  const tRows = targets.map(t => `<tr>
+      <td>${esc(t.role_or_item || '—')}<div class="mono" style="font-size:11px;color:var(--text-dim)">${esc([t.seniority, t.region].filter(Boolean).join(' · '))}</div></td>
+      <td>${esc(t.supplier_name || '—')}<div class="mono" style="font-size:11px;color:var(--text-dim)">${esc(t.document_title || '')}</div></td>
+      <td class="num">${t.normalized_amount_per_canonical_unit != null ? fmtAmount(t.normalized_amount_per_canonical_unit, t.original_currency) + ' / ' + esc(t.canonical_unit) : '—'}</td>
+      <td>${rbadge(t.review_status)}</td>
+      <td><button class="btn primary" onclick="runAnalysis('${t.id}', this)">Vergleichen</button></td>
+    </tr>`).join('');
+  const aRows = analyses.map(a => `<tr class="row" style="cursor:pointer" onclick="location.hash='#analysis/${a.id}'">
+      <td class="mono">${new Date(a.created_at).toLocaleString('de-DE')}</td>
+      <td>${esc([a.target.role_or_item, a.target.seniority, a.target.region].filter(Boolean).join(' · '))}${a.rfq_offer_id ? ' <span class="mono" style="font-size:11px;color:var(--text-dim)">RFQ</span>' : ''}</td>
+      <td class="num">${a.target.normalized_amount_per_canonical_unit != null ? fmtAmount(a.target.normalized_amount_per_canonical_unit, a.target.original_currency) + ' / ' + esc(a.target.canonical_unit || '') : '—'}</td>
+      <td>${abadge(a.status)}</td>
+      <td class="mono">${esc(a.as_of)} · ${esc(a.policy_id)}</td>
+    </tr>`).join('');
+
+  app.innerHTML = `
+    <h1>Angebotsvergleich</h1>
+    <p class="sub">Ein Angebot wird nur gegen freigegebene, vergleichbare und aktuelle Positionen desselben Mandanten verglichen. Jede Analyse wird als unveraenderliche Akte gespeichert.</p>
+    ${tabs('compare')}
+    <div class="panel">
+      <div class="panel-h">Angebotspositionen (${targets.length})</div>
+      ${targets.length ? `<table><thead><tr><th>Position</th><th>Anbieter</th><th>Netto je Einheit</th><th>Pruefstatus</th><th></th></tr></thead><tbody>${tRows}</tbody></table>`
+        : '<div class="empty">Keine Angebotspositionen. Angebote als Dokumenttyp "offer" hochladen und Positionen extrahieren.</div>'}
+    </div>
+    <div class="panel">
+      <div class="panel-h">Analyseakte (${analyses.length})</div>
+      ${analyses.length ? `<table><thead><tr><th>Erstellt</th><th>Position</th><th>Angebot</th><th>Ergebnis</th><th>Stichtag / Regelwerk</th></tr></thead><tbody>${aRows}</tbody></table>`
+        : '<div class="empty">Noch keine Analysen.</div>'}
+    </div>`;
+}
+
+async function renderAnalysis(id) {
+  app.innerHTML = '<div class="loading">Lade Analyse...</div>';
+  let s;
+  try { s = await api(`/analyses/${id}`); }
+  catch (e) { app.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(e.message)}</div></div>`; return; }
+  const r = s.result, t = r.target, cur = t.currency;
+
+  const classPanels = (r.classes || []).map(c => {
+    const st = c.stats;
+    const refRows = c.references.map(x => `<tr>
+        <td class="num">${fmtAmount(x.value, cur)}</td>
+        <td>${esc(x.supplier_name || '—')}<div class="mono" style="font-size:11px;color:var(--text-dim)">${esc(x.document_title || '')} · v${x.version_number}</div></td>
+        <td class="mono">${esc(x.offer_date || x.valid_from || '—')}${x.valid_to ? ' bis ' + esc(x.valid_to) : ''}</td>
+        <td class="num">${pct(x.gap_vs_reference_pct)}</td>
+        <td>${(st.outlier_line_item_ids || []).includes(x.line_item_id) ? '<span class="badge b-needs_review">Ausreisser</span>' : ''}</td>
+        <td><button class="btn" onclick="showEvidence('${x.line_item_id}')">Beleg</button></td>
+      </tr>`).join('');
+    return `<div class="panel">
+      <div class="panel-h">${esc(c.label)} ${abadge(c.status)}${r.primary_class === c.reference_class ? ' <span class="mono" style="font-size:11px;color:var(--text-dim)">primaere Referenzklasse</span>' : ''}</div>
+      <div class="statgrid">
+        <div class="stat"><div class="l">Beobachtungen</div><div class="v">${st.n}</div></div>
+        <div class="stat"><div class="l">Projekte</div><div class="v">${st.projects}</div></div>
+        <div class="stat"><div class="l">Lieferanten</div><div class="v">${st.suppliers}</div></div>
+        <div class="stat"><div class="l">Median</div><div class="v">${st.median != null ? fmtAmount(st.median, cur) : '—'}</div></div>
+        <div class="stat"><div class="l">Spanne</div><div class="v" style="font-size:13.5px">${fmtAmount(st.min, cur)} – ${fmtAmount(st.max, cur)}</div></div>
+        <div class="stat"><div class="l">Quartile</div><div class="v" style="font-size:13.5px">${st.q1 != null ? fmtAmount(st.q1, cur) + ' / ' + fmtAmount(st.q3, cur) : '—'}</div></div>
+        <div class="stat"><div class="l">Abstand zum Median</div><div class="v">${pct(st.premium_vs_median_pct)}</div></div>
+        <div class="stat"><div class="l">Hypoth. Abschlag</div><div class="v">${pct(st.hypothetical_reduction_pct)}</div></div>
+      </div>
+      ${st.dominant_supplier ? `<div class="disclaimer">Dominanter Lieferant: ${esc(st.dominant_supplier.supplier_name)} (${pct(st.dominant_supplier.share_pct)} der Beobachtungen).</div>` : ''}
+      <table><thead><tr><th>Wert netto</th><th>Lieferant / Beleg</th><th>Datum</th><th>Angebot vs. Referenz</th><th></th><th></th></tr></thead><tbody>${refRows}</tbody></table>
+    </div>`;
+  }).join('');
+
+  const histRows = (r.historical || []).map(h => `<tr><td class="num">${fmtAmount(h.value, cur)}</td><td>${esc(h.supplier_name || '—')}</td><td>${esc(h.historical_reason)}</td><td><button class="btn" onclick="showEvidence('${h.line_item_id}')">Beleg</button></td></tr>`).join('');
+  const exclRows = (r.excluded || []).map(e => `<tr><td>${esc(e.role_or_item || '—')}</td><td>${esc(e.supplier_name || '—')}</td><td>${esc(e.reason)}</td><td><button class="btn" onclick="showEvidence('${e.line_item_id}')">Beleg</button></td></tr>`).join('');
+
+  app.innerHTML = `
+    <a class="back" onclick="location.hash='#compare'">&larr; Zurueck zum Angebotsvergleich</a>
+    <h1>Analyse: ${esc(t.role_or_item || 'Angebot')}</h1>
+    <p class="sub">${abadge(s.status)} &middot; Angebot ${t.value != null ? fmtAmount(t.value, cur) + ' netto / ' + esc(t.canonical_unit) : 'ohne Nettowert'} &middot; ${esc([t.seniority, t.region].filter(Boolean).join(' · '))}
+      &middot; Stichtag ${esc(s.as_of)} &middot; Regelwerk ${esc(s.policy_id)} v${esc(s.policy_version)}</p>
+
+    <div class="panel">
+      <div class="panel-h">Einordnung</div>
+      <pre class="explain">${esc(s.explanation)}</pre>
+      <div class="disclaimer">Alle Zahlen stammen aus dem deterministischen Vergleichsservice; der Text wird daraus erzeugt, nicht von einem Sprachmodell formuliert. Diese Akte ist eingefroren -- Korrekturen am Bestand wirken erst in einer neuen Analyse.</div>
+    </div>
+
+    ${(r.missing_data || []).length ? `<div class="panel"><div class="panel-h">Fehlende Angaben am Angebot</div><ul class="issues">${r.missing_data.map(m => `<li class="block">${esc(m)}</li>`).join('')}</ul>
+      <div class="row-actions"><a class="btn" style="text-decoration:none" href="#item/${t.line_item_id}">Angebotsposition pruefen</a></div></div>` : ''}
+
+    ${classPanels}
+
+    <div id="evidence-panel"></div>
+
+    ${histRows ? `<div class="panel"><div class="panel-h">Nur historisch (nicht im aktuellen Vergleich)</div><table><thead><tr><th>Wert</th><th>Lieferant</th><th>Grund</th><th></th></tr></thead><tbody>${histRows}</tbody></table></div>` : ''}
+    ${exclRows ? `<div class="panel"><div class="panel-h">Ausgeschlossen (${r.excluded.length})</div><table><thead><tr><th>Position</th><th>Lieferant</th><th>Ausschlussgrund</th><th></th></tr></thead><tbody>${exclRows}</tbody></table></div>` : ''}
+
+    <div class="panel">
+      <div class="panel-h">Gesamtkosten (TCO)</div>
+      <ul class="issues">${(r.tco.reasons || []).map(x => `<li class="hint">${esc(x)}</li>`).join('')}</ul>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h">Regelwerk &amp; Nachvollziehbarkeit</div>
+      <div class="disclaimer" style="border-top:none">Aktualitaet ${r.policy.freshness_days} Tage &middot; Benchmark ab ${r.policy.benchmark_min_projects} Projekten und ${r.policy.benchmark_min_suppliers} Lieferanten &middot; Median ab n=${r.policy.median_min_n}, Quartile ab n=${r.policy.quartile_min_n} (${esc(r.policy.quantile_method)}) &middot; Ausreisser: ${esc(r.policy.outlier_rule)}<br>
+      Snapshot <span class="mono">${esc(s.id)}</span> &middot; erstellt ${new Date(s.created_at).toLocaleString('de-DE')} &middot; ${(s.input.candidate_line_item_ids || []).length} freigegebene Positionen der Kategorie geprueft</div>
+      <div class="row-actions">
+        <a class="btn" style="text-decoration:none" href="#item/${t.line_item_id}">Angebotsposition</a>
+        <button class="btn" onclick="runAnalysis('${t.line_item_id}', this)">Mit aktuellem Bestand neu vergleichen</button>
+      </div>
+    </div>`;
+}
+
+async function showEvidence(itemId) {
+  const panel = document.getElementById('evidence-panel');
+  panel.innerHTML = '<div class="panel"><div class="loading">Lade Beleg...</div></div>';
+  try {
+    const e = await api(`/evidence/${itemId}`);
+    const ctx = (e.context || []).map(l => {
+      const safe = esc(l);
+      return e.source_evidence && l.includes(e.source_evidence) ? `<mark>${safe}</mark>` : safe;
+    }).join('\n');
+    panel.innerHTML = `<div class="panel">
+      <div class="panel-h">Beleg: ${esc(e.document_title || '')} · v${e.version_number} ${e.version_status === 'superseded' ? '<span class="badge b-superseded">ersetzt</span>' : ''}</div>
+      <pre class="textpreview">${ctx || esc(e.source_evidence || '(keine Belegstelle)')}</pre>
+      <div class="row-actions">
+        <button class="btn" onclick="downloadOriginal('${e.download_path}')">Original herunterladen</button>
+        <a class="btn" style="text-decoration:none" href="#doc/${e.document_id}">Zum Dokument</a>
+        <a class="btn" style="text-decoration:none" href="#item/${e.line_item_id}">Zur Position</a>
+      </div>
+    </div>`;
+    panel.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  } catch (err) { panel.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(err.message)}</div></div>`; }
+}
+
+function renderSearch() {
+  app.innerHTML = `
+    <h1>Belegsuche</h1>
+    <p class="sub">Volltextsuche in vollstaendig freigegebenen Dokumenten des eigenen Mandanten. Ungepruefte, abgelehnte oder ersetzte Fassungen werden nicht durchsucht.</p>
+    ${tabs('search')}
+    <div class="panel">
+      <form class="searchbar" onsubmit="event.preventDefault(); doSearch();">
+        <input id="q" placeholder="z.B. Editor Stundensatz, Reisekosten, DoP" autofocus>
+        <button class="btn primary" type="submit">Suchen</button>
+      </form>
+      <div id="search-results"></div>
+      <div class="disclaimer">v1 nutzt die PostgreSQL-Volltextsuche (deutsche Wortstaemme). Eine semantische Vektorsuche ist vorbereitet, aber noch nicht aktiviert.</div>
+    </div>`;
+}
+
+async function doSearch() {
+  const q = document.getElementById('q').value.trim();
+  const out = document.getElementById('search-results');
+  if (!q) return;
+  out.innerHTML = '<div class="loading">Suche...</div>';
+  try {
+    const hits = await api('/search?q=' + encodeURIComponent(q));
+    if (!hits.length) { out.innerHTML = '<div class="empty">Keine Treffer in freigegebenen Dokumenten.</div>'; return; }
+    out.innerHTML = `<table><thead><tr><th>Dokument</th><th>Stelle</th><th>Auszug</th></tr></thead><tbody>${hits.map(h => `
+      <tr class="row" style="cursor:pointer" onclick="location.hash='#doc/${h.document_id}'">
+        <td>${esc(h.document_title || '—')}<div class="mono" style="font-size:11px;color:var(--text-dim)">v${h.version_number}</div></td>
+        <td class="mono" style="font-size:11.5px">${esc(h.anchor || '—')}</td>
+        <td style="font-size:12.5px;white-space:pre-wrap">${esc(h.snippet).replace(/&lt;&lt;/g, '<mark>').replace(/&gt;&gt;/g, '</mark>')}</td>
+      </tr>`).join('')}</tbody></table>`;
+  } catch (e) { out.innerHTML = `<div class="empty">Fehler: ${esc(e.message)}</div>`; }
+}
+
 async function route() {
   await ensureTenant();
   const hash = location.hash;
@@ -476,6 +689,9 @@ async function route() {
     if (hash.startsWith('#doc/')) await renderDocument(hash.slice(5));
     else if (hash.startsWith('#item/')) await renderItem(hash.slice(6));
     else if (hash === '#review') await renderReviewQueue();
+    else if (hash === '#compare') await renderCompare();
+    else if (hash.startsWith('#analysis/')) await renderAnalysis(hash.slice(10));
+    else if (hash === '#search') renderSearch();
     else await renderList();
   } catch (e) { app.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(e.message)}</div></div>`; }
 }

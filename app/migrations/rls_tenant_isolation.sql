@@ -46,7 +46,8 @@ DECLARE
     'outreach_reminder_timers','policies','policy_checks','rfq_actions',
     'rfq_invitations','rfq_offers','rfqs','savings_records','sourcing_requests',
     'supplier_candidates','supplier_certificates','suppliers_v2',
-    'mdc_categories','mdc_suppliers','mdc_documents','mdc_document_versions','mdc_line_items'
+    'mdc_categories','mdc_suppliers','mdc_documents','mdc_document_versions','mdc_line_items',
+    'mdc_retrieval_chunks','mdc_analysis_snapshots'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP

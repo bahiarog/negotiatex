@@ -84,7 +84,12 @@ const app = document.getElementById('app');
 
 async function api(base, path, opts) {
   const res = await fetch(base + path, { ...opts, headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', ...(opts && opts.headers || {}) } });
-  if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.detail || ('HTTP ' + res.status)); }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const d = body.detail;
+    const msg = Array.isArray(d) ? d.map(x => x.msg).join('; ') : (d && typeof d === 'object' ? d.message : d);
+    throw new Error(msg || ('HTTP ' + res.status));
+  }
   return res.json();
 }
 const rfqApi = (p, o) => api(API_RFQ, p, o);
@@ -133,6 +138,7 @@ async function renderRfq(id) {
       <td class="mono ${o.rank===1?'rank-1':''}">${money(o.total_cost_net, o.currency)}</td>
       <td>${badge(o.comparability_flag)}${o.rank?(' #' + o.rank):''}</td>
       <td class="mono">${esc(o.comparability_note||'—')}</td>
+      <td><button class="btn" onclick="openReferenceCheck('${id}','${o.offer_id}')">Referenzabgleich</button></td>
     </tr>`).join('');
 
   const deltaRows = (comparison.negotiation_deltas||[]).map(d => `
@@ -150,10 +156,12 @@ async function renderRfq(id) {
 
     <div class="panel">
       <div class="panel-h">Angebotsvergleich (Bewertungsgewichtung Preis/Qualitaet/Lieferf.: ${comparison.evaluation_weights.price}/${comparison.evaluation_weights.quality}/${comparison.evaluation_weights.delivery})</div>
-      ${comparison.offers.length ? `<table><thead><tr><th>Bieter</th><th>Vers.</th><th>Stueckpreis</th><th>Warenwert</th><th>Fracht</th><th>Gesamtkosten</th><th>Vergleichbarkeit</th><th>Hinweis</th></tr></thead><tbody>${allRows}</tbody></table>` : '<div class="empty">Noch keine Angebote erfasst.</div>'}
+      ${comparison.offers.length ? `<table><thead><tr><th>Bieter</th><th>Vers.</th><th>Stueckpreis</th><th>Warenwert</th><th>Fracht</th><th>Gesamtkosten</th><th>Vergleichbarkeit</th><th>Hinweis</th><th></th></tr></thead><tbody>${allRows}</tbody></table>` : '<div class="empty">Noch keine Angebote erfasst.</div>'}
       ${deltaRows ? `<ul class="timeline">${deltaRows}</ul>` : ''}
       <div class="disclaimer">${esc(comparison.note)}</div>
     </div>
+
+    <div class="panel" id="refcheck-panel" style="display:none"></div>
 
     <div class="panel"><div class="panel-h">Zuschlag (nur menschliche Entscheidung)</div>
       <div class="row-actions">
@@ -162,6 +170,50 @@ async function renderRfq(id) {
       </div>
       ${rfq.awarded_case_id ? `<div class="disclaimer">Vergeben -- Fall <span class="mono">${rfq.awarded_case_id}</span>, Verhandlung laeuft ueber /cases-dashboard (Teil A).</div>` : ''}
     </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Referenzabgleich gegen das Master Data Center (compare_offer). Die
+// Vergleichsmerkmale stehen nicht im RFQ-Angebot und werden hier vom Einkauf
+// bestaetigt -- das System raet sie nicht.
+// ---------------------------------------------------------------------------
+
+async function openReferenceCheck(rfqId, offerId) {
+  const panel = document.getElementById('refcheck-panel');
+  panel.style.display = 'block';
+  panel.innerHTML = '<div class="loading">Lade Kategorien...</div>';
+  let cats = [];
+  try { cats = await api('/api/v1/mdc', '/categories'); } catch (e) { panel.innerHTML = `<div class="empty">Fehler: ${esc(e.message)}</div>`; return; }
+  if (!cats.length) { panel.innerHTML = '<div class="empty">Im Data Center ist noch keine Kategorie angelegt.</div>'; return; }
+  const inp = (id, ph) => `<input id="rc-${id}" placeholder="${ph}" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px">`;
+  panel.innerHTML = `
+    <div class="panel-h">Referenzabgleich fuer Angebot <span class="mono">${esc(offerId.slice(0,8))}</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;padding:14px 18px">
+      <select id="rc-category" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px">${cats.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
+      ${inp('role', 'Rolle / Leistung *')}${inp('seniority', 'Senioritaet')}${inp('region', 'Region')}${inp('unit', 'Einheit (z.B. Stunde) *')}
+      <select id="rc-tax" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px"><option value="unknown">Steuerbasis unbekannt</option><option value="net">netto</option><option value="gross">brutto</option></select>
+      ${inp('rate', 'Steuersatz % (bei brutto)')}${inp('hours', 'Std./Tag (nur bei Tagessatz)')}
+    </div>
+    <div class="row-actions"><button class="btn primary" onclick="doReferenceCheck('${rfqId}','${offerId}')">Mit geprueftem Bestand vergleichen</button></div>
+    <div id="rc-result"></div>
+    <div class="disclaimer">Vergleich nur gegen freigegebene Positionen des Data Centers. Das Ergebnis ist ein Verhandlungssignal, kein Zielpreis -- interne Referenzen duerfen dem Lieferanten nicht als Konkurrenzangebot genannt werden.</div>`;
+  panel.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+async function doReferenceCheck(rfqId, offerId) {
+  const val = id => document.getElementById('rc-' + id).value.trim();
+  const body = { category_id: val('category'), role_or_item: val('role'), unit: val('unit'), tax_basis: val('tax'),
+                 seniority: val('seniority') || null, region: val('region') || null,
+                 tax_rate_pct: val('rate') || null, billable_hours_per_day: val('hours') || null };
+  const out = document.getElementById('rc-result');
+  if (!body.role_or_item || !body.unit) { out.innerHTML = '<div class="empty">Rolle und Einheit sind Pflicht.</div>'; return; }
+  out.innerHTML = '<div class="loading">Vergleiche...</div>';
+  try {
+    const s = await post(rfqApi, `/${rfqId}/offers/${offerId}/reference-check`, body);
+    out.innerHTML = `<div style="padding:0 18px 14px">${badge(s.status)}
+      <pre style="white-space:pre-wrap;font-family:'DM Sans',sans-serif;font-size:13px;margin:10px 0">${esc(s.explanation)}</pre>
+      <a class="btn" style="text-decoration:none" href="/data-center#analysis/${s.id}">Vollstaendige Analyseakte mit Belegen</a></div>`;
+  } catch (e) { out.innerHTML = `<div class="empty">Fehler: ${esc(e.message)}</div>`; }
 }
 
 async function doAward(rfqId) {
