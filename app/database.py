@@ -8,6 +8,21 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://negotiatex:negoti
 engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+# Background system processes (the IMAP poller, reminder-window checks) are
+# a deliberate, narrow exception to RLS: they aren't serving a specific
+# tenant's request, their whole job is to scan an inbound message across
+# ALL tenants' outbound messages to find which one it's a reply to -- no
+# single app.tenant_id value could ever make that query work. This is not a
+# weakening of the per-request isolation guarantee tested in
+# rls_tenant_isolation.sql; it's the standard pattern for a trusted,
+# code-reviewed system worker vs. a request handler driven by arbitrary
+# user input. ADMIN_DATABASE_URL is the original superuser connection
+# (BYPASSRLS), kept specifically for this and for migrations/admin psql
+# work -- it must never be used for anything reachable from a user request.
+ADMIN_DATABASE_URL = os.getenv("ADMIN_DATABASE_URL", DATABASE_URL)
+admin_engine = create_async_engine(ADMIN_DATABASE_URL, echo=False, pool_pre_ping=True)
+AdminSessionLocal = async_sessionmaker(admin_engine, class_=AsyncSession, expire_on_commit=False)
+
 class Base(DeclarativeBase):
     pass
 

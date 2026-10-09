@@ -26,11 +26,33 @@ kein neues Paket).
 import asyncio
 import logging
 import os
+import re
 from datetime import datetime, timedelta
 
 from sqlalchemy import select, desc
 
 logger = logging.getLogger(__name__)
+
+# Confirmed live (9.10.2026): the Strato SMTP relay (smtpin.rzone.de) REWRITES
+# the Message-ID we generate when it actually delivers a message (observed
+# e.g. "<N03d522999PZ0zx.RZmta@negotiatex.ai>" replacing our own generated
+# id). That breaks pure Message-ID/In-Reply-To/References matching for any
+# reply the recipient's client threads off the delivered copy, since the
+# header it threads against is no longer the one we stored. The outreach
+# compose step already embeds the candidate's own id prefix at the end of
+# the subject line (e.g. "... / 9eaa74bf") specifically so a reply keeps a
+# stable, relay-proof correlation token even when its headers don't survive
+# intact. This is a deliberate fallback, used only when the header-based
+# match (the primary, preferred mechanism) finds nothing -- not a
+# replacement for it.
+_SUBJECT_TOKEN_RE = re.compile(r"/\s*([0-9a-f]{8})\s*$", re.IGNORECASE)
+
+
+def _extract_subject_token(subject: str) -> str | None:
+    if not subject:
+        return None
+    m = _SUBJECT_TOKEN_RE.search(subject.strip())
+    return m.group(1).lower() if m else None
 
 # Testbar in Minuten statt Tagen, siehe Bericht (Judgment Call).
 REMINDER_DELAY_MINUTES = int(os.getenv("NEGOTIATION_REMINDER_DELAY_MINUTES", "15"))
@@ -94,13 +116,26 @@ async def _dispatch_inbound_message(db, m: dict) -> dict:
     if r.scalars().first():
         return await ingest_inbound_outreach_message(db, m)
 
+    # 4) Fallback: Subject-Token (siehe Moduldoc oben) -- nur wenn die
+    # Header-basierte Zuordnung nichts gefunden hat, z.B. weil ein
+    # SMTP-Relay die Message-ID beim Versand umgeschrieben hat.
+    token = _extract_subject_token(m.get("subject") or "")
+    if token:
+        from models_sourcing import SupplierCandidate
+        from sqlalchemy import cast, String
+        r = await db.execute(select(SupplierCandidate).where(cast(SupplierCandidate.id, String).like(f"{token}%")))
+        cand = r.scalars().first()
+        if cand:
+            logger.info(f"poll_inbox_job: ueber Subject-Token-Fallback zugeordnet (Message-ID/References ohne Treffer): Kandidat {cand.id}")
+            return await ingest_inbound_outreach_message(db, m, candidate_override=cand)
+
     logger.warning(f"poll_inbox_job: Nachricht konnte keinem Fall/Kandidaten/NDA zugeordnet werden: {m.get('subject')}")
     return {"matched": False}
 
 
 async def poll_inbox_job():
     from services.email_imap import fetch_unseen_messages
-    from database import AsyncSessionLocal
+    from database import AdminSessionLocal as AsyncSessionLocal  # Teil C: system worker, see database.py docstring
 
     try:
         messages = await asyncio.to_thread(fetch_unseen_messages)
@@ -126,7 +161,7 @@ async def check_reminders_job():
     Preisvorschlag menschliche Freigabe ueber POST .../approve braucht,
     bevor er tatsaechlich gesendet wird. Es wird hoechstens EIN Reminder
     pro Fall erzeugt (keine Dauerschleife)."""
-    from database import AsyncSessionLocal
+    from database import AdminSessionLocal as AsyncSessionLocal  # Teil C: system worker, see database.py docstring
     from models_v2 import Case, CaseStatus
     from models_negotiation import (
         NegotiationStrategy, NegotiationAction, NegotiationActionType, NegotiationActionStatus,
@@ -196,7 +231,7 @@ async def check_outreach_reminders_job():
     eingehenden Antwort gesetzt) erzeugen einen Reminder-Entwurf, der
     genau wie der Erstkontakt menschliche Freigabe ueber
     /outreach/{id}/approve braucht, bevor er gesendet wird."""
-    from database import AsyncSessionLocal
+    from database import AdminSessionLocal as AsyncSessionLocal  # Teil C: system worker, see database.py docstring
     from sqlalchemy import select
     from models_sourcing import (
         OutreachReminderTimer, OutreachAction, OutreachActionStatus, SupplierCandidate, CandidateStatus,

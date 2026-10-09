@@ -667,38 +667,49 @@ async def get_candidate_messages(candidate_id: str, membership=Depends(get_curre
 # (services/email_poller.py) and the test-inject endpoint below.
 # ---------------------------------------------------------------------------
 
-async def ingest_inbound_outreach_message(db: AsyncSession, email_record: dict) -> dict:
+async def ingest_inbound_outreach_message(db: AsyncSession, email_record: dict, candidate_override: "SupplierCandidate | None" = None) -> dict:
     """Analog zu routers.negotiation.ingest_inbound_message. Matched via
     Message-ID-Header gegen gespeicherte outbound OutreachMessage-Zeilen.
     JEDE eingehende Antwort (gleich welcher Klassifikation) storniert alle
-    offenen Reminder-Timer fuer diesen Kandidaten sofort (B4)."""
+    offenen Reminder-Timer fuer diesen Kandidaten sofort (B4).
+
+    `candidate_override`: gesetzt vom Subject-Token-Fallback in
+    email_poller.py, wenn der echte Mailserver (bestaetigt: Strato/rzone)
+    die Message-ID beim Versand umschreibt und die Header-Zuordnung
+    deshalb leerlaeuft. Wenn gesetzt, wird direkt dieser Kandidat
+    verwendet statt ueber eine OutreachMessage-Zeile aufgeloest."""
     in_reply_to = email_record.get("in_reply_to")
     refs = email_record.get("references_header") or ""
-    candidate_ids = set()
-    if in_reply_to:
-        candidate_ids.add(in_reply_to.strip())
-    for token in refs.split():
-        candidate_ids.add(token.strip())
 
-    matched_outbound = None
-    if candidate_ids:
-        r = await db.execute(
-            select(OutreachMessage).where(
-                OutreachMessage.direction == OutreachDirection.outbound,
-                OutreachMessage.message_id.in_(list(candidate_ids)),
+    if candidate_override is not None:
+        cand = candidate_override
+        tenant_id = cand.tenant_id
+    else:
+        candidate_ids = set()
+        if in_reply_to:
+            candidate_ids.add(in_reply_to.strip())
+        for token in refs.split():
+            candidate_ids.add(token.strip())
+
+        matched_outbound = None
+        if candidate_ids:
+            r = await db.execute(
+                select(OutreachMessage).where(
+                    OutreachMessage.direction == OutreachDirection.outbound,
+                    OutreachMessage.message_id.in_(list(candidate_ids)),
+                )
             )
-        )
-        matched_outbound = r.scalars().first()
+            matched_outbound = r.scalars().first()
 
-    if not matched_outbound:
-        return {"matched": False}
+        if not matched_outbound:
+            return {"matched": False}
 
-    cand_id = matched_outbound.supplier_candidate_id
-    tenant_id = matched_outbound.tenant_id
-    r = await db.execute(select(SupplierCandidate).where(SupplierCandidate.id == cand_id))
-    cand = r.scalar_one_or_none()
-    if not cand:
-        return {"matched": False}
+        cand_id = matched_outbound.supplier_candidate_id
+        tenant_id = matched_outbound.tenant_id
+        r = await db.execute(select(SupplierCandidate).where(SupplierCandidate.id == cand_id))
+        cand = r.scalar_one_or_none()
+        if not cand:
+            return {"matched": False}
 
     if email_record.get("message_id"):
         existing = await db.execute(select(OutreachMessage).where(OutreachMessage.message_id == email_record["message_id"]))
