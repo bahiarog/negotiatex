@@ -75,7 +75,7 @@ async def run_analysis(offer_text, category, total_net, check_types=None, questi
             elif ct == "terms": prompt = _terms_prompt(offer_text, category)
             elif ct == "general": prompt = _general_prompt(offer_text, category, total_net, questionnaire)
             else: continue
-            resp = _client.messages.create(model=MODEL, max_tokens=2000, messages=[{"role":"user","content":prompt}])
+            resp = _client.messages.create(model=MODEL, max_tokens=2000, thinking={"type": "disabled"}, messages=[{"role":"user","content":prompt}])
             raw = resp.content[0].text
             parsed = _parse(raw)
             score = max(0, min(100, int(parsed.get("score", 50))))

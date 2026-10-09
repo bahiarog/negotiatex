@@ -128,6 +128,7 @@ async def chat_message(request: Request, payload: ChatPayload, db: AsyncSession 
         response = client.messages.create(
             model="claude-sonnet-5",
             max_tokens=500,
+            thinking={"type": "disabled"},
             system=SYSTEM_PROMPT,
             messages=messages,
         )

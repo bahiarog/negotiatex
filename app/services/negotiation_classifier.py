@@ -179,6 +179,7 @@ def classify_reply(case, strategy, email_body: str) -> str:
         resp = client.messages.create(
             model="claude-sonnet-5",
             max_tokens=20,
+            thinking={"type": "disabled"},  # sonst verbraucht das Nachdenken das Token-Budget, Antwort bliebe leer
             system=CLASSIFIER_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": f"Lieferanten-E-Mail:\n\n{email_body[:4000]}"}],
             # Bewusst KEIN `tools=` Parameter -- siehe Moduldoc und chat.py.

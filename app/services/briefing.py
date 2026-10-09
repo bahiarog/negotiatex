@@ -70,7 +70,7 @@ def draft_briefing(text: str, source: str = "prompt", today: Optional[date] = No
     system = PROMPT + (OFFER_HINT if source == "offer" else "")
     try:
         resp = anthropic.Anthropic().messages.create(
-            model="claude-sonnet-5", max_tokens=1500, system=system,
+            model="claude-sonnet-5", max_tokens=8000, system=system,
             messages=[{"role": "user", "content": f"Heutiges Datum: {today.isoformat()}\n\nEingabe:\n{text[:20000]}"}],
             # Bewusst KEIN `tools=`.
         )

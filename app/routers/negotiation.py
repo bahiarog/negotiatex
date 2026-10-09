@@ -272,7 +272,8 @@ def _render_email_text(case: Case, strategy: NegotiationStrategy, round_number: 
         # Bewusst KEIN `tools=` Parameter -- das Modell liefert nur Text.
         resp = client.messages.create(
             model="claude-sonnet-5",
-            max_tokens=600,
+            max_tokens=1000,
+            thinking={"type": "disabled"},  # sonst verbraucht das Nachdenken das Token-Budget, Antwort bliebe leer
             system=EMAIL_DRAFT_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}],
         )

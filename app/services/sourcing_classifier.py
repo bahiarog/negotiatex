@@ -105,6 +105,7 @@ def classify_outreach_reply(email_body: str) -> str:
         resp = client.messages.create(
             model="claude-sonnet-5",
             max_tokens=20,
+            thinking={"type": "disabled"},  # sonst verbraucht das Nachdenken das Token-Budget, Antwort bliebe leer
             system=CLASSIFIER_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": f"Kandidaten-E-Mail:\n\n{email_body[:4000]}"}],
             # Bewusst KEIN `tools=` Parameter -- siehe Moduldoc.
@@ -168,7 +169,8 @@ def assess_nda_necessity(bedarf_text: str, must_criteria_text: str, confidential
         client = anthropic.Anthropic()
         resp = client.messages.create(
             model="claude-sonnet-5",
-            max_tokens=300,
+            max_tokens=600,
+            thinking={"type": "disabled"},
             system=NDA_ASSESSMENT_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": context}],
             # Bewusst KEIN `tools=` Parameter -- siehe Moduldoc oben.

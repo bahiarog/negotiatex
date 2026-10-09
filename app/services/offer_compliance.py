@@ -133,7 +133,7 @@ def clause_review(offer_text: str, project) -> tuple[list[dict], int]:
     ] if x)
     try:
         resp = anthropic.Anthropic().messages.create(
-            model="claude-sonnet-5", max_tokens=2500, system=CLAUSE_PROMPT,
+            model="claude-sonnet-5", max_tokens=10000, system=CLAUSE_PROMPT,
             messages=[{"role": "user", "content": f"Vorgaben des Auftraggebers:\n{vorgaben or '(keine)'}\n\nAngebotstext:\n{offer_text[:20000]}"}],
             # Bewusst KEIN `tools=`.
         )

@@ -104,6 +104,7 @@ async def generate_counter_offer(
         resp = _client.messages.create(
             model=MODEL,
             max_tokens=2000,
+            thinking={"type": "disabled"},  # resp.content[0] muss der Textblock sein
             messages=[{"role": "user", "content": prompt}],
         )
         raw = resp.content[0].text

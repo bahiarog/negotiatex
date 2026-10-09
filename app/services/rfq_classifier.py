@@ -24,15 +24,19 @@ dokument (PDF-Text oder E-Mail-Text) eines Lieferanten, als Antwort auf eine Ang
 
 Gib AUSSCHLIESSLICH ein JSON-Objekt zurueck, exakt mit diesen Feldern (keine zusaetzlichen Felder, \
 kein Freitext davor/danach):
-{"unit_price": null, "quantity": null, "currency": null, "freight_cost": null, "other_costs": null, \
+{"total_price": null, "unit_price": null, "quantity": null, "currency": null, "freight_cost": null, "other_costs": null, \
 "delivery_date": null, "payment_terms": null, "offer_validity_until": null, "spec_confirmed": null, \
 "scope_note": null}
 
 Regeln:
 - Trage NUR Werte ein, die im Dokument eindeutig erkennbar sind. Bei Unsicherheit oder Nichtvorhandensein: null.
 - Erfinde NIEMALS plausibel klingende Zahlen.
-- "unit_price" ist der Stueckpreis NETTO (ohne Steuer), als Zahl (Punkt als Dezimaltrennzeichen).
-- "freight_cost"/"other_costs" als Zahl, 0 falls ausdruecklich "keine" genannt, sonst null.
+- "total_price": der im Dokument ausdruecklich genannte Gesamtpreis NETTO (Angebotssumme), als Zahl.
+- "unit_price" ist der Stueckpreis NETTO (ohne Steuer), als Zahl (Punkt als Dezimaltrennzeichen). Bei einem
+  Pauschal-/Dienstleistungsangebot ohne Stueckpreis: unit_price = Gesamtpreis netto und quantity = 1.
+- "freight_cost"/"other_costs" NUR fuer Kosten, die ZUSAETZLICH zum Gesamtpreis berechnet werden; Positionen, die
+  bereits in der Angebotssumme enthalten sind, hier NICHT erneut eintragen. 0 falls ausdruecklich "keine", sonst null.
+- Datumsangaben im Format YYYY-MM-DD.
 - "spec_confirmed": true nur wenn der Bieter die Spezifikation ausdruecklich bestaetigt; false, wenn er \
 ausdruecklich eine Abweichung nennt; sonst null.
 - "scope_note": Freitext, falls der Bieter eine Abweichung vom Bedarf/Spezifikation kennzeichnet, sonst null."""
@@ -53,7 +57,7 @@ def extract_offer_fields(document_text: str) -> dict:
     null) statt zu raten -- der Aufrufer (Router) verlangt dann manuelle
     Nacherfassung."""
     empty = {
-        "unit_price": None, "quantity": None, "currency": None, "freight_cost": None,
+        "total_price": None, "unit_price": None, "quantity": None, "currency": None, "freight_cost": None,
         "other_costs": None, "delivery_date": None, "payment_terms": None,
         "offer_validity_until": None, "spec_confirmed": None, "scope_note": None,
     }
@@ -62,7 +66,8 @@ def extract_offer_fields(document_text: str) -> dict:
         client = anthropic.Anthropic()
         resp = client.messages.create(
             model="claude-sonnet-5",
-            max_tokens=500,
+            max_tokens=1000,
+            thinking={"type": "disabled"},  # sonst verbraucht das Nachdenken das Token-Budget, Antwort bliebe leer
             system=OFFER_EXTRACTION_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": f"Angebotstext:\n\n{document_text[:12000]}"}],
             # Bewusst KEIN `tools=` Parameter -- siehe Moduldoc.

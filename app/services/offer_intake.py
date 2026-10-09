@@ -57,6 +57,48 @@ def _dec(v) -> Optional[Decimal]:
         return None
 
 
+def _in_text(v: Optional[Decimal], text: str) -> bool:
+    """Ganzzahliger Teil des Betrags muss als Ziffernfolge im Text stehen
+    (1.234,00 / 1234.00 / 1 234 -> 1234) -- Schutz gegen erfundene Zahlen."""
+    import re
+    if v is None:
+        return False
+    digits = re.sub(r"\D", "", str(int(v)))
+    return bool(digits) and digits in re.sub(r"\D", "", text or "")
+
+
+def reconcile_prices(extracted: dict, text: str) -> dict:
+    """Bringt Einzelpreis, Menge, Zusatzkosten und ausdruecklich genannten
+    Gesamtpreis in Einklang. Massgeblich ist im Zweifel der im Dokument
+    stehende Gesamtpreis; Betraege ohne Beleg im Text werden verworfen."""
+    up, qty = _dec(extracted.get("unit_price")), _dec(extracted.get("quantity"))
+    fr, oc = _dec(extracted.get("freight_cost")), _dec(extracted.get("other_costs"))
+    tp = _dec(extracted.get("total_price"))
+    notes = []
+    for name, val in (("Gesamtpreis", tp), ("Einzelpreis", up)):
+        if val is not None and not _in_text(val, text):
+            notes.append(f"{name} {val} nicht im Dokument belegt -- verworfen.")
+    tp = tp if _in_text(tp, text) else None
+    up = up if _in_text(up, text) else None
+    extras = (fr or Decimal("0")) + (oc or Decimal("0"))
+    if tp is not None:
+        q = qty or Decimal("1")
+        if up is None:
+            up, qty = tp, Decimal("1")
+            if extras == tp:  # Gesamtsumme faelschlich als Zusatzkosten erfasst
+                fr = oc = Decimal("0")
+        elif abs(up * q + extras - tp) > Decimal("0.01") and abs(up * q - tp) > Decimal("0.01"):
+            notes.append(f"Einzelpositionen ergeben nicht den genannten Gesamtpreis {tp} -- Gesamtpreis uebernommen.")
+            up, qty, fr, oc = tp, Decimal("1"), Decimal("0"), Decimal("0")
+        elif abs(up * q + extras - tp) <= Decimal("0.01") and extras:
+            # Zusatzkosten sind bereits im Gesamtpreis enthalten -> nicht doppelt zaehlen
+            up, qty, fr, oc = tp, Decimal("1"), Decimal("0"), Decimal("0")
+    out = dict(extracted)
+    out.update({"unit_price": up, "quantity": qty, "freight_cost": fr, "other_costs": oc, "total_price": tp,
+                "price_notes": notes})
+    return out
+
+
 def _date(v) -> Optional[datetime]:
     if not v:
         return None
@@ -152,6 +194,7 @@ async def intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, offe
                        preexisting: bool = False) -> tuple[RFQOffer, OfferReview]:
     from services.rfq_classifier import extract_offer_fields, _comparability
     extracted = await asyncio.to_thread(extract_offer_fields, offer_text) if offer_text else {}
+    extracted = reconcile_prices(extracted, offer_text or "")
 
     previous = (await db.execute(select(RFQOffer).where(
         RFQOffer.rfq_id == rfq.id, RFQOffer.supplier_candidate_id == cand.id, RFQOffer.status == OfferStatus.submitted,
@@ -166,7 +209,7 @@ async def intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, offe
         delivery_date=(str(extracted["delivery_date"])[:100] if extracted.get("delivery_date") else None),
         payment_terms=extracted.get("payment_terms"), offer_validity_until=_date(extracted.get("offer_validity_until")),
         scope_note=extracted.get("scope_note"), spec_confirmed=extracted.get("spec_confirmed"),
-        raw_extracted_json={**{k: (str(v) if v is not None else None) for k, v in extracted.items()}, "channel": channel},
+        raw_extracted_json={**{k: (v if isinstance(v, list) or v is None else str(v)) for k, v in extracted.items()}, "channel": channel},
         created_by=str(actor),
     )
     flag, note = _comparability(offer.quantity, rfq.expected_quantity, offer.scope_note, offer.spec_confirmed)
@@ -195,6 +238,10 @@ async def intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, offe
 
     project = await project_for_rfq(db, rfq)
     review = await run_review(db, offer, project, offer_text, actor)
+    if extracted.get("price_notes"):
+        review.findings_json = list(review.findings_json or []) + [
+            {"code": "price_extraction", "source": "regel", "severity": "info", "message": n, "quote": None}
+            for n in extracted["price_notes"]]
 
     if project:
         from services.projects import add_event

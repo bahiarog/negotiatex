@@ -119,7 +119,7 @@ async def upload_invoice(file: UploadFile = File(...), db: AsyncSession = Depend
             user_content = [{"type": "text", "text": f"Dokumenttext:\n\n{text[:12000]}\n\nExtrahiere die Rechnungsdaten gemäß Systemanweisung."}]
 
         response = client.messages.create(
-            model="claude-sonnet-5", max_tokens=1536,
+            model="claude-sonnet-5", max_tokens=1536, thinking={"type": "disabled"},
             system=EXTRACTION_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_content}],
         )

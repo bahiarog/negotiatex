@@ -57,6 +57,7 @@ Respond ONLY with JSON:
         resp = client.messages.create(
             model=MODEL,
             max_tokens=300,
+            thinking={"type": "disabled"},
             messages=[{"role": "user", "content": prompt}]
         )
         text = resp.content[0].text.strip()

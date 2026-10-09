@@ -243,6 +243,7 @@ async def extract_supplier_data(file: UploadFile = File(...)):
         response = client.messages.create(
             model="claude-sonnet-5",
             max_tokens=1024,
+            thinking={"type": "disabled"},
             system=EXTRACTION_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_content}],
         )
