@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NegotiateX.ai — Stammdaten hinterlegen</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/theme.css">
+<style>
+body{font-family:'DM Sans',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:48px 24px}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:40px;width:100%;max-width:560px;box-shadow:0 20px 48px rgba(22,32,28,0.06)}
+.logo{font-family:'Playfair Display',serif;font-size:20px;font-weight:700;margin-bottom:20px}
+.logo span{color:var(--gold)}
+h1{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;margin-bottom:4px}
+.sub{font-size:13px;color:var(--text-muted);margin-bottom:28px}
+.f{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;font-family:'DM Mono',monospace}
+input,textarea{background:#fbfbfa;border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;width:100%;outline:none;transition:border .15s;font-family:'DM Sans',sans-serif}
+input:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim)}
+.compliance{background:var(--bg-card2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-top:20px;display:flex;gap:10px;align-items:flex-start}
+.compliance input{width:auto;margin-top:2px}
+.compliance p{font-size:12px;color:var(--text);line-height:1.6;margin:0}
+.btn{padding:14px 20px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;width:100%;margin-top:20px;background:var(--gold);color:var(--on-accent)}
+.btn:hover{background:var(--gold-light)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.msg{padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none}
+.msg.ok{background:var(--gold-dim);border:1px solid var(--gold-border);color:#1D9E75;display:block}
+.msg.err{background:rgba(216,90,48,.08);border:1px solid rgba(216,90,48,.28);color:#B03E1E;display:block}
+#wrap-invalid,#wrap-done{display:none;text-align:center}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">Negotiate<span>X</span>.ai</div>
+
+  <div id="wrap-loading"><p class="sub">Lädt …</p></div>
+
+  <div id="wrap-invalid">
+    <h1>Link ungültig</h1>
+    <p class="sub" id="invalid-reason">Dieser Link ist nicht mehr gültig oder wurde bereits verwendet. Bitte wenden Sie sich an Ihren Ansprechpartner bei NegotiateX für einen neuen Link.</p>
+  </div>
+
+  <div id="wrap-done">
+    <h1>Vielen Dank!</h1>
+    <p class="sub">Ihre Angaben wurden übermittelt und werden nun geprüft.</p>
+  </div>
+
+  <div id="wrap-form" style="display:none">
+    <h1 id="form-title">Unternehmensdaten hinterlegen</h1>
+    <p class="sub">Bitte füllen Sie die folgenden Felder aus. Das dauert etwa 5 Minuten. Bankdaten werden hier bewusst nicht abgefragt.</p>
+    <div class="msg" id="msg"></div>
+    <div id="fields"></div>
+
+    <div class="compliance">
+      <input type="checkbox" id="f-confirm">
+      <p>Ich versichere hiermit, dass die oben gemachten Angaben korrekt und vollständig sind, und dass ich berechtigt bin, diese Angaben im Namen des genannten Unternehmens zu übermitteln.</p>
+    </div>
+    <div class="f" style="margin-top:14px"><label>Ihr Name (zur Bestätigung) *</label><input id="f-confirmname" placeholder="Vor- und Nachname"></div>
+
+    <button class="btn" id="submit-btn" onclick="submitForm()">Angaben übermitteln</button>
+  </div>
+</div>
+<script>
+const token = new URLSearchParams(location.search).get('token');
+const wrapLoading = document.getElementById('wrap-loading');
+const wrapInvalid = document.getElementById('wrap-invalid');
+const wrapForm = document.getElementById('wrap-form');
+const wrapDone = document.getElementById('wrap-done');
+let fieldKeys = [];
+
+function showMsg(text, type) { const m = document.getElementById('msg'); m.textContent = text; m.className = 'msg ' + type; }
+function esc(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+(async function init() {
+  if (!token) { wrapLoading.style.display = 'none'; wrapInvalid.style.display = 'block'; return; }
+  try {
+    const res = await fetch(`/api/v1/sourcing/onboarding/status?token=${encodeURIComponent(token)}`);
+    const data = await res.json();
+    if (!res.ok) {
+      document.getElementById('invalid-reason').textContent = data.detail || 'Dieser Link ist nicht mehr gültig.';
+      wrapLoading.style.display = 'none'; wrapInvalid.style.display = 'block'; return;
+    }
+    if (data.company_name) document.getElementById('form-title').textContent = `Unternehmensdaten hinterlegen — ${data.company_name}`;
+    fieldKeys = Object.keys(data.fields || {});
+    document.getElementById('fields').innerHTML = fieldKeys.map(k => {
+      const f = data.fields[k];
+      return `<div class="f"><label>${esc(f.label)}</label><input id="field-${esc(k)}" value="${esc(f.current_value || '')}"></div>`;
+    }).join('');
+    wrapLoading.style.display = 'none'; wrapForm.style.display = 'block';
+  } catch (e) {
+    wrapLoading.style.display = 'none'; wrapInvalid.style.display = 'block';
+  }
+})();
+
+async function submitForm() {
+  const confirmed = document.getElementById('f-confirm').checked;
+  const confirmName = document.getElementById('f-confirmname').value.trim();
+  if (!confirmed) { showMsg('Bitte bestätigen Sie die Richtigkeit der Angaben.', 'err'); return; }
+  if (!confirmName) { showMsg('Bitte Ihren Namen zur Bestätigung angeben.', 'err'); return; }
+
+  const fields = {};
+  fieldKeys.forEach(k => { fields[k] = document.getElementById(`field-${k}`).value.trim() || null; });
+
+  const payload = { token, fields, confirmed_accurate: confirmed, confirmed_by_name: confirmName };
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = 'Wird übermittelt…';
+  try {
+    const res = await fetch('/api/v1/sourcing/onboarding/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!res.ok) { showMsg(data.detail || 'Fehler beim Übermitteln.', 'err'); btn.disabled = false; btn.textContent = 'Angaben übermitteln'; return; }
+    wrapForm.style.display = 'none'; wrapDone.style.display = 'block';
+  } catch (e) {
+    showMsg('Netzwerkfehler. Bitte erneut versuchen.', 'err'); btn.disabled = false; btn.textContent = 'Angaben übermitteln';
+  }
+}
+</script>
+<div style="text-align:center;padding:16px;font-size:11px;color:var(--text-dim)"><a href="/privacy" style="color:var(--text-dim);margin-right:12px">Datenschutz</a><a href="/impressum" style="color:var(--text-dim)">Impressum</a></div>
+</body>
+</html>

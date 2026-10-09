@@ -728,7 +728,7 @@ async def _auto_prepare_after_interest(db: AsyncSession, cand: SupplierCandidate
         raw_token = secrets.token_urlsafe(32)
         token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
         db.add(CandidateOnboardingInvite(tenant_id=tenant_id, supplier_candidate_id=cand.id, token_hash=token_hash))
-        link = f"https://negotiatex.ai/supplier-onboarding?token={raw_token}"
+        link = f"https://negotiatex.ai/candidate-onboarding?token={raw_token}"
         db.add(OutreachAction(
             tenant_id=tenant_id, supplier_candidate_id=cand.id, kind="stammdaten_invite",
             recipient_email=cand.contact_email,
