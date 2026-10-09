@@ -35,7 +35,7 @@ async def _excel(path):
 
 async def _csv(path):
     import pandas as pd
-    df = pd.read_csv(path, encoding="utf-8", errors="replace")
+    df = pd.read_csv(path, encoding="utf-8", encoding_errors="replace")
     return df.to_string(index=False)
 
 async def _docx(path):

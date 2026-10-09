@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NegotiateX.ai — Master Data Center</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/theme.css">
+<style>
+:root{--hh:56px}
+body{font-size:14px;line-height:1.5}
+header{position:fixed;top:0;left:0;right:0;z-index:300;height:var(--hh);background:rgba(247,246,241,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:10px}
+.logo{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--text);text-decoration:none;flex-shrink:0}
+.logo em{color:var(--gold);font-style:normal}
+.hdr-sep{width:1px;height:20px;background:var(--border)}
+.hdr-pg{font-size:12px;color:var(--text-muted)}
+.hdr-r{margin-left:auto;display:flex;align-items:center;gap:10px}
+.phase-note{font-family:'DM Mono',monospace;font-size:10.5px;color:var(--text-muted);background:var(--bg-card2);border:1px solid var(--border);padding:5px 10px;border-radius:7px;letter-spacing:.3px}
+.h-btn{font-size:12px;color:var(--text-muted);background:transparent;border:1px solid var(--border);padding:5px 11px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;text-decoration:none}
+.h-btn:hover{border-color:var(--gold-border);color:var(--text)}
+main{padding:calc(var(--hh) + 28px) 28px 60px;max-width:1200px;margin:0 auto}
+h1{font-family:'Playfair Display',serif;font-size:26px;font-weight:700;margin-bottom:4px}
+.sub{color:var(--text-muted);font-size:13px;margin-bottom:22px}
+.panel{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px;overflow:hidden;box-shadow:0 20px 48px rgba(22,32,28,0.04)}
+.panel-h{padding:14px 18px;border-bottom:1px solid var(--border);font-size:13px;font-weight:500;display:flex;justify-content:space-between;align-items:center}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:10px 18px;color:var(--text-muted);font-weight:400;font-size:11px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+td{padding:10px 18px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:3px 9px;border-radius:6px;font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.3px}
+.b-uploaded{background:rgba(46,110,181,.1);color:#2E6EB5}
+.b-parsed,.b-extracted,.b-validated{background:var(--gold-dim);color:var(--gold)}
+.b-approved,.b-indexed{background:rgba(29,158,117,.1);color:var(--status-good)}
+.b-needs_review{background:rgba(216,90,48,.1);color:var(--status-bad)}
+.b-rejected{background:rgba(216,90,48,.1);color:var(--status-bad)}
+.b-superseded{background:var(--bg-card2);color:var(--text-dim)}
+.mono{font-family:'DM Mono',monospace}
+.empty{padding:28px 18px;color:var(--text-muted);font-size:13px;text-align:center}
+.loading{padding:40px;text-align:center;color:var(--text-muted)}
+.formgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;padding:14px 18px}
+.formgrid input,.formgrid select,.formgrid textarea{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'DM Sans',sans-serif}
+.btn{font-size:12px;border:1px solid var(--border);background:var(--bg-card2);padding:6px 12px;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif}
+.btn:hover{border-color:var(--gold-border)}
+.btn.primary{background:var(--gold);color:#fff;border:none}
+.row-actions{display:flex;gap:8px;padding:14px 18px;flex-wrap:wrap}
+.disclaimer{font-size:11.5px;color:var(--text-dim);padding:12px 18px;border-top:1px dashed var(--border)}
+.ver-list{list-style:none;padding:0;margin:0;font-size:12.5px}
+.ver-list li{padding:8px 18px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:10px;align-items:center}
+.back{display:inline-block;margin-bottom:14px;color:var(--text-muted);font-size:12px;text-decoration:none;cursor:pointer}
+.back:hover{color:var(--text)}
+pre.textpreview{white-space:pre-wrap;font-family:'DM Mono',monospace;font-size:11.5px;padding:14px 18px;max-height:320px;overflow:auto;margin:0}
+</style>
+</head>
+<body>
+<header>
+  <a class="logo" href="/dashboard"><em>Negotiate</em>X.ai</a>
+  <div class="hdr-sep"></div>
+  <span class="hdr-pg">Master Data Center — Etappe 1 (Datenkern)</span>
+  <div class="hdr-r">
+    <span class="phase-note">Nur Dummy-/Testdaten · keine Preisanalytik/RAG (Etappe 2-3 folgen)</span>
+    <a class="h-btn" href="/dashboard">Zurueck zum Dashboard</a>
+  </div>
+</header>
+<main id="app"><div class="loading">Lade...</div></main>
+
+<script>
+const token = localStorage.getItem('nx_token');
+const user  = JSON.parse(localStorage.getItem('nx_user') || 'null');
+if (!token || !user) location.href = '/login';
+
+const API = '/api/v1/mdc';
+const app = document.getElementById('app');
+
+async function api(path, opts) {
+  const res = await fetch(API + path, { ...opts, headers: { 'Authorization': 'Bearer ' + token, ...(opts && opts.headers || {}) } });
+  if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.detail || ('HTTP ' + res.status)); }
+  return res.json();
+}
+function postJson(path, body) { return api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }
+
+function esc(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function badge(v){ return `<span class="badge b-${esc(v)}">${esc(v)}</span>`; }
+
+let tenantEnsured = false;
+async function ensureTenant() {
+  if (tenantEnsured) return;
+  const authHeaders = { 'Authorization': 'Bearer ' + token };
+  try { const r = await fetch('/api/v1/tenants/me', { headers: authHeaders }); if (!r.ok) throw new Error('no-membership'); }
+  catch (e) {
+    const companyName = (user && (user.company_name || user.name)) || 'Mein Unternehmen';
+    try { await fetch('/api/v1/tenants', { method: 'POST', headers: { ...authHeaders, 'Content-Type': 'application/json' }, body: JSON.stringify({ company_name: companyName }) }); }
+    catch (e2) {}
+  }
+  tenantEnsured = true;
+}
+
+let categories = [];
+
+async function renderList() {
+  app.innerHTML = '<div class="loading">Lade Dokumenten-Inbox...</div>';
+  let docs = [], cats = [];
+  try { [docs, cats] = await Promise.all([api('/documents'), api('/categories')]); }
+  catch (e) { app.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(e.message)}</div></div>`; return; }
+  categories = cats;
+
+  const catOptions = cats.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  const typeOptions = ['ratecard','price_list','offer','contract','invoice','other'].map(t => `<option value="${t}">${t}</option>`).join('');
+
+  const rows = docs.map(d => {
+    const current = d.versions[d.versions.length - 1];
+    return `<tr class="row" style="cursor:pointer" onclick="location.hash='#doc/${d.id}'">
+      <td>${esc(d.title || '—')}</td>
+      <td class="mono">${esc(d.document_type)}</td>
+      <td class="mono">v${current ? current.version_number : '—'} (${d.versions.length} gesamt)</td>
+      <td>${current ? badge(current.import_status) : '—'}</td>
+      <td class="mono">${current ? new Date(current.created_at).toLocaleString('de-DE') : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  app.innerHTML = `
+    <h1>Master Data Center</h1>
+    <p class="sub">Etappe 1 (Datenkern): Dokumente importieren, hashen, versionieren, Text/Tabellen lesen. Preisanalytik, Review-Freigabe und RAG folgen in Etappe 2/3.</p>
+
+    <div class="panel">
+      <div class="panel-h">Neues Dokument hochladen</div>
+      <div class="formgrid">
+        <input type="file" id="f-file">
+        <select id="f-category"><option value="">Kategorie (optional)</option>${catOptions}</select>
+        <select id="f-type">${typeOptions}</select>
+        <input id="f-supplier" placeholder="Lieferant (optional)">
+        <input id="f-title" placeholder="Titel (optional)">
+        <input id="f-source" placeholder="Quelle (optional)">
+      </div>
+      <div class="row-actions">
+        <button class="btn primary" onclick="doUpload()">Hochladen</button>
+      </div>
+      <div id="upload-msg"></div>
+      <div class="disclaimer">Exakte Duplikate (gleicher Hash, gleicher Mandant) werden erkannt und nicht erneut importiert. Revisionen eines bestehenden Dokuments bitte in der Dokumentenansicht hochladen (ersetzt nichts, versioniert nur).</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h">Dokumenten-Inbox (${docs.length})</div>
+      ${docs.length ? `<table><thead><tr><th>Titel</th><th>Typ</th><th>Version</th><th>Importstatus</th><th>Erstellt</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="empty">Noch keine Dokumente importiert.</div>'}
+    </div>
+
+    <div class="panel">
+      <div class="panel-h">Kategorien (${cats.length})</div>
+      ${cats.length ? `<table><thead><tr><th>Name</th><th>Pflichtmerkmale</th></tr></thead><tbody>${cats.map(c => `<tr><td>${esc(c.name)}</td><td class="mono">${esc(JSON.stringify(c.must_criteria_json))}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">Keine Kategorien angelegt.</div>'}
+    </div>`;
+}
+
+async function doUpload() {
+  const fileInput = document.getElementById('f-file');
+  const msg = document.getElementById('upload-msg');
+  if (!fileInput.files.length) { msg.innerHTML = '<div class="empty">Bitte Datei waehlen.</div>'; return; }
+  const fd = new FormData();
+  fd.append('file', fileInput.files[0]);
+  if (document.getElementById('f-category').value) fd.append('category_id', document.getElementById('f-category').value);
+  fd.append('document_type', document.getElementById('f-type').value);
+  if (document.getElementById('f-supplier').value) fd.append('supplier_name', document.getElementById('f-supplier').value);
+  if (document.getElementById('f-title').value) fd.append('title', document.getElementById('f-title').value);
+  if (document.getElementById('f-source').value) fd.append('source', document.getElementById('f-source').value);
+  msg.innerHTML = '<div class="loading">Lade hoch...</div>';
+  try {
+    const res = await fetch(API + '/documents/upload', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Fehler');
+    msg.innerHTML = data.duplicate ? '<div class="empty">Exaktes Duplikat erkannt -- bereits vorhanden, kein neuer Import.</div>' : '<div class="empty">Importiert.</div>';
+    renderList();
+  } catch (e) { msg.innerHTML = `<div class="empty">Fehler: ${esc(e.message)}</div>`; }
+}
+
+async function renderDocument(id) {
+  app.innerHTML = '<div class="loading">Lade...</div>';
+  let doc;
+  try { doc = await api(`/documents/${id}`); } catch (e) { app.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(e.message)}</div></div>`; return; }
+
+  const versionItems = doc.versions.slice().reverse().map(v => `
+    <li>
+      <div>
+        v${v.version_number} — ${esc(v.file_name)} ${badge(v.import_status)}
+        <div class="mono" style="font-size:11px;color:var(--text-dim)">${new Date(v.created_at).toLocaleString('de-DE')} &middot; ${(v.file_size_bytes/1024).toFixed(1)} KB ${v.source ? '&middot; Quelle: ' + esc(v.source) : ''}</div>
+        ${v.import_error ? `<div style="color:var(--status-bad);font-size:11.5px;margin-top:4px">${esc(v.import_error)}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:8px">
+        <a class="btn" style="text-decoration:none" href="${API}/documents/${doc.id}/versions/${v.id}/download" target="_blank">Original</a>
+        <button class="btn" onclick="showText('${doc.id}','${v.id}')">Text</button>
+      </div>
+    </li>`).join('');
+
+  app.innerHTML = `
+    <a class="back" onclick="location.hash=''">&larr; Zurueck zur Inbox</a>
+    <h1>${esc(doc.title || 'Dokument')}</h1>
+    <p class="sub">Typ: <span class="mono">${esc(doc.document_type)}</span> &middot; erstellt ${new Date(doc.created_at).toLocaleString('de-DE')}</p>
+
+    <div class="panel">
+      <div class="panel-h">Neue Revision hochladen</div>
+      <div class="formgrid"><input type="file" id="rev-file"><input id="rev-source" placeholder="Quelle (optional)"></div>
+      <div class="row-actions"><button class="btn primary" onclick="doRevisionUpload('${doc.id}')">Als neue Version hochladen</button></div>
+      <div id="rev-msg"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-h">Versionen (${doc.versions.length})</div>
+      <ul class="ver-list">${versionItems}</ul>
+    </div>
+
+    <div class="panel" id="text-panel" style="display:none">
+      <div class="panel-h">Extrahierter Text / Beleganker</div>
+      <pre class="textpreview" id="text-content"></pre>
+    </div>`;
+}
+
+async function doRevisionUpload(docId) {
+  const fileInput = document.getElementById('rev-file');
+  const msg = document.getElementById('rev-msg');
+  if (!fileInput.files.length) { msg.innerHTML = '<div class="empty">Bitte Datei waehlen.</div>'; return; }
+  const fd = new FormData();
+  fd.append('file', fileInput.files[0]);
+  fd.append('revision_of_document_id', docId);
+  fd.append('document_type', 'other');
+  if (document.getElementById('rev-source').value) fd.append('source', document.getElementById('rev-source').value);
+  msg.innerHTML = '<div class="loading">Lade hoch...</div>';
+  try {
+    const res = await fetch(API + '/documents/upload', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Fehler');
+    renderDocument(docId);
+  } catch (e) { msg.innerHTML = `<div class="empty">Fehler: ${esc(e.message)}</div>`; }
+}
+
+async function showText(docId, versionId) {
+  const panel = document.getElementById('text-panel');
+  const content = document.getElementById('text-content');
+  panel.style.display = 'block';
+  content.textContent = 'Lade...';
+  try {
+    const data = await api(`/documents/${docId}/versions/${versionId}/text`);
+    content.textContent = data.extracted_text || data.import_error || '(kein Text)';
+  } catch (e) { content.textContent = 'Fehler: ' + e.message; }
+}
+
+async function route() {
+  await ensureTenant();
+  const hash = location.hash;
+  try {
+    if (hash.startsWith('#doc/')) await renderDocument(hash.slice(5));
+    else await renderList();
+  } catch (e) { app.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(e.message)}</div></div>`; }
+}
+window.addEventListener('hashchange', route);
+route();
+</script>
+</body>
+</html>

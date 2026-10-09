@@ -4,21 +4,22 @@ from contextlib import asynccontextmanager
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from database import engine, Base
+from database import engine, admin_engine, Base
 import models_v2  # noqa: F401 -- registers Phase 1 tables (tenants, cases, documents, ...) on Base.metadata
 import models_requisitions  # noqa: F401 -- registers requisition/approval tables on Base.metadata
 import models_invoices  # noqa: F401 -- registers invoice/line-item tables on Base.metadata
 import models_negotiation  # noqa: F401 -- registers Teil A negotiation tables on Base.metadata
 import models_sourcing  # noqa: F401 -- registers Teil B sourcing/outreach/NDA tables on Base.metadata
 import models_contracts  # noqa: F401 -- registers Teil B7-B9 RFQ/offer/contract tables on Base.metadata
-from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers, chat, requisitions, invoices, negotiation, sourcing, agent_overview
+import models_mdc  # noqa: F401 -- registers Master Data Center (Etappe 1) tables on Base.metadata
+from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers, chat, requisitions, invoices, negotiation, sourcing, agent_overview, mdc
 from routers.rfq_contracts import rfq_router, contracts_router
 
 limiter = Limiter(key_func=get_remote_address)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
+    async with admin_engine.begin() as conn:  # Teil C: create_all braucht CREATE-Rechte, die negotiatex_app bewusst nicht hat
         await conn.run_sync(Base.metadata.create_all)
     from services.autonomous_agent import start_scheduler
     scheduler = start_scheduler()
@@ -62,6 +63,7 @@ app.include_router(sourcing.router, prefix="/api/v1/sourcing", tags=["Teil B - S
 app.include_router(rfq_router, prefix="/api/v1/rfq", tags=["Teil B7-B8 - RFQ & Angebote"])
 app.include_router(contracts_router, prefix="/api/v1/contracts", tags=["Teil B9 - Vertraege"])
 app.include_router(agent_overview.router, prefix="/api/v1/agent", tags=["Agent-Uebersicht (Freigaben & Aktivitaet)"])
+app.include_router(mdc.router, prefix="/api/v1/mdc", tags=["Master Data Center (Etappe 1)"])
 
 @app.get("/health")
 async def health_root():
