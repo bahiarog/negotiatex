@@ -8,7 +8,8 @@ from database import engine, Base
 import models_v2  # noqa: F401 -- registers Phase 1 tables (tenants, cases, documents, ...) on Base.metadata
 import models_requisitions  # noqa: F401 -- registers requisition/approval tables on Base.metadata
 import models_invoices  # noqa: F401 -- registers invoice/line-item tables on Base.metadata
-from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers, chat, requisitions, invoices
+import models_negotiation  # noqa: F401 -- registers Teil A negotiation tables on Base.metadata
+from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers, chat, requisitions, invoices, negotiation
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -18,6 +19,8 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     from services.autonomous_agent import start_scheduler
     scheduler = start_scheduler()
+    from services.email_poller import register_negotiation_jobs
+    register_negotiation_jobs(scheduler)
     yield
     scheduler.shutdown(wait=False)
 
@@ -51,6 +54,7 @@ app.include_router(invoices.router, prefix="/api/invoices", tags=["Invoices"])
 app.include_router(tenants.router, prefix="/api/v1", tags=["Phase 1 - Tenants"])
 app.include_router(cases.router, prefix="/api/v1", tags=["Phase 1 - Cases"])
 app.include_router(policies.router, prefix="/api/v1", tags=["Phase 1 - Policies"])
+app.include_router(negotiation.router, prefix="/api/v1/negotiation", tags=["Teil A - Negotiation"])
 
 @app.get("/health")
 async def health_root():
