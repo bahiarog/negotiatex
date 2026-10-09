@@ -1,22 +1,25 @@
 """
-Master Data Center (Etappe 1 -- Datenkern): Kategorie/Spezifikation,
-Lieferanten-Identitaet, Originaldokumente und versionierte Dokumentfassungen
-mit Beleganker (Seiten-/Tabellentext aus services/pdf_parser).
+Master Data Center -- Etappe 1 (Datenkern) + Etappe 2 (pruefbare Preise).
 
-Bewusst NICHT Teil von Etappe 1 (folgt in Etappe 2/3, siehe Anleitung
-"Master Data Center, Preisanalytik und RAG", Abschnitt 16):
-  - price_observation/line_item (strukturierte Preispositionen)
-  - field_evidence/review (Review-Queue mit Feldfreigabe)
+Etappe 1: Kategorie/Spezifikation, Lieferanten-Identitaet, Originaldokumente
+und versionierte Dokumentfassungen mit Beleganker (Seiten-/Tabellentext aus
+services/pdf_parser).
+
+Etappe 2: MDCLineItem -- strukturierte Preispositionen je Dokumentversion.
+field_evidence/review aus der Anleitung (Abschnitt 05) ist hier bewusst
+NICHT als eigene Tabelle umgesetzt, sondern als source_evidence/open_issues
+je Zeile vereinfacht (MVP-Entscheidung, siehe Bericht) -- eine separate
+Feld-fuer-Feld-Historie mit Transformationsschritten kann spaeter ergaenzt
+werden, ohne das Grundschema zu aendern.
+
+Bewusst NICHT Teil von Etappe 1/2 (folgt in Etappe 3):
   - retrieval_chunk (pgvector-Embeddings)
-  - analysis_snapshot (Vergleichsergebnisse)
-Etappe 1 liefert den Unterbau dafuer: Originale sicher gespeichert, Hash-
-basierte Duplikaterkennung pro Mandant, Versionierung statt stillem
-Ueberschreiben, Rechte-/Quellenvermerk je Version.
+  - analysis_snapshot (Vergleichsergebnisse, Agenten-Tools wie compare_offer)
 """
 import enum
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, func
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 
@@ -42,6 +45,39 @@ class MDCDocumentType(str, enum.Enum):
     contract = "contract"
     invoice = "invoice"
     other = "other"
+
+
+class MDCTaxBasis(str, enum.Enum):
+    net = "net"
+    gross = "gross"
+    unknown = "unknown"
+
+
+class MDCAncillaryCostStatus(str, enum.Enum):
+    inclusive = "inclusive"
+    exclusive = "exclusive"
+    unknown = "unknown"
+
+
+class MDCPriceStatus(str, enum.Enum):
+    """Anleitung Abschnitt 06 'Status': list_price, quoted, negotiated_quote,
+    contracted, invoiced -- getrennt vom Pruef-/Freigabestatus review_status."""
+    list_price = "list_price"
+    quoted = "quoted"
+    negotiated_quote = "negotiated_quote"
+    contracted = "contracted"
+    invoiced = "invoiced"
+
+
+class MDCReviewStatus(str, enum.Enum):
+    """Qualitaetsstatus (Anleitung Abschnitt 06): EXTRACTED -> NEEDS_REVIEW
+    oder direkt -> APPROVED/REJECTED. Nur APPROVED fliesst in automatisierte
+    Preisvergleiche ein (Etappe 3)."""
+    extracted = "extracted"
+    needs_review = "needs_review"
+    approved = "approved"
+    rejected = "rejected"
+    superseded = "superseded"
 
 
 class MDCCategory(Base):
@@ -116,3 +152,58 @@ class MDCDocumentVersion(Base):
 
     created_by = Column(String(100), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class MDCLineItem(Base):
+    """Eine Preisbeobachtung (price_observation + line_item der Anleitung,
+    in einer Tabelle). original_amount/original_currency bleiben immer die
+    unveraenderte Quellenangabe; Normalisierungen (Netto, Tag->Stunde)
+    werden nur bei belegter Grundlage berechnet, sonst NULL."""
+    __tablename__ = "mdc_line_items"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_version_id = Column(UUID(as_uuid=True), ForeignKey("mdc_document_versions.id", ondelete="CASCADE"), nullable=False, index=True)
+    category_id = Column(UUID(as_uuid=True), ForeignKey("mdc_categories.id", ondelete="SET NULL"), nullable=True, index=True)
+    supplier_id = Column(UUID(as_uuid=True), ForeignKey("mdc_suppliers.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    role_or_item = Column(String(255), nullable=True)
+    scope_text = Column(Text, nullable=True)
+    seniority = Column(String(100), nullable=True)
+    region = Column(String(100), nullable=True)
+
+    original_amount = Column(Numeric(18, 4), nullable=True)
+    original_amount_raw = Column(String(100), nullable=True)  # exakt wie im Dokument, fuer Komma/Punkt-Pruefung
+    amount_confirmed = Column(Boolean, default=False, nullable=False)  # Mensch hat Betrag gegen Original bestaetigt
+    original_currency = Column(String(10), nullable=True)
+    tax_basis = Column(SAEnum(MDCTaxBasis, name="mdc_tax_basis"), default=MDCTaxBasis.unknown, nullable=False)
+    tax_rate_pct = Column(Numeric(5, 2), nullable=True)
+    normalized_amount_net = Column(Numeric(18, 4), nullable=True)
+    normalization_version = Column(String(50), nullable=True)
+
+    original_unit = Column(String(50), nullable=True)
+    canonical_unit = Column(String(50), nullable=True)
+    quantity = Column(Numeric(18, 4), nullable=True)
+    min_quantity = Column(Numeric(18, 4), nullable=True)
+    billable_hours_per_day = Column(Numeric(6, 2), nullable=True)
+    normalized_amount_per_canonical_unit = Column(Numeric(18, 4), nullable=True)
+
+    ancillary_costs_json = Column(JSON, default=dict)
+    payment_terms = Column(String(255), nullable=True)
+
+    price_status = Column(SAEnum(MDCPriceStatus, name="mdc_price_status"), default=MDCPriceStatus.quoted, nullable=False)
+    review_status = Column(SAEnum(MDCReviewStatus, name="mdc_review_status"), default=MDCReviewStatus.extracted, nullable=False)
+    open_issues_json = Column(JSON, default=list)
+
+    offer_date = Column(Date, nullable=True)
+    valid_from = Column(Date, nullable=True)
+    valid_to = Column(Date, nullable=True)
+
+    source_evidence = Column(Text, nullable=True)
+    reviewed_by = Column(String(100), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    review_note = Column(Text, nullable=True)
+    superseded_by_line_item_id = Column(UUID(as_uuid=True), ForeignKey("mdc_line_items.id", ondelete="SET NULL"), nullable=True)
+
+    created_by = Column(String(100), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

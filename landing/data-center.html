@@ -50,15 +50,31 @@ tr:last-child td{border-bottom:none}
 .back{display:inline-block;margin-bottom:14px;color:var(--text-muted);font-size:12px;text-decoration:none;cursor:pointer}
 .back:hover{color:var(--text)}
 pre.textpreview{white-space:pre-wrap;font-family:'DM Mono',monospace;font-size:11.5px;padding:14px 18px;max-height:320px;overflow:auto;margin:0}
+.review-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+@media(max-width:900px){.review-grid{grid-template-columns:1fr}main{padding-left:16px;padding-right:16px}}
+.review-grid pre.textpreview{max-height:620px}
+mark{background:var(--gold-dim);color:var(--text);padding:1px 0;border-radius:2px}
+.issues{list-style:none;padding:10px 18px;margin:0;font-size:12.5px}
+.issues li{padding:5px 0}
+.issues li.block{color:var(--status-bad)}
+.issues li.hint{color:var(--text-muted)}
+.fieldgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 18px}
+.fieldgrid label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--text-muted);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.4px}
+.fieldgrid input,.fieldgrid select{padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'DM Sans',sans-serif;text-transform:none;letter-spacing:0;color:var(--text)}
+.fieldgrid .full{grid-column:1/-1}
+.nav-tabs{display:flex;gap:8px;margin-bottom:18px}
+.nav-tabs a{font-size:12.5px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;text-decoration:none;color:var(--text-muted)}
+.nav-tabs a.on{border-color:var(--gold-border);color:var(--text);background:var(--bg-card)}
+td.num{font-family:'DM Mono',monospace;white-space:nowrap}
 </style>
 </head>
 <body>
 <header>
   <a class="logo" href="/dashboard"><em>Negotiate</em>X.ai</a>
   <div class="hdr-sep"></div>
-  <span class="hdr-pg">Master Data Center — Etappe 1 (Datenkern)</span>
+  <span class="hdr-pg">Master Data Center — Datenkern &amp; pruefbare Preise</span>
   <div class="hdr-r">
-    <span class="phase-note">Nur Dummy-/Testdaten · keine Preisanalytik/RAG (Etappe 2-3 folgen)</span>
+    <span class="phase-note">Nur Dummy-/Testdaten · Preisanalytik/RAG folgen (Etappe 3)</span>
     <a class="h-btn" href="/dashboard">Zurueck zum Dashboard</a>
   </div>
 </header>
@@ -74,10 +90,22 @@ const app = document.getElementById('app');
 
 async function api(path, opts) {
   const res = await fetch(API + path, { ...opts, headers: { 'Authorization': 'Bearer ' + token, ...(opts && opts.headers || {}) } });
-  if (!res.ok) { const body = await res.json().catch(() => ({})); throw new Error(body.detail || ('HTTP ' + res.status)); }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const d = body.detail;
+    const msg = d && typeof d === 'object' ? [d.message, ...(d.blocking_issues || [])].filter(Boolean).join(' — ') : d;
+    throw new Error(msg || ('HTTP ' + res.status));
+  }
   return res.json();
 }
 function postJson(path, body) { return api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }
+function putJson(path, body) { return api(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); }
+function tabs(active) {
+  return `<div class="nav-tabs"><a href="#inbox" class="${active==='inbox'?'on':''}">Dokumenten-Inbox</a><a href="#review" class="${active==='review'?'on':''}">Review-Queue</a></div>`;
+}
+const STATUS_LABELS = { extracted: 'vorgeschlagen', needs_review: 'Pruefung noetig', approved: 'freigegeben', rejected: 'abgelehnt', superseded: 'ersetzt' };
+function rbadge(s) { return `<span class="badge b-${esc(s)}">${esc(STATUS_LABELS[s] || s)}</span>`; }
+function fmtAmount(v, cur) { return v == null ? '—' : Number(v).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ' + esc(cur || ''); }
 
 function esc(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function badge(v){ return `<span class="badge b-${esc(v)}">${esc(v)}</span>`; }
@@ -120,7 +148,8 @@ async function renderList() {
 
   app.innerHTML = `
     <h1>Master Data Center</h1>
-    <p class="sub">Etappe 1 (Datenkern): Dokumente importieren, hashen, versionieren, Text/Tabellen lesen. Preisanalytik, Review-Freigabe und RAG folgen in Etappe 2/3.</p>
+    <p class="sub">Dokumente importieren, versionieren und Preispositionen pruefen. Nur freigegebene Positionen fliessen spaeter in Preisvergleiche ein (Etappe 3).</p>
+    ${tabs('inbox')}
 
     <div class="panel">
       <div class="panel-h">Neues Dokument hochladen</div>
@@ -206,10 +235,209 @@ async function renderDocument(id) {
       <ul class="ver-list">${versionItems}</ul>
     </div>
 
+    <div class="panel" id="items-panel"><div class="loading">Lade Preispositionen...</div></div>
+
     <div class="panel" id="text-panel" style="display:none">
       <div class="panel-h">Extrahierter Text / Beleganker</div>
       <pre class="textpreview" id="text-content"></pre>
     </div>`;
+
+  const current = doc.versions[doc.versions.length - 1];
+  if (current) loadVersionItems(doc.id, current);
+}
+
+async function loadVersionItems(docId, version) {
+  const panel = document.getElementById('items-panel');
+  let items = [];
+  try { items = await api(`/documents/${docId}/versions/${version.id}/line-items`); }
+  catch (e) { panel.innerHTML = `<div class="empty">Fehler: ${esc(e.message)}</div>`; return; }
+
+  const head = `<div class="panel-h">Preispositionen — Version ${version.version_number}</div>`;
+  if (!items.length) {
+    const canExtract = version.import_status !== 'superseded' && version.import_status !== 'uploaded';
+    panel.innerHTML = head + `<div class="empty">Noch keine Positionen extrahiert.</div>` +
+      (canExtract ? `<div class="row-actions"><button class="btn primary" id="extract-btn" onclick="doExtract('${docId}','${version.id}')">Preispositionen extrahieren</button></div>
+      <div class="disclaimer">Die KI schlaegt Positionen nur vor. Jede Position wird anschliessend deterministisch geprueft (Betrag, Einheit, Steuerbasis, Beleg) und muss von einem Menschen freigegeben werden.</div>` : '');
+    return;
+  }
+  const rows = items.map(i => {
+    const blocking = (i.open_issues_json || []).filter(x => x.blocking).length;
+    const hints = (i.open_issues_json || []).length - blocking;
+    return `<tr class="row" style="cursor:pointer" onclick="location.hash='#item/${i.id}'">
+      <td>${esc(i.role_or_item || '—')}<div class="mono" style="font-size:11px;color:var(--text-dim)">${esc([i.seniority, i.region].filter(Boolean).join(' · '))}</div></td>
+      <td class="num">${fmtAmount(i.original_amount, i.original_currency)} / ${esc(i.original_unit || '?')}</td>
+      <td class="mono">${esc(i.tax_basis)}</td>
+      <td class="num">${i.normalized_amount_per_canonical_unit != null ? fmtAmount(i.normalized_amount_per_canonical_unit, i.original_currency) + ' / ' + esc(i.canonical_unit) : '—'}</td>
+      <td>${rbadge(i.review_status)}</td>
+      <td style="font-size:12px">${blocking ? `<span style="color:var(--status-bad)">${blocking} blockierend</span>` : ''}${blocking && hints ? ' · ' : ''}${hints ? `<span style="color:var(--text-muted)">${hints} Hinweis${hints > 1 ? 'e' : ''}</span>` : ''}</td>
+    </tr>`;
+  }).join('');
+  panel.innerHTML = head + `<table><thead><tr><th>Rolle / Artikel</th><th>Original</th><th>Steuer</th><th>Normalisiert (netto)</th><th>Status</th><th>Offene Punkte</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+async function doExtract(docId, versionId) {
+  const btn = document.getElementById('extract-btn');
+  btn.disabled = true; btn.textContent = 'Extrahiere... (kann bis zu einer Minute dauern)';
+  try { await postJson(`/documents/${docId}/versions/${versionId}/extract-lines`, {}); renderDocument(docId); }
+  catch (e) { btn.disabled = false; btn.textContent = 'Preispositionen extrahieren'; alert(e.message); }
+}
+
+async function renderReviewQueue() {
+  app.innerHTML = '<div class="loading">Lade Review-Queue...</div>';
+  let items = [];
+  try { items = await api('/line-items'); }
+  catch (e) { app.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(e.message)}</div></div>`; return; }
+  const sorted = items.sort((a, b) => (b.review_status === 'needs_review') - (a.review_status === 'needs_review'));
+  const rows = sorted.map(i => {
+    const blocking = (i.open_issues_json || []).filter(x => x.blocking);
+    return `<tr class="row" style="cursor:pointer" onclick="location.hash='#item/${i.id}'">
+      <td>${esc(i.role_or_item || '—')}<div class="mono" style="font-size:11px;color:var(--text-dim)">${esc(i.document_title || '')} · v${i.version_number}</div></td>
+      <td class="num">${fmtAmount(i.original_amount, i.original_currency)} / ${esc(i.original_unit || '?')}</td>
+      <td>${rbadge(i.review_status)}</td>
+      <td style="font-size:12px;color:var(--status-bad)">${blocking.map(b => esc(b.message)).join('<br>') || '<span style="color:var(--text-muted)">keine blockierenden Punkte</span>'}</td>
+    </tr>`;
+  }).join('');
+  app.innerHTML = `
+    <h1>Review-Queue</h1>
+    <p class="sub">Vorgeschlagene Preispositionen, die auf eine menschliche Entscheidung warten. Positionen mit blockierenden Punkten koennen erst nach Klaerung freigegeben werden.</p>
+    ${tabs('review')}
+    <div class="panel">
+      <div class="panel-h">Offen (${items.length})</div>
+      ${items.length ? `<table><thead><tr><th>Position</th><th>Original</th><th>Status</th><th>Blockierend</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="empty">Keine offenen Positionen.</div>'}
+    </div>`;
+}
+
+function highlightEvidence(text, evidence) {
+  const safe = esc(text || '');
+  const ev = (evidence || '').trim();
+  if (!ev) return safe;
+  const safeEv = esc(ev);
+  const idx = safe.indexOf(safeEv);
+  if (idx === -1) return safe;
+  return safe.slice(0, idx) + '<mark id="ev-mark">' + safeEv + '</mark>' + safe.slice(idx + safeEv.length);
+}
+
+const ANC_LABELS = { fracht: 'Fracht', setup: 'Setup', reise: 'Reise', mindesthonorar: 'Mindesthonorar' };
+
+async function renderItem(id) {
+  app.innerHTML = '<div class="loading">Lade Position...</div>';
+  let i;
+  try { i = await api(`/line-items/${id}`); }
+  catch (e) { app.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(e.message)}</div></div>`; return; }
+
+  const editable = i.review_status !== 'superseded';
+  const decidable = i.review_status === 'extracted' || i.review_status === 'needs_review';
+  const issues = (i.open_issues_json || []).map(x => `<li class="${x.blocking ? 'block' : 'hint'}">${x.blocking ? 'Blockierend: ' : 'Hinweis: '}${esc(x.message)}</li>`).join('');
+  const field = (key, label, val, extra = '') => `<label>${label}<input id="fi-${key}" value="${esc(val ?? '')}" ${editable ? '' : 'disabled'} ${extra}></label>`;
+  const select = (key, label, val, opts) => `<label>${label}<select id="fi-${key}" ${editable ? '' : 'disabled'}>${opts.map(o => `<option value="${o}" ${o === val ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`;
+  const anc = i.ancillary_costs_json || {};
+  const ancFields = Object.keys(ANC_LABELS).map(k => select(`anc-${k}`, ANC_LABELS[k], (anc[k] || {}).status || 'unknown', ['inclusive', 'exclusive', 'unknown'])).join('');
+
+  app.innerHTML = `
+    <a class="back" onclick="history.back()">&larr; Zurueck</a>
+    <h1>${esc(i.role_or_item || 'Position')}</h1>
+    <p class="sub">${rbadge(i.review_status)} &middot; Version ${i.version_number} &middot; Preisstatus <span class="mono">${esc(i.price_status)}</span>
+      ${i.reviewed_by ? ` &middot; entschieden ${new Date(i.reviewed_at).toLocaleString('de-DE')}` : ''}${i.review_note ? ` &middot; Notiz: ${esc(i.review_note)}` : ''}</p>
+    <div class="review-grid">
+      <div class="panel">
+        <div class="panel-h">Original (Beleg markiert)</div>
+        <pre class="textpreview">${highlightEvidence(i.source_text, i.source_evidence)}</pre>
+        <div style="padding:0 18px 14px"><a class="btn" style="text-decoration:none" href="#doc/${i.document_id}">Zum Dokument</a></div>
+      </div>
+      <div>
+        <div class="panel">
+          <div class="panel-h">Pruefergebnis</div>
+          ${issues ? `<ul class="issues">${issues}</ul>` : '<div class="empty">Keine offenen Punkte.</div>'}
+          <div class="disclaimer">Normalisiert: ${i.normalized_amount_per_canonical_unit != null ? fmtAmount(i.normalized_amount_per_canonical_unit, i.original_currency) + ' netto / ' + esc(i.canonical_unit) : 'nicht berechenbar'} (Regelwerk ${esc(i.normalization_version || '—')})</div>
+        </div>
+        <div class="panel">
+          <div class="panel-h">Extrahierte Felder</div>
+          <div class="fieldgrid">
+            ${field('role_or_item', 'Rolle / Artikel', i.role_or_item)}
+            ${field('seniority', 'Senioritaet', i.seniority)}
+            ${field('region', 'Region', i.region)}
+            ${field('original_unit', 'Einheit', i.original_unit)}
+            ${field('original_amount', 'Betrag (Punkt als Dezimaltrenner)', i.original_amount)}
+            <label>Im Dokument<input value="${esc(i.original_amount_raw ?? '')}" disabled></label>
+            ${field('original_currency', 'Waehrung', i.original_currency)}
+            ${select('tax_basis', 'Steuerbasis', i.tax_basis, ['net', 'gross', 'unknown'])}
+            ${field('tax_rate_pct', 'Steuersatz %', i.tax_rate_pct)}
+            ${field('billable_hours_per_day', 'Abrechenbare Std./Tag', i.billable_hours_per_day)}
+            ${field('valid_from', 'Gueltig ab (JJJJ-MM-TT)', i.valid_from)}
+            ${field('valid_to', 'Gueltig bis (JJJJ-MM-TT)', i.valid_to)}
+            ${field('offer_date', 'Angebotsdatum', i.offer_date)}
+            ${select('price_status', 'Preisstatus', i.price_status, ['list_price', 'quoted', 'negotiated_quote', 'contracted', 'invoiced'])}
+            ${ancFields}
+            <label class="full">Belegstelle<input id="fi-source_evidence" value="${esc(i.source_evidence ?? '')}" ${editable ? '' : 'disabled'}></label>
+            <label class="full" style="flex-direction:row;align-items:center;gap:8px;text-transform:none"><input type="checkbox" id="fi-confirm_amount" ${i.amount_confirmed ? 'checked' : ''} ${editable ? '' : 'disabled'} style="width:auto"> Betrag gegen das Original geprueft und bestaetigt</label>
+          </div>
+          ${editable ? `<div class="row-actions">
+            <button class="btn" onclick="saveItem('${i.id}')">Aenderungen speichern</button>
+            ${decidable ? `<button class="btn primary" onclick="decideItem('${i.id}','approve')">Freigeben</button>
+            <button class="btn" onclick="decideItem('${i.id}','reject')">Ablehnen</button>` : ''}
+          </div>` : '<div class="empty">Diese Position wurde durch eine neuere Dokumentversion ersetzt und ist schreibgeschuetzt.</div>'}
+          <div id="item-msg"></div>
+          ${i.review_status === 'approved' || i.review_status === 'rejected' ? '<div class="disclaimer">Jede Aenderung an einer entschiedenen Position hebt die Entscheidung auf -- sie muss danach erneut geprueft werden.</div>' : ''}
+        </div>
+      </div>
+    </div>`;
+  const mark = document.getElementById('ev-mark');
+  if (mark) mark.scrollIntoView({ block: 'center' });
+}
+
+function collectItemChanges(original) {
+  const ids = ['role_or_item', 'seniority', 'region', 'original_unit', 'original_amount', 'original_currency', 'tax_basis', 'tax_rate_pct', 'billable_hours_per_day', 'valid_from', 'valid_to', 'offer_date', 'price_status', 'source_evidence'];
+  const changes = {};
+  ids.forEach(k => {
+    const el = document.getElementById('fi-' + k);
+    const v = el.value.trim();
+    const before = original[k] == null ? '' : String(original[k]);
+    if (v !== before) changes[k] = v === '' ? null : v;
+  });
+  const anc = {};
+  let ancChanged = false;
+  Object.keys(ANC_LABELS).forEach(k => {
+    const v = document.getElementById('fi-anc-' + k).value;
+    const prev = (original.ancillary_costs_json || {})[k] || {};
+    anc[k] = { status: v, amount: prev.amount ?? null };
+    if (v !== (prev.status || 'unknown')) ancChanged = true;
+  });
+  if (ancChanged) changes.ancillary_costs_json = anc;
+  const confirm = document.getElementById('fi-confirm_amount').checked;
+  if (confirm && !original.amount_confirmed) changes.confirm_amount = true;
+  return changes;
+}
+
+async function saveItem(id) {
+  const msg = document.getElementById('item-msg');
+  try {
+    const original = await api(`/line-items/${id}`);
+    const changes = collectItemChanges(original);
+    if (!Object.keys(changes).length) { msg.innerHTML = '<div class="empty">Keine Aenderungen.</div>'; return; }
+    await putJson(`/line-items/${id}`, changes);
+    renderItem(id);
+  } catch (e) { msg.innerHTML = `<div class="empty" style="color:var(--status-bad)">${esc(e.message)}</div>`; }
+}
+
+async function decideItem(id, action) {
+  const msg = document.getElementById('item-msg');
+  try {
+    const original = await api(`/line-items/${id}`);
+    const changes = collectItemChanges(original);
+    if (Object.keys(changes).length) {
+      msg.innerHTML = '<div class="empty" style="color:var(--status-bad)">Es gibt ungespeicherte Aenderungen -- bitte zuerst speichern, damit genau die gepruefte Fassung entschieden wird.</div>';
+      return;
+    }
+    let note = null;
+    if (action === 'reject') {
+      note = prompt('Ablehnungsgrund (Pflicht):');
+      if (!note || !note.trim()) return;
+    } else {
+      note = prompt('Optionale Notiz zur Freigabe:') || null;
+    }
+    await postJson(`/line-items/${id}/${action}`, { note });
+    renderItem(id);
+  } catch (e) { msg.innerHTML = `<div class="empty" style="color:var(--status-bad)">${esc(e.message)}</div>`; }
 }
 
 async function doRevisionUpload(docId) {
@@ -246,6 +474,8 @@ async function route() {
   const hash = location.hash;
   try {
     if (hash.startsWith('#doc/')) await renderDocument(hash.slice(5));
+    else if (hash.startsWith('#item/')) await renderItem(hash.slice(6));
+    else if (hash === '#review') await renderReviewQueue();
     else await renderList();
   } catch (e) { app.innerHTML = `<div class="panel"><div class="empty">Fehler: ${esc(e.message)}</div></div>`; }
 }

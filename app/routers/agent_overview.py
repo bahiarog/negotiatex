@@ -21,6 +21,7 @@ from models_v2 import Case, CaseEvent
 from models_negotiation import NegotiationAction, NegotiationActionStatus, NegotiationException
 from models_sourcing import SupplierCandidate, OutreachAction, OutreachActionStatus, NDA, NDAStatus, NDAEvent
 from models_contracts import RFQAction, RFQActionStatus, ContractAction, ContractActionStatus
+from models_mdc import MDCLineItem, MDCReviewStatus, MDCDocumentVersion, MDCDocument
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -119,6 +120,28 @@ async def agent_overview(membership=Depends(get_current_membership), db: AsyncSe
             "contract", CONTRACT_LABELS.get(a.kind, a.kind), "Vertrag",
             f"An {a.recipient_email}: {(a.rendered_subject or '')[:120]}",
             f"/rfq-dashboard#contract/{a.contract_id}", a.created_at,
+        ))
+
+    # Master Data Center: vorgeschlagene Preispositionen, je Dokumentversion gebuendelt
+    r = await db.execute(select(MDCLineItem, MDCDocumentVersion, MDCDocument).join(
+        MDCDocumentVersion, MDCLineItem.document_version_id == MDCDocumentVersion.id,
+    ).join(MDCDocument, MDCDocumentVersion.document_id == MDCDocument.id).where(
+        MDCLineItem.tenant_id == tid,
+        MDCLineItem.review_status.in_([MDCReviewStatus.extracted, MDCReviewStatus.needs_review]),
+    ))
+    by_version: dict = {}
+    for item, version, doc in r.all():
+        entry = by_version.setdefault(version.id, {"doc": doc, "version": version, "open": 0, "blocked": 0, "latest": item.created_at})
+        entry["open"] += 1
+        if item.review_status == MDCReviewStatus.needs_review:
+            entry["blocked"] += 1
+        if item.created_at and (entry["latest"] is None or item.created_at > entry["latest"]):
+            entry["latest"] = item.created_at
+    for entry in by_version.values():
+        pending.append(_item(
+            "mdc", "Preispositionen pruefen", f"{entry['doc'].title or 'Dokument'} (v{entry['version'].version_number})",
+            f"{entry['open']} offen, davon {entry['blocked']} mit blockierenden Punkten",
+            f"/data-center#doc/{entry['doc'].id}", entry["latest"],
         ))
 
     pending.sort(key=lambda x: x["created_at"] or "", reverse=True)

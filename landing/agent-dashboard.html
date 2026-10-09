@@ -42,6 +42,7 @@ tr:last-child td{border-bottom:none}
 .b-nda{background:rgba(29,158,117,.1);color:var(--status-good)}
 .b-rfq{background:rgba(46,110,181,.1);color:#2E6EB5}
 .b-contract{background:rgba(120,90,200,.12);color:#785AC8}
+.b-mdc{background:rgba(29,158,117,.1);color:var(--status-good)}
 .mono{font-family:'DM Mono',monospace}
 .empty{padding:28px 18px;color:var(--text-muted);font-size:13px;text-align:center}
 .loading{padding:40px;text-align:center;color:var(--text-muted)}
@@ -90,7 +91,7 @@ function fmtWhen(iso){ return iso ? new Date(iso).toLocaleString('de-DE') : '—
 
 const CATEGORY_LABELS = {
   negotiation: 'Verhandlung (Teil A)', exception: 'Ausnahme', outreach: 'Erstkontakt/Sourcing (B4)',
-  nda: 'NDA (B6)', rfq: 'RFQ (B7)', contract: 'Vertrag (B9)',
+  nda: 'NDA (B6)', rfq: 'RFQ (B7)', contract: 'Vertrag (B9)', mdc: 'Data Center',
 };
 
 let tenantEnsured = false;

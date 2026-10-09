@@ -34,9 +34,10 @@ async def _excel(path):
     return "\n\n".join(parts) or "[No data]"
 
 async def _csv(path):
-    import pandas as pd
-    df = pd.read_csv(path, encoding="utf-8", encoding_errors="replace")
-    return df.to_string(index=False)
+    # Rohtext statt pandas: read_csv nimmt eine Titelzeile als Header und verliert dann Spalten.
+    with open(path, encoding="utf-8", errors="replace") as f:
+        lines = [l.rstrip("\r\n") for l in f]
+    return "\n".join(f"Zeile {i}: {l}" for i, l in enumerate(lines, start=1) if l.strip()) or "[No data]"
 
 async def _docx(path):
     from docx import Document
