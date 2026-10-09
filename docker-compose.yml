@@ -1,6 +1,7 @@
 services:
   db:
-    image: postgres:16-alpine
+    build: ./db
+    image: negotiatex-postgres:16-pgvector0.8.0
     container_name: negotiatex-db
     environment:
       POSTGRES_DB: negotiatex

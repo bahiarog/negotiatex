@@ -85,7 +85,7 @@ td.num{font-family:'DM Mono',monospace;white-space:nowrap}
   <div class="hdr-sep"></div>
   <span class="hdr-pg">Master Data Center — Daten, Preispruefung &amp; Angebotsvergleich</span>
   <div class="hdr-r">
-    <span class="phase-note">Nur Dummy-/Testdaten · Vektorsuche noch nicht aktiviert</span>
+    <span class="phase-note">Nur Dummy-/Testdaten · Suche lokal, ohne externe Dienste</span>
     <a class="h-btn" href="/dashboard">Zurueck zum Dashboard</a>
   </div>
 </header>
@@ -653,7 +653,7 @@ async function showEvidence(itemId) {
 function renderSearch() {
   app.innerHTML = `
     <h1>Belegsuche</h1>
-    <p class="sub">Volltextsuche in vollstaendig freigegebenen Dokumenten des eigenen Mandanten. Ungepruefte, abgelehnte oder ersetzte Fassungen werden nicht durchsucht.</p>
+    <p class="sub">Sucht nach Wortlaut und Bedeutung (z.B. findet "Fahrtkosten" auch "Reisekosten") in vollstaendig freigegebenen Dokumenten des eigenen Mandanten. Ungepruefte, abgelehnte oder ersetzte Fassungen werden nicht durchsucht.</p>
     ${tabs('search')}
     <div class="panel">
       <form class="searchbar" onsubmit="event.preventDefault(); doSearch();">
@@ -661,7 +661,7 @@ function renderSearch() {
         <button class="btn primary" type="submit">Suchen</button>
       </form>
       <div id="search-results"></div>
-      <div class="disclaimer">v1 nutzt die PostgreSQL-Volltextsuche (deutsche Wortstaemme). Eine semantische Vektorsuche ist vorbereitet, aber noch nicht aktiviert.</div>
+      <div class="disclaimer">Hybride Suche: PostgreSQL-Volltext plus semantische Naehe ueber ein lokal auf dem Server laufendes Sprachmodell (jina-embeddings-v2-base-de) -- Dokumenttexte verlassen den Server nicht. Semantische Treffer liefern Kontext; fuer den Preisvergleich zaehlen weiterhin nur exakt passende, freigegebene Merkmale.</div>
     </div>`;
 }
 
@@ -671,13 +671,16 @@ async function doSearch() {
   if (!q) return;
   out.innerHTML = '<div class="loading">Suche...</div>';
   try {
-    const hits = await api('/search?q=' + encodeURIComponent(q));
-    if (!hits.length) { out.innerHTML = '<div class="empty">Keine Treffer in freigegebenen Dokumenten.</div>'; return; }
-    out.innerHTML = `<table><thead><tr><th>Dokument</th><th>Stelle</th><th>Auszug</th></tr></thead><tbody>${hits.map(h => `
+    const res = await api('/search?q=' + encodeURIComponent(q));
+    const note = res.semantic_available ? '' : '<div class="disclaimer" style="color:var(--status-bad)">Semantische Suche gerade nicht verfuegbar -- nur Volltext-Treffer.</div>';
+    if (!res.hits.length) { out.innerHTML = note + '<div class="empty">Keine Treffer in freigegebenen Dokumenten.</div>'; return; }
+    const MATCH = { beides: 'Wortlaut + Bedeutung', volltext: 'Wortlaut', semantisch: 'Bedeutung' };
+    out.innerHTML = note + `<table><thead><tr><th>Dokument</th><th>Stelle</th><th>Auszug</th><th>Treffer</th></tr></thead><tbody>${res.hits.map(h => `
       <tr class="row" style="cursor:pointer" onclick="location.hash='#doc/${h.document_id}'">
         <td>${esc(h.document_title || '—')}<div class="mono" style="font-size:11px;color:var(--text-dim)">v${h.version_number}</div></td>
         <td class="mono" style="font-size:11.5px">${esc(h.anchor || '—')}</td>
         <td style="font-size:12.5px;white-space:pre-wrap">${esc(h.snippet).replace(/&lt;&lt;/g, '<mark>').replace(/&gt;&gt;/g, '</mark>')}</td>
+        <td style="font-size:12px;white-space:nowrap">${esc(MATCH[h.match] || h.match)}${h.semantic_similarity != null ? `<div class="mono" style="font-size:11px;color:var(--text-dim)">Naehe ${Number(h.semantic_similarity).toFixed(2)}</div>` : ''}</td>
       </tr>`).join('')}</tbody></table>`;
   } catch (e) { out.innerHTML = `<div class="empty">Fehler: ${esc(e.message)}</div>`; }
 }

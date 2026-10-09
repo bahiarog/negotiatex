@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+import asyncio
 from sqlalchemy import text
 from database import engine, admin_engine, Base
 import models_v2  # noqa: F401 -- registers Phase 1 tables (tenants, cases, documents, ...) on Base.metadata
@@ -28,6 +29,9 @@ async def lifespan(app: FastAPI):
     scheduler = start_scheduler()
     from services.email_poller import register_negotiation_jobs
     register_negotiation_jobs(scheduler)
+    # Embedding-Modell im Hintergrund vorladen, damit die erste Suche nicht wartet; blockiert den Start nicht.
+    from services.mdc_embeddings import warm_up
+    asyncio.get_running_loop().run_in_executor(None, warm_up)
     yield
     scheduler.shutdown(wait=False)
 

@@ -1,44 +1,50 @@
 """
-Master Data Center Etappe 3 -- Belegsuche (search_reference_context).
+Master Data Center -- Zuschnitt der Suchabschnitte (search_reference_context).
 
-v1: PostgreSQL-Volltextsuche (Konfiguration 'german') ueber Abschnitte
-vollstaendig freigegebener Dokumentversionen. Eine Vektorsuche (pgvector)
-ist vorbereitet (MDCRetrievalChunk.embedding_*), aber bewusst nicht
-aktiviert: das DB-Image hat kein pgvector und es ist kein Embedding-
-Anbieter freigegeben (siehe Bericht).
+lines-v2: Tabellenzeilen ("Zeile N: ...", aus pdf_parser fuer CSV) werden
+einzeln indexiert, Fliesstext wird je Seite/Tabellenblatt in Abschnitte von
+hoechstens MAX_CHUNK_CHARS Zeichen gepackt. Grund: Abschnitte, die ein
+ganzes Dokument umfassen, verwaessern die Bedeutung fuer die semantische
+Suche (gemessen 09.10.2026: relevante Treffer fielen unter das Rauschen) und
+liefern ungenaue Belegstellen. Ein Wechsel der Version erfordert Neu-
+indexierung (maintenance/reindex_mdc_search.py).
 """
 import re
 
-CHUNKING_VERSION = "lines-v1"
-MAX_CHUNK_CHARS = 800
-_ANCHOR_RE = re.compile(r"^(Zeile \d+|--- Page \d+ ---|--- Sheet: [^-]+ ---)")
+CHUNKING_VERSION = "lines-v2"
+MAX_CHUNK_CHARS = 400
+_ROW_RE = re.compile(r"^Zeile (\d+):")
+_PAGE_RE = re.compile(r"^--- Page (\d+) ---$")
+_SHEET_RE = re.compile(r"^--- Sheet: (.+?) ---$")
 
 
 def build_chunks(text: str) -> list[tuple[str, str]]:
-    """Zerlegt den Dokumenttext entlang der Beleganker aus pdf_parser
-    (Zeilen, Seiten, Tabellenblaetter) in Abschnitte von hoechstens
-    MAX_CHUNK_CHARS Zeichen. Rueckgabe: [(anker, text)]."""
+    """Rueckgabe: [(anker, text)]. Anker ist 'Zeile N', 'Seite N' oder
+    'Blatt X' -- genau die Stelle, die als Beleg angezeigt wird."""
     chunks: list[tuple[str, str]] = []
     buf: list[str] = []
-    first_anchor = last_anchor = None
+    section = None
 
     def flush():
-        nonlocal buf, first_anchor, last_anchor
         if buf:
-            anchor = first_anchor if first_anchor == last_anchor or not last_anchor else f"{first_anchor} bis {last_anchor}"
-            chunks.append(((anchor or "")[:100], "\n".join(buf)))
-        buf, first_anchor, last_anchor = [], None, None
+            chunks.append(((section or "")[:100], "\n".join(buf)))
+            buf.clear()
 
     for line in (text or "").splitlines():
-        if not line.strip():
+        s = line.strip()
+        if not s:
             continue
-        m = _ANCHOR_RE.match(line)
-        anchor = m.group(1).strip("- ").strip() if m else None
-        if buf and sum(len(b) + 1 for b in buf) + len(line) > MAX_CHUNK_CHARS:
+        page, sheet, row = _PAGE_RE.match(s), _SHEET_RE.match(s), _ROW_RE.match(s)
+        if page or sheet:
             flush()
-        if anchor:
-            first_anchor = first_anchor or anchor
-            last_anchor = anchor
-        buf.append(line)
+            section = f"Seite {page.group(1)}" if page else f"Blatt {sheet.group(1)}"
+            continue
+        if row:
+            flush()
+            chunks.append((f"Zeile {row.group(1)}", s))
+            continue
+        if buf and sum(len(b) + 1 for b in buf) + len(s) > MAX_CHUNK_CHARS:
+            flush()
+        buf.append(s)
     flush()
     return chunks

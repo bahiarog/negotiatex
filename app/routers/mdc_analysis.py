@@ -15,6 +15,8 @@ services/mdc_analytics, die Erklaerung ist ein Textbaustein daraus. Der
 Mandant kommt immer aus der Session -- eine mitgesendete fremde ID fuehrt
 zu 404, nie zu Daten (zusaetzlich zu RLS).
 """
+import asyncio
+import logging
 import uuid
 from datetime import date, datetime
 from typing import Optional
@@ -33,6 +35,7 @@ from models_mdc import (
 from services.mdc_analytics import compare, explain, POLICIES, DEFAULT_POLICY_ID
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _ev(v):
@@ -206,34 +209,102 @@ async def get_evidence(line_item_id: uuid.UUID, membership=Depends(get_current_m
     }
 
 
-@router.get("/search")
-async def search_reference_context(q: str, category_id: Optional[uuid.UUID] = None, limit: int = 20,
-                                   membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
-    """Volltextsuche nur ueber vollstaendig freigegebene (indexierte),
-    nicht ersetzte Versionen des eigenen Mandanten."""
-    if not q.strip():
-        raise HTTPException(400, "Suchbegriff fehlt.")
-    limit = max(1, min(limit, 50))
-    rows = (await db.execute(sql_text("""
-        SELECT c.id, c.anchor, c.chunk_index, v.id AS version_id, v.version_number, d.id AS document_id, d.title,
-               ts_rank(to_tsvector('german', c.text), websearch_to_tsquery('german', :q)) AS rank,
-               ts_headline('german', c.text, websearch_to_tsquery('german', :q),
-                           'StartSel=<<, StopSel=>>, MaxFragments=2, MaxWords=30, MinWords=8') AS snippet
+SEARCH_CANDIDATES = 30
+RRF_K = 60
+# Kalibriert 09.10.2026 auf zeilengenauen Abschnitten (lines-v2): relevante
+# Treffer 0.27-0.53 (Median 0.40), sinnlose Anfragen hoechstens 0.24. Auf dem
+# kleinen Testbestand ermittelt -- mit echten Daten neu pruefen.
+SEMANTIC_MIN_SIMILARITY = 0.26
+
+_SEARCH_SCOPE = """
         FROM mdc_retrieval_chunks c
         JOIN mdc_document_versions v ON v.id = c.document_version_id
         JOIN mdc_documents d ON d.id = v.document_id
         WHERE c.tenant_id = :tenant_id
           AND v.import_status = 'indexed'
           AND (CAST(:category_id AS uuid) IS NULL OR d.category_id = CAST(:category_id AS uuid))
+"""
+
+
+@router.get("/search")
+async def search_reference_context(q: str, category_id: Optional[uuid.UUID] = None, limit: int = 20,
+                                   membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+    """Hybride Belegsuche: Volltext (deutsche Wortstaemme) und semantische
+    Naehe (lokales Embedding-Modell), zusammengefuehrt per Reciprocal Rank
+    Fusion. Beide Wege filtern VOR dem Ranking auf Mandant, freigegebene
+    (indexierte) und nicht ersetzte Versionen -- zusaetzlich greift RLS.
+    Semantische Naehe liefert Kontext, gibt aber nie eine Preisposition fuer
+    den Vergleich frei."""
+    from services.mdc_embeddings import embed_texts, to_pgvector, MODEL_NAME
+    if not q.strip():
+        raise HTTPException(400, "Suchbegriff fehlt.")
+    limit = max(1, min(limit, 50))
+    params = {"q": q, "tenant_id": str(membership.tenant_id),
+              "category_id": str(category_id) if category_id else None, "k": SEARCH_CANDIDATES}
+
+    fts_rows = (await db.execute(sql_text(f"""
+        SELECT c.id, ts_rank(to_tsvector('german', c.text), websearch_to_tsquery('german', :q)) AS rank
+        {_SEARCH_SCOPE}
           AND to_tsvector('german', c.text) @@ websearch_to_tsquery('german', :q)
         ORDER BY rank DESC, c.id
-        LIMIT :limit
-    """), {"q": q, "tenant_id": str(membership.tenant_id), "category_id": str(category_id) if category_id else None, "limit": limit})).all()
-    return [{
-        "chunk_id": str(r.id), "anchor": r.anchor, "document_id": str(r.document_id), "document_title": r.title,
-        "document_version_id": str(r.version_id), "version_number": r.version_number,
-        "relevance": round(float(r.rank), 4), "snippet": r.snippet,
-    } for r in rows]
+        LIMIT :k
+    """), params)).all()
+
+    semantic_ok, sem_rows = True, []
+    try:
+        qvec = (await asyncio.to_thread(embed_texts, [q.strip()]))[0]
+        async with db.begin_nested():  # Fehler hier darf die Volltext-Transaktion nicht abbrechen
+            # Iterativer HNSW-Scan: sonst kann der Mandantenfilter nach dem Index
+            # die Trefferliste bei vielen Mandanten unvollstaendig machen.
+            await db.execute(sql_text("SET LOCAL hnsw.iterative_scan = 'relaxed_order'"))
+            sem_rows = (await db.execute(sql_text(f"""
+                SELECT c.id, 1 - (c.embedding <=> CAST(:qv AS vector)) AS similarity
+                {_SEARCH_SCOPE}
+                  AND c.embedding IS NOT NULL AND c.embedding_model = :model
+                ORDER BY c.embedding <=> CAST(:qv AS vector), c.id
+                LIMIT :k
+            """), {**params, "qv": to_pgvector(qvec), "model": MODEL_NAME})).all()
+        sem_rows = sorted((r for r in sem_rows if float(r.similarity) >= SEMANTIC_MIN_SIMILARITY),
+                          key=lambda r: (-float(r.similarity), str(r.id)))
+    except Exception:
+        logger.exception("Semantische Suche nicht verfuegbar -- nur Volltext.")
+        semantic_ok = False
+
+    fused: dict = {}
+    for rank, r in enumerate(fts_rows, start=1):
+        e = fused.setdefault(r.id, {"score": 0.0, "fts_rank": None, "similarity": None})
+        e["score"] += 1 / (RRF_K + rank)
+        e["fts_rank"] = round(float(r.rank), 4)
+    for rank, r in enumerate(sem_rows, start=1):
+        e = fused.setdefault(r.id, {"score": 0.0, "fts_rank": None, "similarity": None})
+        e["score"] += 1 / (RRF_K + rank)
+        e["similarity"] = round(float(r.similarity), 4)
+    top = sorted(fused.items(), key=lambda kv: (-kv[1]["score"], str(kv[0])))[:limit]
+
+    hits = []
+    if top:
+        details = {r.id: r for r in (await db.execute(sql_text(f"""
+            SELECT c.id, c.anchor, c.text, v.id AS version_id, v.version_number, d.id AS document_id, d.title,
+                   ts_headline('german', c.text, websearch_to_tsquery('german', :q),
+                               'StartSel=<<, StopSel=>>, MaxFragments=2, MaxWords=30, MinWords=8') AS headline
+            {_SEARCH_SCOPE}
+              AND c.id = ANY(CAST(:ids AS uuid[]))
+        """), {**params, "ids": [str(cid) for cid, _ in top]})).all()}
+        for cid, e in top:
+            r = details.get(cid)
+            if not r:
+                continue
+            match = "beides" if e["fts_rank"] is not None and e["similarity"] is not None else (
+                "volltext" if e["fts_rank"] is not None else "semantisch")
+            hits.append({
+                "chunk_id": str(cid), "anchor": r.anchor, "document_id": str(r.document_id), "document_title": r.title,
+                "document_version_id": str(r.version_id), "version_number": r.version_number,
+                "match": match, "relevance": round(e["score"], 5), "fts_rank": e["fts_rank"],
+                "semantic_similarity": e["similarity"],
+                "snippet": r.headline if e["fts_rank"] is not None else r.text[:300],
+            })
+    return {"query": q, "semantic_available": semantic_ok, "embedding_model": MODEL_NAME if semantic_ok else None,
+            "fusion": f"Reciprocal Rank Fusion (k={RRF_K})", "hits": hits}
 
 
 class ReviewRequest(BaseModel):

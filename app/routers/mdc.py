@@ -25,7 +25,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import select, desc, delete as sa_delete
+from sqlalchemy import select, desc, delete as sa_delete, text as sql_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -36,6 +36,7 @@ from models_mdc import (
 )
 from services.pdf_parser import extract_text
 from services.mdc_search import build_chunks, CHUNKING_VERSION
+from services.mdc_embeddings import embed_texts, to_pgvector, MODEL_NAME as EMBEDDING_MODEL, DIM as EMBEDDING_DIM
 from services.mdc_extractor import extract_line_items, normalize_and_check, ANCILLARY_KEYS, _to_decimal
 
 logger = logging.getLogger(__name__)
@@ -450,10 +451,36 @@ async def _refresh_version_status(db: AsyncSession, version: MDCDocumentVersion)
     if version.import_status == MDCImportStatus.indexed:
         return
     await db.execute(sa_delete(MDCRetrievalChunk).where(MDCRetrievalChunk.document_version_id == version.id))
-    for idx, (anchor, text) in enumerate(build_chunks(version.extracted_text or "")):
-        db.add(MDCRetrievalChunk(tenant_id=version.tenant_id, document_version_id=version.id, chunk_index=idx,
-                                 anchor=anchor or None, text=text, chunking_version=CHUNKING_VERSION))
+    chunks = []
+    for idx, (anchor, chunk_text) in enumerate(build_chunks(version.extracted_text or "")):
+        chunk = MDCRetrievalChunk(tenant_id=version.tenant_id, document_version_id=version.id, chunk_index=idx,
+                                  anchor=anchor or None, text=chunk_text, chunking_version=CHUNKING_VERSION)
+        db.add(chunk)
+        chunks.append(chunk)
+    await db.flush()
+    await embed_chunks(db, chunks)
     version.import_status = MDCImportStatus.indexed
+
+
+async def embed_chunks(db: AsyncSession, chunks: list) -> int:
+    """Berechnet die Vektoren lokal und schreibt sie per SQL (die Spalte ist
+    nicht im ORM-Modell gemappt). Scheitert das Modell, bleiben die
+    Abschnitte per Volltext auffindbar -- die Freigabe selbst wird dadurch
+    nicht blockiert."""
+    if not chunks:
+        return 0
+    try:
+        vectors = await asyncio.to_thread(embed_texts, [c.text for c in chunks])
+    except Exception:
+        logger.exception("Embedding fehlgeschlagen -- Abschnitte bleiben nur per Volltext durchsuchbar.")
+        return 0
+    for chunk, vec in zip(chunks, vectors):
+        await db.execute(
+            sql_text("UPDATE mdc_retrieval_chunks SET embedding = CAST(:v AS vector), embedding_model = :m, "
+                     "embedding_dim = :d, index_status = 'fts+vector' WHERE id = :id"),
+            {"v": to_pgvector(vec), "m": EMBEDDING_MODEL, "d": EMBEDDING_DIM, "id": chunk.id},
+        )
+    return len(chunks)
 
 
 async def _get_version_or_404(doc: MDCDocument, version_id: str, db: AsyncSession) -> MDCDocumentVersion:
