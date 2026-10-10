@@ -93,7 +93,7 @@ async function doLogin(){
     localStorage.setItem('nx_token',data.access_token);
     localStorage.setItem('nx_user',JSON.stringify(data.user));
     showAlert('Anmeldung erfolgreich! Weiterleitung…','success');
-    setTimeout(()=>{window.location.href=data.user.is_admin?'/admin':'/dashboard';},800);
+    setTimeout(()=>{window.location.href='/uebersicht';},800);
   }catch(e){
     showAlert(e.message);btn.disabled=false;btn.textContent='Anmelden';
   }
@@ -135,7 +135,7 @@ async function doRegister(){
     localStorage.setItem('nx_token',data.access_token);
     localStorage.setItem('nx_user',JSON.stringify(data.user));
     showAlert('Konto erstellt! Willkommen bei NegotiateX.','success');
-    setTimeout(()=>{window.location.href='/dashboard';},800);
+    setTimeout(()=>{window.location.href='/uebersicht';},800);
   }catch(e){
     showAlert(e.message);btn.disabled=false;btn.textContent='Konto erstellen';
     if(window.turnstile&&turnstileSiteKey)window.turnstile.reset();
@@ -148,7 +148,7 @@ document.addEventListener('keydown',e=>{
   }
 });
 const token=localStorage.getItem('nx_token');
-if(token){const user=JSON.parse(localStorage.getItem('nx_user')||'{}');window.location.href=user.is_admin?'/admin':'/dashboard';}
+if(token){const user=JSON.parse(localStorage.getItem('nx_user')||'{}');window.location.href='/uebersicht';}
 </script>
 </body>
 </html>

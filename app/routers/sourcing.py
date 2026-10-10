@@ -55,6 +55,7 @@ from services.sourcing_classifier import classify_outreach_reply, detect_redline
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+public_router = APIRouter()  # tokengebundene Endpunkte fuer Dienstleister (ohne Anmeldung)
 
 
 # ---------------------------------------------------------------------------
@@ -1535,7 +1536,7 @@ async def _get_invite_and_candidate_by_token(token: str, db: AsyncSession):
     return invite, cand
 
 
-@router.get("/onboarding/status")
+@public_router.get("/onboarding/status")
 async def onboarding_status(token: str, db: AsyncSession = Depends(get_admin_db)):
     _invite, cand = await _get_invite_and_candidate_by_token(token, db)
     sb = cand.stammblatt_json or {}
@@ -1549,7 +1550,7 @@ async def onboarding_status(token: str, db: AsyncSession = Depends(get_admin_db)
     }
 
 
-@router.post("/onboarding/submit")
+@public_router.post("/onboarding/submit")
 async def onboarding_submit(payload: OnboardingSubmitPayload, db: AsyncSession = Depends(get_admin_db)):
     if not payload.confirmed_accurate:
         raise HTTPException(400, "Bitte bestaetigen Sie die Richtigkeit der Angaben.")

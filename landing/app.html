@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NegotiateX.ai</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/theme.css">
+<style>
+body{font-size:14px;line-height:1.55}
+main{padding:92px 28px 64px;max-width:1160px;margin:0 auto}
+main:focus{outline:none}
+/* theme.css stylt "nav" global als feste Website-Kopfleiste -- in der App neutralisieren */
+main nav{position:static;padding:0;background:none;backdrop-filter:none;z-index:auto;border-bottom:none;justify-content:flex-start}
+main:focus-visible,main[tabindex]:focus-visible{outline:none}
+.card{padding:0}
+th{font-family:'DM Sans',sans-serif;text-transform:none;letter-spacing:0}
+label{display:inline;font-family:'DM Sans',sans-serif;text-transform:none;letter-spacing:0;font-size:inherit;color:inherit;margin:0;font-weight:inherit}
+h1{font-family:'Playfair Display',serif;font-size:28px;font-weight:700;margin:0 0 4px;line-height:1.2}
+h2{font-family:'Playfair Display',serif;font-size:19px;font-weight:600;margin:0 0 10px}
+h3{font-size:14px;font-weight:600;margin:0 0 8px}
+a{color:var(--gold)}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.lead{color:var(--text-muted);font-size:14px;margin:0 0 22px;max-width:760px}
+.muted{color:var(--text-muted)}.dim{color:var(--text-dim);font-size:12.5px}.mono{font-family:'DM Mono',monospace}
+.crumbs{font-size:12.5px;color:var(--text-muted);margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.crumbs a{color:var(--text-muted);text-decoration:none}.crumbs a:hover{color:var(--text);text-decoration:underline}
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 20px 48px rgba(22,32,28,.04);margin-bottom:18px}
+.card-h{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.card-h h2,.card-h h3{margin:0}
+.card-b{padding:16px 18px}
+.btn{font-family:'DM Sans',sans-serif;font-size:13.5px;border-radius:8px;padding:9px 16px;cursor:pointer;border:1px solid var(--border);background:var(--bg-card);color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:6px;line-height:1.2}
+.btn:hover{border-color:var(--gold-border)}
+.btn.pri{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:500}.btn.pri:hover{background:var(--gold-light)}
+.btn.ok{background:var(--status-good);border-color:var(--status-good);color:#fff}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--text-muted)}.btn.ghost:hover{color:var(--text)}
+.btn.bad{color:var(--status-bad);border-color:rgba(216,90,48,.35)}
+.btn.sm{font-size:12.5px;padding:6px 11px}
+.btn[disabled]{opacity:.55;cursor:wait}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.grid-side{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+label.f{display:block;font-size:12.5px;color:var(--text-muted);margin:14px 0 5px;font-weight:500}
+.hint{font-size:12px;color:var(--text-dim);margin-top:4px}
+input[type=text],input[type=email],input[type=number],input[type=date],input[type=search],textarea,select{width:100%;box-sizing:border-box;font-family:'DM Sans',sans-serif;font-size:14px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text)}
+textarea{min-height:100px;resize:vertical}
+.invalid{border-color:var(--status-bad)!important;background:#fff8f6!important}
+.ferr{color:var(--status-bad);font-size:12.5px;margin-top:5px}
+.alert{border-radius:9px;padding:12px 15px;font-size:13.5px;margin:0 0 16px}
+.alert.err{background:rgba(216,90,48,.08);border:1px solid rgba(216,90,48,.3)}
+.alert.info{background:var(--gold-dim);border:1px solid var(--gold-border)}
+.alert.ok{background:rgba(29,158,117,.08);border:1px solid rgba(29,158,117,.3)}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:500;white-space:nowrap;border:1px solid var(--border);background:var(--bg-card2);color:var(--text-muted)}
+.chip:before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.8}
+.s-draft{color:var(--text-muted)}
+.s-in_progress{color:#2E6EB5;background:rgba(46,110,181,.08);border-color:rgba(46,110,181,.25)}
+.s-waiting_for_you{color:#9a6b12;background:var(--gold-dim);border-color:var(--gold-border)}
+.s-done{color:var(--status-good);background:rgba(29,158,117,.08);border-color:rgba(29,158,117,.25)}
+.tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11.5px;border:1px solid var(--border);color:var(--text-muted);background:var(--bg-card2);white-space:nowrap}
+.tag.good{color:var(--status-good);border-color:rgba(29,158,117,.3);background:rgba(29,158,117,.07)}
+.tag.warn{color:#9a6b12;border-color:var(--gold-border);background:var(--gold-dim)}
+.tag.bad{color:var(--status-bad);border-color:rgba(216,90,48,.3);background:rgba(216,90,48,.07)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px}
+.kpi{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
+.kpi .l{font-size:12px;color:var(--text-muted);margin-bottom:6px}
+.kpi .v{font-family:'DM Mono',monospace;font-size:22px;font-weight:500}
+.kpi .v.na{font-family:'DM Sans',sans-serif;font-size:14px;color:var(--text-dim);font-weight:400;padding-top:6px}
+.kpi .s{font-size:12px;color:var(--text-dim);margin-top:4px}
+.next{border-left:4px solid var(--gold)}
+.next .who{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-dim);margin-bottom:4px}
+.next p{margin:0 0 12px;font-size:15px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin:0 0 20px;overflow-x:auto}
+.tabs a{padding:10px 14px;font-size:14px;color:var(--text-muted);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tabs a[aria-current=page]{color:var(--text);border-bottom-color:var(--gold);font-weight:500}
+.tabs .n{font-family:'DM Mono',monospace;font-size:11px;background:var(--bg-card2);border:1px solid var(--border);border-radius:9px;padding:0 6px;margin-left:5px}
+.tabs .n.hot{background:var(--gold);color:#fff;border-color:var(--gold)}
+.steps{display:flex;margin:4px 0 6px;overflow-x:auto;padding-bottom:4px}
+.step{flex:1;min-width:110px;text-align:center;font-size:12.5px;color:var(--text-dim);position:relative;padding-top:26px}
+.step:before{content:'';position:absolute;top:8px;left:0;right:0;height:2px;background:var(--border)}
+.step:first-child:before{left:50%}.step:last-child:before{right:50%}
+.step i{position:absolute;top:2px;left:50%;margin-left:-7px;width:14px;height:14px;border-radius:50%;background:var(--bg);border:2px solid var(--border);box-sizing:border-box}
+.step.done{color:var(--text-muted)}.step.done i{background:var(--status-good);border-color:var(--status-good)}
+.step.cur{color:var(--text);font-weight:500}.step.cur i{background:var(--gold);border-color:var(--gold)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;padding:10px 14px;color:var(--text-muted);font-weight:500;font-size:12px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr.link{cursor:pointer}tr.link:hover td{background:rgba(0,0,0,.015)}
+td a.rowlink{color:var(--text);font-weight:500;text-decoration:none}td a.rowlink:hover{text-decoration:underline}
+.num{text-align:right;font-family:'DM Mono',monospace;white-space:nowrap}
+.na{color:var(--text-dim);font-style:italic;font-family:'DM Sans',sans-serif}
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.filters input[type=search]{max-width:320px}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;flex-wrap:wrap}
+.seg button{border:none;background:var(--bg-card);padding:8px 12px;font-size:13px;cursor:pointer;color:var(--text-muted);font-family:inherit}
+.seg button[aria-pressed=true]{background:var(--text);color:#fff}
+.list{list-style:none;margin:0;padding:0}
+.list li{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.list li:last-child{border-bottom:none}
+.empty{padding:28px 18px;text-align:center;color:var(--text-muted)}
+.empty .btn{margin-top:12px}
+.kv{display:grid;grid-template-columns:170px 1fr;gap:8px 16px;font-size:13.5px}
+.kv>div:nth-child(odd){color:var(--text-muted)}
+.draft{padding:14px 18px;border-bottom:1px solid var(--border)}
+.draft:last-child{border-bottom:none}
+.draft .top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.draft .acts{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+pre.mail{white-space:pre-wrap;font-family:'DM Sans',sans-serif;font-size:13px;background:var(--bg-card2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin:10px 0 0;max-height:340px;overflow:auto}
+details>summary{cursor:pointer;color:var(--text-muted);font-size:12.5px;margin-top:6px}
+.finding{font-size:12.5px;margin:7px 0;padding-left:10px;border-left:3px solid var(--border)}
+.finding.critical{border-color:var(--status-bad)}.finding.warning{border-color:var(--gold)}
+.finding q{display:block;color:var(--text-muted);font-style:italic;margin-top:2px}
+.tl{list-style:none;margin:0;padding:0}
+.tl li{padding:11px 18px;border-bottom:1px solid var(--border);font-size:13.5px}
+.tl li:last-child{border-bottom:none}
+.tl .w{float:right;font-family:'DM Mono',monospace;font-size:11.5px;color:var(--text-dim);margin-left:10px}
+.tl .d{color:var(--text-muted);font-size:13px;margin-top:2px}
+.wiz{display:flex;gap:0;margin:6px 0 22px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg-card)}
+.wiz div{flex:1;padding:11px 14px;font-size:13px;color:var(--text-dim);border-right:1px solid var(--border)}
+.wiz div:last-child{border-right:none}
+.wiz div b{display:block;font-family:'DM Mono',monospace;font-size:11px;font-weight:400}
+.wiz div.cur{color:var(--text);background:var(--gold-dim);font-weight:500}
+.wiz div.done{color:var(--text-muted)}
+.choice{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--border);border-radius:10px;padding:14px 16px;cursor:pointer;background:#fff}
+.choice:has(input:checked){border-color:var(--gold);background:var(--gold-dim)}
+.choice input{margin-top:3px}
+.choice b{display:block;margin-bottom:2px}
+.mandate{background:var(--bg-card2);border:1px solid var(--border);border-radius:10px;padding:14px 18px}
+.mandate ul{margin:8px 0 0 18px;padding:0}
+.formbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:22px;padding-top:16px;border-top:1px solid var(--border)}
+.formbar .sp{flex:1}
+.sugg{display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--border)}
+.sugg:last-child{border-bottom:none}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--text);color:#fff;padding:11px 18px;border-radius:9px;font-size:13.5px;z-index:500;max-width:90vw}
+.toast.err{background:var(--status-bad)}
+.banner{background:#2E6EB5;color:#fff;border-radius:9px;padding:10px 15px;font-size:13px;margin-bottom:16px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.banner a{color:#fff;font-weight:500}
+dialog{border:1px solid var(--border);border-radius:12px;padding:22px;max-width:480px;width:calc(100% - 32px);box-shadow:0 30px 60px rgba(0,0,0,.2)}
+dialog::backdrop{background:rgba(20,20,20,.35)}
+.help h2{margin-top:26px}.help p,.help li{max-width:760px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.grid-side>*,.grid2>*{min-width:0}
+@media(max-width:900px){.grid-side,.grid2{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:720px){
+  main{padding:80px 16px 50px}h1{font-size:23px}
+  .kv{grid-template-columns:1fr}.kv>div:nth-child(odd){margin-top:6px}
+  table.resp thead{display:none}
+  table.resp tr{display:block;border-bottom:1px solid var(--border);padding:8px 0}
+  table.resp td{display:flex;justify-content:space-between;gap:12px;border:none;padding:5px 14px;text-align:right}
+  table.resp td:before{content:attr(data-l);color:var(--text-muted);font-size:12px;text-align:left}
+  table.resp td.first{display:block;text-align:left}table.resp td.first:before{content:none}
+  .wiz{flex-direction:column}.wiz div{border-right:none;border-bottom:1px solid var(--border)}
+  .draft .acts{margin-left:0}
+}
+</style>
+</head>
+<body>
+<header id="app-nav"></header>
+<script src="/assets/app-nav.js"></script>
+<main id="app" tabindex="-1"><div class="empty">Lade…</div></main>
+<dialog id="dlg"></dialog>
+
+<script>
+const token = localStorage.getItem('nx_token');
+if (!token) location.href = '/login';
+const app = document.getElementById('app');
+let ACCESS = window.NX_ACCESS || null;
+document.addEventListener('nx:access', e => { ACCESS = e.detail; });
+
+/* ---------------- Grundfunktionen ---------------- */
+function esc(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+const NA = '<span class="na">noch nicht ermittelt</span>';
+function money(v, cur, na){ if (v == null || v === '') return na === undefined ? NA : na; return Number(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ' + (cur || 'EUR'); }
+function dateDe(iso){ return iso ? new Date(iso).toLocaleDateString('de-DE') : '—'; }
+function when(iso){ return iso ? new Date(iso).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : ''; }
+function toast(msg, err){ const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.setAttribute('role', err ? 'alert' : 'status'); t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), err ? 7000 : 3500); }
+class ApiError extends Error { constructor(status, detail){ super(typeof detail === 'string' ? detail : (detail && detail.message) || ('Fehler ' + status)); this.status = status; this.field = detail && detail.field; this.missing = detail && detail.missing; } }
+async function api(path, opts = {}) {
+  const headers = { Authorization: 'Bearer ' + token };
+  let body = opts.body;
+  if (opts.json !== undefined) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(opts.json); }
+  const res = await fetch('/api/v1' + path, { method: opts.method || (body ? 'POST' : 'GET'), headers, body });
+  if (res.status === 401) { location.href = '/login'; throw new ApiError(401, 'Bitte neu anmelden.'); }
+  if (!res.ok) {
+    const b = await res.json().catch(() => ({}));
+    let d = b.detail;
+    if (Array.isArray(d)) d = { field: (d[0] && d[0].loc && d[0].loc.slice(-1)[0]) || null, message: 'Bitte die Eingabe prüfen.' };
+    throw new ApiError(res.status, d || ('Fehler ' + res.status));
+  }
+  return res.json();
+}
+async function busy(btn, fn) {
+  const label = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Bitte warten…'; }
+  try { return await fn(); }
+  catch (e) { if (!showFieldError(e)) toast(e.message, true); }
+  finally { if (btn && btn.isConnected) { btn.disabled = false; btn.innerHTML = label; } }
+}
+/* Fehler am betroffenen Feld erklaeren */
+function clearErrors(){ document.querySelectorAll('.ferr').forEach(x => x.remove()); document.querySelectorAll('.invalid').forEach(x => { x.classList.remove('invalid'); x.removeAttribute('aria-invalid'); }); }
+function showFieldError(e) {
+  if (!e || !e.field) return false;
+  const el = document.querySelector(`[data-field="${e.field}"]`);
+  if (!el) return false;
+  el.classList.add('invalid'); el.setAttribute('aria-invalid', 'true');
+  const m = document.createElement('div'); m.className = 'ferr'; m.id = 'err-' + e.field; m.textContent = e.message;
+  el.setAttribute('aria-describedby', m.id); el.insertAdjacentElement('afterend', m); el.focus();
+  return true;
+}
+
+/* ---------------- Router ---------------- */
+const SPA = /^\/(uebersicht|vorhaben|einsparungen|entscheidungen|hilfe|arbeitsbereich\/vorhaben)(\/|$)/;
+function go(url, replace) { if (replace) history.replaceState({}, '', url); else history.pushState({}, '', url); render(); }
+document.addEventListener('click', e => {
+  const a = e.target.closest('a');
+  if (!a || a.target || e.metaKey || e.ctrlKey || e.shiftKey || a.hasAttribute('download')) return;
+  const u = new URL(a.href, location.href);
+  if (u.origin !== location.origin || !SPA.test(u.pathname)) return;
+  e.preventDefault();
+  rememberListPosition();
+  go(u.pathname + u.search);
+});
+window.addEventListener('popstate', render);
+function rememberListPosition(){
+  const p = location.pathname;
+  if (p === '/vorhaben' || p === '/arbeitsbereich/vorhaben') {
+    try { sessionStorage.setItem('nx_list_url:' + p, p + location.search); sessionStorage.setItem('nx_list_scroll:' + p, String(window.scrollY)); } catch (e) {}
+  }
+}
+function listUrl(ws){ const base = ws ? '/arbeitsbereich/vorhaben' : '/vorhaben'; try { return sessionStorage.getItem('nx_list_url:' + base) || base; } catch (e) { return base; } }
+let refreshTimer = null;
+
+async function render() {
+  clearInterval(refreshTimer);
+  const path = location.pathname.replace(/\/+$/, '') || '/uebersicht';
+  const qs = new URLSearchParams(location.search);
+  if (window.NX_NAV) window.NX_NAV.update();
+  let m;
+  try {
+    if (path === '/uebersicht') return await viewOverview();
+    if (path === '/einsparungen') return await viewSavings(qs);
+    if (path === '/entscheidungen') return await viewDecisions();
+    if (path === '/hilfe') return viewHelp();
+    if (path === '/vorhaben') return await viewList(false, qs);
+    if (path === '/arbeitsbereich/vorhaben') return await viewList(true, qs);
+    if (path === '/vorhaben/neu') return await viewWizard(null, 1);
+    if ((m = path.match(/^\/vorhaben\/([0-9a-f-]{36})\/auftrag$/))) return await viewWizard(m[1], Number(qs.get('schritt') || 1));
+    if ((m = path.match(/^\/(vorhaben|arbeitsbereich\/vorhaben)\/([0-9a-f-]{36})(?:\/(angebote|entscheidungen|dokumente|bearbeitung))?$/)))
+      return await viewProject(m[2], m[3] || 'ueberblick', m[1] !== 'vorhaben');
+    app.innerHTML = `<div class="card"><div class="empty"><h2>Seite nicht gefunden</h2><a class="btn pri" href="/uebersicht">Zur Übersicht</a></div></div>`;
+  } catch (e) {
+    app.innerHTML = `<div class="card"><div class="empty"><h2>Das hat nicht geklappt</h2><p>${esc(e.message)}</p>
+      <a class="btn" href="/uebersicht">Zur Übersicht</a> <a class="btn" href="/vorhaben">Zur Vorhabenliste</a></div></div>`;
+  }
+}
+function setTitle(t){ document.title = t + ' – NegotiateX.ai'; }
+function focusMain(){ app.focus({ preventScroll: true }); }
+
+/* ---------------- Gemeinsame Bausteine ---------------- */
+const STATE_CLS = { draft: 's-draft', in_progress: 's-in_progress', waiting_for_you: 's-waiting_for_you', done: 's-done' };
+function stateChip(state, label){ return `<span class="chip ${STATE_CLS[state] || ''}">${esc(label)}</span>`; }
+function projectUrl(id, ws, tab){ return (ws ? '/arbeitsbereich/vorhaben/' : '/vorhaben/') + id + (tab && tab !== 'ueberblick' ? '/' + tab : ''); }
+function decisionUrl(d, ws){ return d.tab === 'neu' ? `/vorhaben/${d.project_id}/auftrag?schritt=${d.kind === 'confirm_order' ? 3 : 1}` : projectUrl(d.project_id, ws, d.tab); }
+function offersLabel(p){ return p.offers_count ? `${p.offers_count} <span class="dim">(${p.comparable_count} vergleichbar)</span>` : '<span class="dim">noch keine</span>'; }
+function nextText(n){ return n.label ? `<b>${esc(n.label)}</b>${n.text ? ' – ' + esc(n.text) : ''}` : esc(n.text || ''); }
+const WHO = { you: 'Sie sind dran', you_optional: 'Optional', expert: 'Ihr Experte ist dran', decider: 'Wartet auf Freigabe', suppliers: 'Die Dienstleister sind dran', agent: 'Der Agent arbeitet', nobody: 'Abgeschlossen' };
+
+/* ================= Übersicht ================= */
+async function viewOverview() {
+  setTitle('Übersicht');
+  const o = await api('/projects/overview');
+  const s = o.savings, c = o.savings_counts;
+  const name = ACCESS && ACCESS.user ? (ACCESS.user.name || '').split(' ')[0] : '';
+  app.innerHTML = `
+    <div class="head"><div><h1>Guten Tag${name ? ', ' + esc(name) : ''}</h1>
+      <p class="lead">Ihre Vorhaben auf einen Blick: was läuft, was Ihre Entscheidung braucht und was Sie bisher sparen.</p></div>
+      <a class="btn pri" href="/vorhaben/neu">+ Neues Vorhaben</a></div>
+    <div class="kpis">
+      <a class="kpi" href="/vorhaben" style="text-decoration:none;color:inherit"><div class="l">Aktive Vorhaben</div><div class="v">${o.active_count}</div></a>
+      <a class="kpi" href="/entscheidungen" style="text-decoration:none;color:inherit"><div class="l">Wartet auf Ihre Entscheidung</div><div class="v ${o.decisions_count ? '' : ''}" style="${o.decisions_count ? 'color:var(--gold)' : ''}">${o.decisions_count}</div></a>
+      <a class="kpi" href="/einsparungen" style="text-decoration:none;color:inherit"><div class="l">Vereinbarte Einsparung</div>${s.agreed != null ? `<div class="v">${money(s.agreed)}</div><div class="s">aus ${c.agreed} Vorhaben</div>` : `<div class="v na">noch nicht ermittelt</div>`}</a>
+      <a class="kpi" href="/einsparungen" style="text-decoration:none;color:inherit"><div class="l">Davon realisiert</div>${s.realized != null ? `<div class="v">${money(s.realized)}</div><div class="s">nach Abrechnung</div>` : `<div class="v na">noch nicht ermittelt</div>`}</a>
+    </div>
+    <div class="grid-side">
+      <div>
+        <div class="card"><div class="card-h"><h2>Wartet auf Sie</h2><a href="/entscheidungen" class="dim">Alle Entscheidungen</a></div>
+          ${o.decisions.length ? `<ul class="list">${o.decisions.map(d => `<li><div><b>${esc(d.title)}</b><div class="dim">${esc(d.project_title)} · ${esc(d.context || '')}</div></div>
+            <a class="btn sm pri" href="${decisionUrl(d)}">Öffnen</a></li>`).join('')}</ul>`
+            : `<div class="empty">Im Moment ist nichts von Ihnen zu tun.</div>`}</div>
+        <div class="card"><div class="card-h"><h2>Aktive Vorhaben</h2><a href="/vorhaben" class="dim">Alle Vorhaben</a></div>
+          ${o.active.length ? `<ul class="list">${o.active.map(p => `<li><div><a class="rowlink" style="color:var(--text);font-weight:500;text-decoration:none" href="${projectUrl(p.id)}">${esc(p.title)}</a>
+              <div class="dim">${p.state === 'draft' ? 'Entwurf – noch nicht beauftragt' : esc(p.phase_label) + ' · Angebote: ' + offersLabel(p)}</div>
+              <div class="dim" style="margin-top:3px">${nextText(p.next)}</div></div>${stateChip(p.state, p.state_label)}</li>`).join('')}</ul>`
+            : `<div class="empty">Sie haben noch keine aktiven Vorhaben.<br><a class="btn pri" href="/vorhaben/neu">Erstes Vorhaben anlegen</a></div>`}</div>
+      </div>
+      <div class="card"><div class="card-h"><h2>Letzte Updates</h2></div>
+        ${o.events.length ? `<ul class="tl">${o.events.map(e => `<li><span class="w">${when(e.at)}</span><a href="${projectUrl(e.project_id)}" style="color:var(--text);text-decoration:none"><b>${esc(e.project_title)}</b></a>
+          <div class="d">${esc(e.title)}</div></li>`).join('')}</ul>` : `<div class="empty">Noch keine Updates.</div>`}</div>
+    </div>`;
+  focusMain();
+}
+
+/* ================= Meine Vorhaben / Vorhaben & Aufgaben ================= */
+const FILTERS = [['', 'Alle'], ['waiting_for_you', 'Wartet auf Sie'], ['in_progress', 'In Bearbeitung'], ['draft', 'Entwurf'], ['done', 'Abgeschlossen']];
+async function viewList(ws, qs) {
+  const base = ws ? '/arbeitsbereich/vorhaben' : '/vorhaben';
+  setTitle(ws ? 'Vorhaben & Aufgaben' : 'Meine Vorhaben');
+  const q = qs.get('q') || '', state = qs.get('status') || '', archived = qs.get('archiv') === '1', mine = qs.get('mir') === '1';
+  const params = new URLSearchParams();
+  if (q) params.set('q', q); if (state) params.set('state', state); if (archived) params.set('archived', 'true'); if (mine) params.set('mine', 'true');
+  app.innerHTML = `<div class="head"><div><h1>${ws ? 'Vorhaben & Aufgaben' : 'Meine Vorhaben'}</h1>
+      <p class="lead">${ws ? 'Alle Vorhaben des Mandanten mit Bearbeitungskontext. „Kundenansicht ansehen“ zeigt, was der Auftraggeber sieht.' : 'Alle Ihre Vorhaben mit Status, Angebotseingängen und nächstem Schritt.'}</p></div>
+      <a class="btn pri" href="/vorhaben/neu">+ Neues Vorhaben</a></div>
+    <form class="filters" id="flt" role="search">
+      <label class="sr" for="q">Vorhaben suchen</label>
+      <input type="search" id="q" placeholder="Suchen nach Titel, Leistung, Anbieter…" value="${esc(q)}">
+      <div class="seg" role="group" aria-label="Status filtern">${FILTERS.map(([v, l]) => `<button type="button" data-st="${v}" aria-pressed="${v === state}">${l}</button>`).join('')}</div>
+      ${ws ? `<label style="display:flex;gap:6px;align-items:center;font-size:13px"><input type="checkbox" id="mine" ${mine ? 'checked' : ''}> Nur mir zugewiesen</label>` : ''}
+      <span style="flex:1"></span>
+      <a class="btn sm ${archived ? 'pri' : ''}" href="${base}?${new URLSearchParams({ ...(q && { q }), ...(state && { status: state }), ...(!archived && { archiv: '1' }) })}">${archived ? 'Aktive Vorhaben zeigen' : 'Archiv'}</a>
+    </form>
+    <div class="card" id="lst"><div class="empty">Lade…</div></div>`;
+  const apply = changes => { const n = new URLSearchParams(location.search); Object.entries(changes).forEach(([k, v]) => v ? n.set(k, v) : n.delete(k)); go(base + (n.toString() ? '?' + n : ''), true); };
+  document.getElementById('flt').onsubmit = e => { e.preventDefault(); apply({ q: document.getElementById('q').value.trim() }); };
+  let t; document.getElementById('q').oninput = e => { clearTimeout(t); t = setTimeout(() => apply({ q: e.target.value.trim() }), 450); };
+  document.querySelectorAll('[data-st]').forEach(b => b.onclick = () => apply({ status: b.dataset.st }));
+  if (ws) document.getElementById('mine').onchange = e => apply({ mir: e.target.checked ? '1' : '' });
+  const rows = await api('/projects?' + params);
+  const box = document.getElementById('lst');
+  if (!rows.length) {
+    box.innerHTML = `<div class="empty">${q || state || mine ? 'Keine Vorhaben passend zu Ihrer Suche bzw. Ihrem Filter.<br><a class="btn" href="' + base + (archived ? '?archiv=1' : '') + '">Filter zurücksetzen</a>'
+      : archived ? 'Das Archiv ist leer.' : 'Noch keine Vorhaben.<br><a class="btn pri" href="/vorhaben/neu">Neues Vorhaben anlegen</a>'}</div>`;
+  } else {
+    box.innerHTML = `<table class="resp"><thead><tr><th>Vorhaben</th><th>Status</th><th>Verantwortlich</th><th>Angebote</th><th>Nächster Schritt</th></tr></thead><tbody>
+      ${rows.map(p => `<tr><td class="first"><a class="rowlink" href="${projectUrl(p.id, ws)}">${esc(p.title)}</a>
+          <div class="dim">${esc(p.service_type || (p.entry_path === 'existing_offer' ? 'Vorhandenes Angebot' : 'Neuer Bedarf'))}${p.owner && ws ? ' · Auftraggeber: ' + esc(p.owner) : ''}</div></td>
+        <td data-l="Status">${stateChip(p.state, p.state_label)}<div class="dim">${esc(p.phase_label)}</div></td>
+        <td data-l="Verantwortlich">${p.responsible ? esc(p.responsible) : '<span class="dim">NegotiateX-Agent</span>'}</td>
+        <td data-l="Angebote">${offersLabel(p)}</td>
+        <td data-l="Nächster Schritt" style="max-width:300px">${nextText(p.next)}</td></tr>`).join('')}</tbody></table>`;
+  }
+  try { const y = Number(sessionStorage.getItem('nx_list_scroll:' + base) || 0); if (y) { window.scrollTo(0, y); sessionStorage.removeItem('nx_list_scroll:' + base); } } catch (e) {}
+}
+
+/* ================= Neues Vorhaben: Bedarf → Unterlagen → Auftrag prüfen ================= */
+const WIZ = ['Bedarf', 'Unterlagen', 'Auftrag prüfen'];
+function wizBar(step){ return `<div class="wiz" aria-label="Schritte">${WIZ.map((s, i) => `<div class="${i + 1 === step ? 'cur' : i + 1 < step ? 'done' : ''}" ${i + 1 === step ? 'aria-current="step"' : ''}><b>Schritt ${i + 1}</b>${s}</div>`).join('')}</div>`; }
+function localKey(id){ return 'nx_wiz:' + (id || 'neu'); }
+function saveLocal(id){ try { const o = {}; document.querySelectorAll('[data-field]').forEach(el => { if (el.type === 'file') return; o[el.dataset.field] = el.type === 'checkbox' ? el.checked : el.type === 'radio' ? (el.checked ? el.value : (o[el.dataset.field] ?? undefined)) : el.value; }); localStorage.setItem(localKey(id), JSON.stringify({ at: Date.now(), v: o })); } catch (e) {} }
+function restoreLocal(id, serverUpdated){
+  try {
+    const raw = JSON.parse(localStorage.getItem(localKey(id)) || 'null');
+    if (!raw || (serverUpdated && raw.at < Date.parse(serverUpdated + 'Z'))) return false;
+    let n = 0;
+    document.querySelectorAll('[data-field]').forEach(el => { const v = raw.v[el.dataset.field]; if (v === undefined || el.type === 'file') return;
+      if (el.type === 'checkbox') el.checked = !!v; else if (el.type === 'radio') el.checked = el.value === v; else if (el.value !== v) { el.value = v; n++; } });
+    return n > 0;
+  } catch (e) { return false; }
+}
+function clearLocal(id){ try { localStorage.removeItem(localKey(id)); } catch (e) {} }
+function val(f){ const el = document.querySelector(`[data-field="${f}"]`); if (!el) return undefined; if (el.type === 'radio') { const c = document.querySelector(`[data-field="${f}"]:checked`); return c ? c.value : undefined; } return el.type === 'checkbox' ? el.checked : el.value; }
+function critToText(c){ return Object.entries(c || {}).map(([k, v]) => `${k}: ${v}`).join('\n'); }
+function textToCrit(t){ const o = {}; (t || '').split('\n').forEach(l => { const i = l.indexOf(':'); if (i > 0) o[l.slice(0, i).trim()] = l.slice(i + 1).trim(); else if (l.trim()) o[l.trim()] = 'ja'; }); return o; }
+
+async function viewWizard(id, step) {
+  setTitle('Neues Vorhaben');
+  step = Math.min(Math.max(step || 1, 1), 3);
+  let d = null, p = null;
+  if (id) { d = await api('/projects/' + id); p = d.project;
+    if (p.status !== 'briefing') { go(projectUrl(id), true); return; }
+    if (!d.viewer.can_edit) throw new Error('Sie können diesen Entwurf nicht bearbeiten.'); }
+  if (!id && step > 1) step = 1;
+  const canDecide = ACCESS ? ACCESS.can_decide : (d ? d.viewer.can_decide : false);
+  const crumbs = `<div class="crumbs"><a href="${listUrl()}">Meine Vorhaben</a><span>/</span><span>${p ? esc(p.title) : 'Neues Vorhaben'}</span></div>`;
+  const head = `${crumbs}<div class="head"><div><h1>${p ? esc(p.title) : 'Neues Vorhaben'}</h1>
+      <p class="lead">${p ? 'Entwurf – Ihre Eingaben sind gespeichert. Sie können jederzeit unterbrechen und später unter „Meine Vorhaben“ weitermachen.' : 'In drei Schritten zum Auftrag. Nichts geht an Dienstleister raus, bevor Sie den Auftrag erteilen und Nachrichten freigeben.'}</p></div>
+      ${p ? `<a class="btn ghost" href="${listUrl()}">Zur Vorhabenliste</a>` : ''}</div>${wizBar(step)}`;
+  let body = '';
+  if (step === 1) {
+    const ep = p ? p.entry_path : 'new_need';
+    body = `<div class="card"><div class="card-b">
+      <fieldset style="border:none;padding:0;margin:0"><legend class="f" style="font-size:13px;color:var(--text);font-weight:600;margin-bottom:8px">Wie möchten Sie starten?</legend>
+      <div class="grid2">
+        <label class="choice"><input type="radio" name="ep" value="new_need" data-field="entry_path" ${ep !== 'existing_offer' ? 'checked' : ''}><span><b>Etwas Neues beschaffen</b><span class="dim">Der Agent sucht Dienstleister, holt Angebote ein, prüft und verhandelt.</span></span></label>
+        <label class="choice"><input type="radio" name="ep" value="existing_offer" data-field="entry_path" ${ep === 'existing_offer' ? 'checked' : ''}><span><b>Ich habe schon ein Angebot</b><span class="dim">Der Agent prüft AGB und Konditionen, verhandelt und holt auf Wunsch Vergleichsangebote ein.</span></span></label>
+      </div></fieldset>
+      <label class="f" for="w-in">Was brauchen Sie? *</label>
+      <textarea id="w-in" rows="6" data-field="briefing_input" placeholder="z.B. Imagevideo ca. 90 Sekunden für unsere neue Produktlinie, ein Drehtag in München, inkl. Schnitt. Nutzungsrechte online für 2 Jahre.">${esc(p ? (p.briefing_input || p.description || '') : '')}</textarea>
+      <div class="hint">Leistung, Umfang, besondere Anforderungen – in eigenen Worten. Der Agent macht daraus eine strukturierte Zusammenfassung.</div>
+      <div class="row">
+        <div><label class="f" for="w-ceil">Budget-Obergrenze (netto, EUR) *</label><input id="w-ceil" type="number" step="0.01" min="0" data-field="budget_ceiling" value="${esc(p ? p.budget_ceiling || '' : '')}"><div class="hint">Wird nie überschritten.</div></div>
+        <div><label class="f" for="w-target">Zielbudget (optional)</label><input id="w-target" type="number" step="0.01" min="0" data-field="budget_target" value="${esc(p ? p.budget_target || '' : '')}"></div>
+        <div><label class="f" for="w-date">Benötigt bis</label><input id="w-date" type="date" data-field="needed_by" value="${esc(p ? p.needed_by || '' : '')}"></div>
+      </div>
+      <div class="formbar"><button class="btn" id="w-save">Als Entwurf speichern</button><span class="sp"></span><button class="btn pri" id="w-next">Weiter: Unterlagen</button></div>
+    </div></div>`;
+  } else if (step === 2) {
+    const offer = p.entry_path === 'existing_offer';
+    const docs = d.documents || [];
+    body = `<div class="card"><div class="card-b">
+      ${offer ? `<h2>Ihr vorhandenes Angebot</h2>
+        <label class="f" for="w-file">Angebot (PDF, Word, Excel) *</label>
+        <input type="file" id="w-file" data-field="offer_file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv">
+        ${docs.filter(x => x.label === 'Ihr vorhandenes Angebot').map(x => `<div class="hint">Bereits hochgeladen: <b>${esc(x.file_name)}</b> – eine neue Datei ersetzt den Vorschlag.</div>`).join('')}
+        <div class="row">
+          <div><label class="f" for="w-co">Anbieter (Firma) *</label><input id="w-co" type="text" data-field="incumbent_company" value="${esc(p.incumbent_company || '')}"></div>
+          <div><label class="f" for="w-em">E-Mail des Ansprechpartners *</label><input id="w-em" type="email" data-field="incumbent_email" value="${esc(p.incumbent_email || '')}"></div>
+          <div><label class="f" for="w-cn">Name des Ansprechpartners</label><input id="w-cn" type="text" data-field="incumbent_contact" value="${esc(p.incumbent_contact || '')}"></div>
+        </div>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:16px"><input type="checkbox" data-field="seek_alternatives" ${p.seek_alternatives !== false ? 'checked' : ''}> Zusätzlich Vergleichsangebote einholen</label>`
+      : `<h2>Unterlagen (optional)</h2><p class="muted" style="margin-top:0">Haben Sie ein Briefing, eine Leistungsbeschreibung oder Vorgaben als Datei? Dann laden Sie sie hier hoch – der Agent berücksichtigt sie in der Zusammenfassung.</p>
+        <label class="f" for="w-file">Briefing-Dokument (PDF, Word, Excel)</label>
+        <input type="file" id="w-file" data-field="briefing_file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv">
+        ${docs.filter(x => x.label === 'Briefing').map(x => `<div class="hint">Bereits hochgeladen: <b>${esc(x.file_name)}</b></div>`).join('')}`}
+      <div id="w-progress"></div>
+      <div class="formbar"><a class="btn ghost" href="/vorhaben/${id}/auftrag?schritt=1">Zurück</a><button class="btn" id="w-save">Als Entwurf speichern</button><span class="sp"></span>
+        <button class="btn pri" id="w-next">Weiter: Auftrag prüfen</button></div>
+    </div></div>`;
+  } else {
+    const missing = d.missing || {};
+    body = `<div class="grid-side"><div class="card"><div class="card-h"><h2>Zusammenfassung</h2><span class="dim">Bitte prüfen und bei Bedarf anpassen</span></div><div class="card-b">
+      ${Object.keys(missing).length ? `<div class="alert err" role="alert"><b>Noch fehlend:</b> ${Object.values(missing).map(esc).join(' ')}</div>` : ''}
+      <label class="f" for="s-title">Titel *</label><input id="s-title" type="text" data-field="title" value="${esc((p.title || '').startsWith('Neues Vorhaben') ? '' : p.title)}">
+      <div class="row"><div><label class="f" for="s-svc">Art der Leistung</label><input id="s-svc" type="text" data-field="service_type" value="${esc(p.service_type || '')}"></div>
+        <div><label class="f" for="s-reg">Region</label><input id="s-reg" type="text" data-field="region" value="${esc(p.region || '')}"></div>
+        <div><label class="f" for="s-loc">Leistungsort</label><input id="s-loc" type="text" data-field="delivery_location" value="${esc(p.delivery_location || '')}"></div></div>
+      <label class="f" for="s-desc">Leistungsumfang *</label><textarea id="s-desc" rows="5" data-field="description">${esc(p.description || '')}</textarea>
+      <div class="hint">Dieser Text geht (ohne Budget) in die Anfrage an die Dienstleister.</div>
+      <label class="f" for="s-crit">Muss-Kriterien <span class="dim">(eine Zeile je Kriterium, „Kriterium: Anforderung“)</span></label><textarea id="s-crit" rows="4" data-field="must_criteria">${esc(critToText(p.must_criteria))}</textarea>
+      <label class="f" for="s-cond">Konditionen und Vorgaben <span class="dim">(Zahlungsziel, Nutzungsrechte …)</span></label><textarea id="s-cond" rows="2" data-field="conditions_text">${esc(p.conditions_text || '')}</textarea>
+      <div class="row"><div><label class="f" for="s-ceil">Budget-Obergrenze (netto) *</label><input id="s-ceil" type="number" step="0.01" data-field="budget_ceiling" value="${esc(p.budget_ceiling || '')}"></div>
+        <div><label class="f" for="s-target">Zielbudget</label><input id="s-target" type="number" step="0.01" data-field="budget_target" value="${esc(p.budget_target || '')}"></div>
+        <div><label class="f" for="s-date">Benötigt bis</label><input id="s-date" type="date" data-field="needed_by" value="${esc(p.needed_by || '')}"></div>
+        <div><label class="f" for="s-qty">Menge / Einheit</label><div style="display:flex;gap:6px"><input id="s-qty" type="number" step="any" data-field="quantity" value="${esc(p.quantity || '')}" aria-label="Menge"><input type="text" data-field="unit" value="${esc(p.unit || '')}" placeholder="z.B. Video" aria-label="Einheit"></div></div></div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:16px"><input type="checkbox" data-field="notify_milestones" ${p.notify_milestones !== false ? 'checked' : ''}> Bei wichtigen Schritten per E-Mail informieren</label>
+    </div></div>
+    <div>
+      ${p.open_questions && p.open_questions.length ? `<div class="card"><div class="card-h"><h3>Hinweise des Agenten</h3></div><div class="card-b"><p class="dim" style="margin-top:0">Diese Punkte fehlen in Ihren Angaben. Ergänzen Sie, was wichtig ist – der Rest wird bei den Dienstleistern erfragt.</p>
+        <ul style="margin:0;padding-left:18px">${p.open_questions.map(q => `<li style="margin-bottom:6px">${esc(q)}</li>`).join('')}</ul></div></div>` : ''}
+      <div class="card"><div class="card-h"><h3>Verhandlungsmandat</h3></div><div class="card-b mandate" style="border:none;border-radius:0 0 var(--radius) var(--radius)">
+        <div>Der Agent handelt ausschließlich in diesem Rahmen:</div>
+        <ul><li>Budget-Obergrenze <b id="m-ceil">${money(p.budget_ceiling, p.currency, '—')}</b> wird nie überschritten.</li>
+          ${p.budget_target ? `<li>Ziel: <b>${money(p.budget_target, p.currency)}</b></li>` : ''}
+          <li>Höchstens zwei Preisrunden je Anbieter; Leistungsumfang, Rechte und Termin bleiben unverändert.</li>
+          <li>Jede Nachricht an Dienstleister wird vor dem Versand freigegeben.</li>
+          <li>Beauftragt wird nur durch Sie – nie automatisch.</li>
+          ${p.entry_path === 'existing_offer' ? `<li>Ihr Angebot von <b>${esc(p.incumbent_company || '—')}</b> wird geprüft${p.seek_alternatives ? '; zusätzlich holt der Agent Vergleichsangebote ein' : ''}.</li>` : ''}</ul>
+        <label style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-weight:500"><input type="checkbox" id="s-confirm" data-field="confirm_mandate" style="margin-top:3px">
+          Ich bestätige Zusammenfassung, Leistungsumfang und Verhandlungsmandat.</label>
+        ${canDecide ? '' : `<div class="alert info" style="margin-top:12px">Ihnen fehlt die Entscheidungsbefugnis. Legen Sie den Auftrag zur Freigabe vor – eine berechtigte Person erteilt ihn.</div>`}
+      </div></div>
+    </div></div>
+    <div class="formbar"><a class="btn ghost" href="/vorhaben/${id}/auftrag?schritt=2">Zurück</a><button class="btn" id="w-save">Als Entwurf speichern</button>
+      <button class="btn ghost bad" id="w-drop">Entwurf verwerfen</button><span class="sp"></span>
+      ${canDecide ? `<button class="btn pri" id="w-start">Auftrag erteilen</button>` : `<button class="btn pri" id="w-share">Zur Freigabe vorlegen</button>`}</div>`;
+  }
+  app.innerHTML = head + `<div id="w-alert"></div>` + body;
+  const restored = restoreLocal(id, p && p.updated_at);
+  if (restored) document.getElementById('w-alert').innerHTML = `<div class="alert info" role="status">Nicht gespeicherte Eingaben wurden wiederhergestellt.</div>`;
+  app.querySelectorAll('[data-field]').forEach(el => el.addEventListener('input', () => saveLocal(id)));
+  app.querySelectorAll('[data-field]').forEach(el => el.addEventListener('change', () => saveLocal(id)));
+  focusMain();
+
+  const collect = () => {
+    const o = {};
+    ['entry_path', 'briefing_input', 'budget_ceiling', 'budget_target', 'needed_by', 'title', 'service_type', 'region', 'delivery_location',
+     'description', 'conditions_text', 'quantity', 'unit', 'incumbent_company', 'incumbent_email', 'incumbent_contact'].forEach(f => { const v = val(f); if (v !== undefined) o[f] = v; });
+    ['notify_milestones', 'seek_alternatives'].forEach(f => { const v = val(f); if (v !== undefined) o[f] = v; });
+    const c = val('must_criteria'); if (c !== undefined) o.must_criteria = textToCrit(c);
+    return o;
+  };
+  const save = async () => {
+    clearErrors();
+    const body = collect();
+    if (!id) { const created = await api('/projects', { json: body }); clearLocal(null); id = created.id; return created; }
+    const r = await api('/projects/' + id, { method: 'PUT', json: body }); clearLocal(id); return r;
+  };
+  const $ = s => document.getElementById(s);
+  $('w-save').onclick = e => busy(e.target, async () => { await save(); toast('Entwurf gespeichert – Sie finden ihn unter „Meine Vorhaben“.'); if (location.pathname === '/vorhaben/neu') go(`/vorhaben/${id}/auftrag?schritt=1`, true); });
+  if (step === 1) $('w-next').onclick = e => busy(e.target, async () => {
+    if ((val('briefing_input') || '').trim().length < 15) throw new ApiError(422, { field: 'briefing_input', message: 'Bitte den Bedarf in ein, zwei Sätzen beschreiben.' });
+    if (!val('budget_ceiling')) throw new ApiError(422, { field: 'budget_ceiling', message: 'Bitte eine Budget-Obergrenze angeben – sie ist der Verhandlungsrahmen.' });
+    await save(); go(`/vorhaben/${id}/auftrag?schritt=2`);
+  });
+  if (step === 2) $('w-next').onclick = e => busy(e.target, async () => {
+    await save();
+    const f = $('w-file').files[0];
+    const offer = p.entry_path === 'existing_offer';
+    if (offer && !f && !p.offer_document_id) throw new ApiError(422, { field: 'offer_file', message: 'Bitte das vorhandene Angebot hochladen.' });
+    $('w-progress').innerHTML = `<div class="alert info" role="status" style="margin-top:16px">Der Agent erstellt die Zusammenfassung – das dauert etwa 20 Sekunden …</div>`;
+    let proposal = null;
+    if (f) { const fd = new FormData(); fd.append('kind', offer ? 'offer' : 'briefing'); fd.append('file', f); proposal = (await api(`/projects/${id}/documents`, { body: fd })).proposal; }
+    else if (!p.description) { proposal = await api(`/projects/${id}/proposal`, { method: 'POST' }); }
+    if (proposal) {
+      const cur = (await api('/projects/' + id)).project, upd = {};
+      const empty = k => cur[k] == null || cur[k] === '' || (k === 'title' && (cur.title || '').startsWith('Neues Vorhaben'));
+      ['title', 'service_type', 'description', 'conditions_text', 'region', 'delivery_location', 'unit', 'quantity', 'budget_ceiling', 'budget_target', 'needed_by']
+        .forEach(k => { if (proposal[k] != null && proposal[k] !== '' && empty(k)) upd[k] = proposal[k]; });
+      if (proposal.must_criteria && !Object.keys(cur.must_criteria || {}).length) upd.must_criteria = proposal.must_criteria;
+      upd.open_questions = proposal.open_questions || [];
+      await api('/projects/' + id, { method: 'PUT', json: upd });
+    }
+    go(`/vorhaben/${id}/auftrag?schritt=3`);
+  });
+  if (step === 3) {
+    if ($('w-start')) $('w-start').onclick = e => busy(e.target, async () => {
+      await save();
+      try { await api(`/projects/${id}/start`, { json: { confirm_mandate: $('s-confirm').checked } }); }
+      catch (err) {
+        if (err.field && !document.querySelector(`[data-field="${err.field}"]`)) {
+          const back = ['offer_file', 'incumbent_company', 'incumbent_email'].includes(err.field) ? 2 : 1;
+          $('w-alert').innerHTML = `<div class="alert err" role="alert">${esc(err.message)} <a href="/vorhaben/${id}/auftrag?schritt=${back}">Zu Schritt ${back}</a></div>`; return;
+        }
+        throw err;
+      }
+      toast('Auftrag erteilt – der Agent legt los.'); go(projectUrl(id));
+    });
+    if ($('w-share')) $('w-share').onclick = e => busy(e.target, async () => {
+      await save(); await api('/projects/' + id, { method: 'PUT', json: { shared_with_tenant: true } });
+      toast('Zur Freigabe vorgelegt.'); go(projectUrl(id));
+    });
+    $('w-drop').onclick = e => { if (confirm('Diesen Entwurf verwerfen? Er wird ins Archiv verschoben.')) busy(e.target, async () => {
+      await api(`/projects/${id}/cancel`, { method: 'POST' }); await api(`/projects/${id}/archive`, { method: 'POST' }); clearLocal(id); go(listUrl()); }); };
+  }
+}
+
+/* ================= Vorhaben: vier Ansichten (+ Bearbeitung im Arbeitsbereich) ================= */
+const STEPS = ['Bedarf erfasst', 'Auftrag erteilt', 'Dienstleister angefragt', 'Angebote liegen vor', 'Beauftragt'];
+async function viewProject(id, tab, ws) {
+  const d = await api('/projects/' + id);
+  const p = d.project, v = d.viewer;
+  if (ws && !v.workspace) { go(projectUrl(id), true); return; }
+  if (tab === 'bearbeitung' && !ws) tab = 'ueberblick';
+  const TABS = [['ueberblick', 'Überblick'], ['angebote', 'Angebote', d.offers.length], ['entscheidungen', 'Entscheidungen', d.decisions.length, true], ['dokumente', 'Dokumente & Verlauf']];
+  if (ws) TABS.push(['bearbeitung', 'Bearbeitung']);
+  const tabLabel = (TABS.find(t => t[0] === tab) || TABS[0])[1];
+  setTitle(p.title + ' – ' + tabLabel);
+  app.innerHTML = `
+    ${!ws && v.workspace ? `<div class="banner"><span>Sie sehen die Kundenansicht dieses Vorhabens.</span><a href="${projectUrl(id, true, 'bearbeitung')}">Zur Bearbeitung im Arbeitsbereich</a></div>` : ''}
+    <nav class="crumbs" aria-label="Brotkrumen"><a href="${listUrl(ws)}">${ws ? 'Vorhaben & Aufgaben' : 'Meine Vorhaben'}</a><span>/</span>
+      ${tab === 'ueberblick' ? `<span aria-current="page">${esc(p.title)}</span>` : `<a href="${projectUrl(id, ws)}">${esc(p.title)}</a><span>/</span><span aria-current="page">${esc(tabLabel)}</span>`}</nav>
+    <div class="head"><div><h1>${esc(p.title)}</h1>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${stateChip(d.state, d.state_label)}<span class="dim">${esc(p.phase_label)} · ${p.entry_path === 'existing_offer' ? 'Vorhandenes Angebot' : 'Neuer Bedarf'}</span></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${ws ? `<a class="btn sm" href="${projectUrl(id)}">Kundenansicht ansehen</a>` : ''}<a class="btn sm ghost" href="${listUrl(ws)}">Zur Vorhabenliste</a></div></div>
+    <nav class="tabs" aria-label="Ansichten des Vorhabens">${TABS.map(([k, l, n, hot]) => `<a href="${projectUrl(id, ws, k)}" ${k === tab ? 'aria-current="page"' : ''}>${l}${n ? `<span class="n ${hot ? 'hot' : ''}">${n}</span>` : ''}</a>`).join('')}</nav>
+    <div id="tab"></div>`;
+  const box = document.getElementById('tab');
+  ({ ueberblick: tabOverview, angebote: tabOffers, entscheidungen: tabDecisions, dokumente: tabDocs, bearbeitung: tabWork })[tab](box, d, ws);
+  focusMain();
+  refreshTimer = setInterval(() => {
+    const el = document.activeElement, editing = el && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
+    if (!editing && !document.querySelector('details[open], .panel-open, dialog[open]') && p.status !== 'briefing') { const y = scrollY; viewProject(id, tab, ws).then(() => scrollTo(0, y)); }
+  }, 45000);
+}
+function reloadProject(){ const y = scrollY; render().then(() => scrollTo(0, y)); if (window.NX_NAV) window.NX_NAV.refreshBadges(); }
+
+function tabOverview(box, d, ws) {
+  const p = d.project, n = d.next, r = d.result, v = d.viewer;
+  const actionTab = n.tab === 'neu' ? `/vorhaben/${p.id}/auftrag?schritt=${n.label === 'Auftrag prüfen' ? 3 : 1}` : projectUrl(p.id, ws, n.tab);
+  const contacted = d.candidates.filter(c => !['found', 'shortlisted', 'rejected'].includes(c.status));
+  const comparable = d.offers.filter(o => o.comparable).length;
+  box.innerHTML = `<div class="grid-side"><div>
+    <div class="card next"><div class="card-b"><div class="who">${esc(WHO[n.who] || 'Nächster Schritt')}</div>
+      ${n.label ? `<p>${esc(n.text || '')}</p><a class="btn pri" href="${actionTab}">${esc(n.label)}</a>` : `<p style="margin:0">${esc(n.text || '')}</p>`}</div></div>
+    <div class="card"><div class="card-h"><h2>Fortschritt</h2></div><div class="card-b">
+      <div class="steps">${STEPS.map((s, i) => `<div class="step ${i < d.stage ? 'done' : i === d.stage ? 'cur' : ''}"><i></i>${s}</div>`).join('')}</div></div></div>
+    <div class="card"><div class="card-h"><h2>Bedarf</h2>${p.status === 'briefing' && v.can_edit ? `<a class="btn sm" href="/vorhaben/${p.id}/auftrag?schritt=1">Bearbeiten</a>` : ''}</div><div class="card-b"><div class="kv">
+      <div>Leistungsumfang</div><div style="white-space:pre-wrap">${esc(p.description || '—')}</div>
+      <div>Muss-Kriterien</div><div>${Object.entries(p.must_criteria || {}).map(([k, x]) => esc(k) + ': ' + esc(x)).join('<br>') || '—'}</div>
+      <div>Konditionen</div><div>${esc(p.conditions_text || '—')}</div>
+      <div>Budget</div><div>${p.budget_ceiling ? 'bis ' + money(p.budget_ceiling, p.currency) : '—'}${p.budget_target ? ' · Ziel ' + money(p.budget_target, p.currency) : ''}</div>
+      <div>Benötigt bis</div><div>${p.needed_by ? dateDe(p.needed_by) : '—'}</div>
+      ${p.region || p.delivery_location ? `<div>Ort</div><div>${esc([p.region, p.delivery_location].filter(Boolean).join(' / '))}</div>` : ''}
+    </div></div></div>
+  </div><div>
+    <div class="card"><div class="card-h"><h3>Auf einen Blick</h3></div><div class="card-b"><div class="kv" style="grid-template-columns:130px 1fr">
+      <div>Verantwortlich</div><div>${p.responsible ? esc(p.responsible) : 'NegotiateX-Agent<div class="dim">Experte noch nicht zugewiesen</div>'}</div>
+      <div>Auftraggeber</div><div>${esc(p.owner || '—')}</div>
+      <div>Angefragt</div><div>${contacted.length} Dienstleister</div>
+      <div>Angebote</div><div>${d.offers.length ? `${d.offers.length} eingegangen<div class="dim">${comparable} davon vergleichbar</div>` : 'noch keine'}</div>
+      <div>Auftrag erteilt</div><div>${p.mandate_confirmed_at ? dateDe(p.mandate_confirmed_at) : '—'}</div>
+    </div></div></div>
+    <div class="card"><div class="card-h"><h3>Ergebnis</h3><a href="/einsparungen" class="dim">Einsparungen</a></div><div class="card-b">${resultHtml(r)}
+      ${p.status === 'awarded' && !p.invoiced_amount && (v.can_decide || v.procurement) ? `<form id="inv" style="margin-top:14px"><label class="f" for="inv-a">Abgerechneter Betrag (netto)</label>
+        <div style="display:flex;gap:6px"><input id="inv-a" type="number" step="0.01" data-field="amount"><button class="btn sm pri">Erfassen</button></div>
+        <div class="hint">Damit wird die Einsparung als „realisiert“ ausgewiesen.</div></form>` : ''}</div></div>
+    ${d.candidates.length ? `<div class="card"><div class="card-h"><h3>Dienstleister</h3></div><ul class="list">${d.candidates.map(c => `<li><span>${esc(c.company_name)}${c.is_incumbent ? ' <span class="tag">Ihr Anbieter</span>' : ''}</span>
+      <span class="tag ${c.has_offer ? 'good' : ['declined', 'rejected'].includes(c.status) ? 'bad' : ''}">${c.has_offer ? 'Angebot liegt vor' : esc(c.status_label)}</span></li>`).join('')}</ul></div>` : ''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${!['awarded', 'cancelled'].includes(p.status) && v.can_edit ? `<button class="btn sm bad" id="p-cancel">Vorhaben abbrechen</button>` : ''}
+      ${['awarded', 'cancelled'].includes(p.status) && v.can_edit ? `<button class="btn sm" id="p-arch">${p.archived_at ? 'Aus dem Archiv holen' : 'Archivieren'}</button>` : ''}
+    </div>
+  </div></div>`;
+  const $ = s => document.getElementById(s);
+  if ($('inv')) $('inv').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { clearErrors(); await api(`/projects/${p.id}/invoice`, { json: { amount: $('inv-a').value } }); toast('Betrag erfasst'); reloadProject(); }); };
+  if ($('p-cancel')) $('p-cancel').onclick = e => { if (confirm('Vorhaben abbrechen? Offene Entwürfe werden verworfen.')) busy(e.target, async () => { await api(`/projects/${p.id}/cancel`, { method: 'POST' }); reloadProject(); }); };
+  if ($('p-arch')) $('p-arch').onclick = e => busy(e.target, async () => { await api(`/projects/${p.id}/archive${p.archived_at ? '?restore=true' : ''}`, { method: 'POST' }); toast(p.archived_at ? 'Wiederhergestellt' : 'Archiviert'); reloadProject(); });
+}
+
+function resultHtml(r) {
+  if (!r) return NA;
+  const rows = [];
+  rows.push(`<div>Status</div><div><b>${esc(r.state_label)}</b></div>`);
+  rows.push(`<div>Ausgangsbasis</div><div>${r.baseline ? money(r.baseline, r.currency) + `<div class="dim">${esc(r.baseline_label || '')}${r.baseline_date ? ', ' + dateDe(r.baseline_date) : ''}</div>` : NA}</div>`);
+  if (r.potential) rows.push(`<div>Potenzial</div><div>${money(r.potential, r.currency)}<div class="dim">${esc(r.potential_label || '')}</div></div>`);
+  rows.push(`<div>Vereinbart</div><div>${r.agreed != null ? money(r.agreed, r.currency) + (r.agreed_at ? `<div class="dim">${dateDe(r.agreed_at)}</div>` : '') : NA}</div>`);
+  rows.push(`<div>Realisiert</div><div>${r.realized != null ? money(r.realized, r.currency) + (r.realized_at ? `<div class="dim">Abrechnung ${dateDe(r.realized_at)}</div>` : '') : NA}</div>`);
+  rows.push(`<div>Gebühr</div><div>${r.fee != null ? money(r.fee, r.currency) + `<div class="dim">${esc(r.fee_pct)} %${r.fee_provisional ? ', vorläufig' : ''}</div>` : r.fee_pct ? NA : '<span class="na">kein Satz vereinbart</span>'}</div>`);
+  rows.push(`<div>Nettoeffekt</div><div>${r.net != null ? '<b>' + money(r.net, r.currency) + '</b>' : NA}</div>`);
+  return `<div class="kv" style="grid-template-columns:120px 1fr">${rows.join('')}</div>`;
+}
+
+function offerRow(o, d, ws) {
+  const p = d.project, v = d.viewer, done = ['awarded', 'cancelled'].includes(p.status);
+  const rv = o.review;
+  const rvTag = !rv ? '<span class="tag">nicht geprüft</span>' : rv.status === 'critical' ? `<span class="tag bad">${rv.critical} kritisch</span>` : rv.status === 'warning' ? `<span class="tag warn">${rv.warnings} Hinweis(e)</span>` : '<span class="tag good">ohne Auffälligkeiten</span>';
+  const findings = rv ? rv.findings.filter(f => f.severity !== 'info' || f.source === 'ki') : [];
+  const NEG = { RECEIVED: 'vorbereitet', READY_TO_DRAFT: 'nächster Vorschlag möglich', AWAITING_APPROVAL: 'Vorschlag wartet auf Freigabe', SEND_PENDING: 'wird gesendet',
+    WAITING_SUPPLIER: 'wartet auf Antwort', EVALUATING_RESPONSE: 'Antwort wird ausgewertet', READY_FOR_DECISION: 'abgeschlossen – Ihre Entscheidung', PAUSED: 'angehalten – wird geprüft' };
+  const op = v.can_decide || v.procurement;
+  return `<tr>
+    <td class="first"><b>${esc(o.supplier)}</b>${o.is_incumbent ? ' <span class="tag">Ihr Anbieter</span>' : ''}${o.awarded ? ' <span class="tag good">beauftragt</span>' : ''}
+      <div class="dim">eingegangen ${dateDe(o.received_at)}${o.version > 1 ? ' · nach Verhandlung' : ''}</div>
+      ${o.negotiation ? `<div class="dim">Verhandlung: ${esc(NEG[o.negotiation.status] || o.negotiation.status)}${o.negotiation.latest_counter ? ' · letztes Gegenangebot ' + money(o.negotiation.latest_counter, o.currency) : ''}</div>` : ''}</td>
+    <td data-l="Gesamt netto" class="num"><b>${money(o.total, o.currency, '<span class="na">kein Preis erkannt</span>')}</b>
+      ${o.improvement ? `<div class="dim" style="color:var(--status-good)">−${money(o.improvement, o.currency)} ggü. Erstangebot</div>` : ''}
+      ${o.within_budget === false ? '<div class="dim" style="color:var(--status-bad)">über Budget</div>' : o.within_budget ? '<div class="dim">im Budget</div>' : ''}</td>
+    <td data-l="Termin & Zahlung">${esc(o.delivery_date || '—')}<div class="dim">${esc(o.payment_terms || '')}</div>${o.offer_validity_until ? `<div class="dim">gültig bis ${dateDe(o.offer_validity_until)}</div>` : ''}</td>
+    <td data-l="Umfang & Abweichungen">${rvTag}${o.scope_note ? `<div class="dim" style="margin-top:4px">${esc(o.scope_note).slice(0, 200)}</div>` : ''}
+      ${findings.length ? `<details><summary>Details zu ${findings.length} Punkt(en)</summary>${findings.map(f => `<div class="finding ${f.severity}">${esc(f.topic ? f.topic + ': ' : '')}${esc(f.message)}${f.quote ? `<q>„${esc(f.quote)}“</q>` : ''}</div>`).join('')}</details>` : ''}</td>
+    <td data-l="">${done || !op ? '' : `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
+      ${v.can_decide ? `<button class="btn sm pri" data-award="${o.id}" data-name="${esc(o.supplier)}" data-total="${esc(money(o.total, o.currency, ''))}">Beauftragen</button>` : ''}
+      ${!o.negotiation && o.total ? `<button class="btn sm" data-neg="${o.id}" data-total="${o.total}">Verhandeln lassen</button>` : ''}
+      ${o.negotiation && o.negotiation.status === 'READY_TO_DRAFT' ? `<button class="btn sm" data-next="${o.id}">Nächsten Vorschlag vorbereiten</button>` : ''}
+      ${o.negotiation ? `<button class="btn sm" data-res="${o.id}" data-counter="${o.negotiation.latest_counter || ''}">Ergebnis übernehmen</button>` : ''}
+    </div>`}</td></tr>
+    <tr class="panel-row" id="pr-${o.id}" hidden><td colspan="5"></td></tr>`;
+}
+
+function tabOffers(box, d, ws) {
+  const p = d.project, v = d.viewer;
+  const comp = d.offers.filter(o => o.comparable), other = d.offers.filter(o => !o.comparable);
+  const head = `<thead><tr><th>Anbieter</th><th class="num">Gesamt netto</th><th>Termin & Zahlung</th><th>Umfang & Abweichungen</th><th><span class="sr">Aktionen</span></th></tr></thead>`;
+  const canUpload = (v.can_decide || v.procurement) && !['awarded', 'cancelled', 'briefing'].includes(p.status) && d.candidates.length;
+  box.innerHTML = `
+    ${d.offers.length ? `<p class="lead" style="margin-bottom:14px">${d.offers.length} Angebot(e) eingegangen, davon ${comp.length} direkt vergleichbar. Gesamtpreise netto inkl. ausgewiesener Nebenkosten; Abweichungen von Ihren Vorgaben sind markiert.</p>` : ''}
+    <div class="card"><div class="card-h"><h2>Vergleichbare Angebote</h2>${canUpload ? `<button class="btn sm" id="up-btn">Angebot manuell hinzufügen</button>` : ''}</div>
+      <div id="up-box"></div>
+      ${comp.length ? `<table class="resp">${head}<tbody>${comp.map(o => offerRow(o, d, ws)).join('')}</tbody></table>`
+        : `<div class="empty">${p.status === 'briefing' ? 'Sobald der Auftrag erteilt ist, holt der Agent Angebote ein.' : 'Noch keine vergleichbaren Angebote. Der Agent erfasst Angebote automatisch, sobald Dienstleister sie per E-Mail schicken.'}</div>`}</div>
+    ${other.length ? `<div class="card"><div class="card-h"><h2>Eingeschränkt vergleichbar</h2><span class="dim">anderer Umfang, fehlender Preis oder abweichende Menge</span></div>
+      <table class="resp">${head}<tbody>${other.map(o => offerRow(o, d, ws)).join('')}</tbody></table></div>` : ''}`;
+  const panel = (id, html) => { document.querySelectorAll('.panel-row').forEach(r => { r.hidden = true; r.classList.remove('panel-open'); }); const r = document.getElementById('pr-' + id); r.hidden = false; r.classList.add('panel-open'); r.firstElementChild.innerHTML = `<div class="card-b" style="background:var(--bg-card2);border-radius:8px">${html}</div>`; return r; };
+  box.querySelectorAll('[data-neg]').forEach(b => b.onclick = () => {
+    const total = Number(b.dataset.total), t = p.budget_target ? Number(p.budget_target) : null;
+    const r1 = (t && t < total ? Math.max(t, total * 0.85) : total * 0.9), r2 = (r1 + total) / 2;
+    const r = panel(b.dataset.neg, `<h3>Verhandlung vorbereiten</h3><p class="dim" style="margin-top:0">Angebot: ${money(total)}. Der Agent schlägt zuerst den ersten Preis vor; bei einem Gegenangebot folgt höchstens ein Kompromiss. Leistung, Rechte und Termin bleiben unverändert. Jede Nachricht geben Sie vorher frei.</p>
+      <form><div class="row"><div><label class="f" for="n1">Erster Vorschlag (netto)</label><input id="n1" type="number" step="0.01" data-field="round1_price" value="${r1.toFixed(2)}"></div>
+      <div><label class="f" for="n2">Höchstens bis (Kompromiss, netto)</label><input id="n2" type="number" step="0.01" data-field="round2_price" value="${r2.toFixed(2)}"></div></div>
+      <div class="formbar"><button class="btn pri">Vorschlag vorbereiten</button><button type="button" class="btn ghost" data-close>Abbrechen</button></div></form>`);
+    r.querySelector('[data-close]').onclick = () => { r.hidden = true; r.classList.remove('panel-open'); };
+    r.querySelector('form').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { clearErrors(); await api(`/projects/${p.id}/offers/${b.dataset.neg}/negotiate`, { json: { round1_price: r.querySelector('#n1').value, round2_price: r.querySelector('#n2').value } });
+      toast('Preisvorschlag liegt zur Freigabe bereit'); go(projectUrl(p.id, ws, 'entscheidungen')); }); };
+  });
+  box.querySelectorAll('[data-next]').forEach(b => b.onclick = () => busy(b, async () => { await api(`/projects/${p.id}/offers/${b.dataset.next}/next-round`, { method: 'POST' }); toast('Nächster Vorschlag liegt zur Freigabe bereit'); go(projectUrl(p.id, ws, 'entscheidungen')); }));
+  box.querySelectorAll('[data-res]').forEach(b => b.onclick = () => {
+    const r = panel(b.dataset.res, `<h3>Verhandlungsergebnis übernehmen</h3><form><label class="f" for="rt">Vereinbarter Gesamtpreis (netto)</label><input id="rt" type="number" step="0.01" data-field="total_price" value="${esc(b.dataset.counter)}" style="max-width:240px">
+      <div class="hint">Wird als neue Angebotsversion gespeichert; das Erstangebot bleibt als Ausgangsbasis erhalten.</div>
+      <div class="formbar"><button class="btn pri">Übernehmen</button><button type="button" class="btn ghost" data-close>Abbrechen</button></div></form>`);
+    r.querySelector('[data-close]').onclick = () => { r.hidden = true; r.classList.remove('panel-open'); };
+    r.querySelector('form').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { clearErrors(); await api(`/projects/${p.id}/offers/${b.dataset.res}/record-result`, { json: { total_price: r.querySelector('#rt').value } }); toast('Ergebnis übernommen'); reloadProject(); }); };
+  });
+  box.querySelectorAll('[data-award]').forEach(b => b.onclick = () => {
+    const dlg = document.getElementById('dlg');
+    dlg.innerHTML = `<form method="dialog"><h2>${esc(b.dataset.name)} beauftragen?</h2>
+      <p>Gesamtpreis: <b>${esc(b.dataset.total)}</b>. Zusage und Absagen werden als Entwürfe vorbereitet – Sie geben sie anschließend frei. Ein Vertrag kommt dadurch noch nicht zustande.</p>
+      <label class="f" for="aw-note">Begründung / Notiz (optional)</label><textarea id="aw-note" rows="3"></textarea>
+      <div class="formbar"><button value="cancel" class="btn ghost">Abbrechen</button><span class="sp"></span><button value="ok" class="btn pri" id="aw-ok">Verbindlich entscheiden</button></div></form>`;
+    dlg.showModal();
+    dlg.querySelector('#aw-ok').onclick = e => { e.preventDefault(); busy(e.target, async () => { await api(`/projects/${p.id}/award`, { json: { offer_id: b.dataset.award, note: dlg.querySelector('#aw-note').value || null } }); dlg.close(); toast('Entscheidung gespeichert'); go(projectUrl(p.id, ws, 'entscheidungen')); }); };
+  });
+  const up = document.getElementById('up-btn');
+  if (up) up.onclick = () => {
+    const ub = document.getElementById('up-box');
+    ub.innerHTML = `<form class="card-b panel-open" style="border-bottom:1px solid var(--border)"><div class="row">
+      <div><label class="f" for="u-c">Dienstleister</label><select id="u-c" data-field="candidate_id">${d.candidates.filter(c => c.status !== 'rejected').map(c => `<option value="${c.id}">${esc(c.company_name)}</option>`).join('')}</select></div>
+      <div><label class="f" for="u-f">Angebotsdatei</label><input id="u-f" type="file" data-field="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv"></div></div>
+      <div class="formbar"><button class="btn sm pri">Hochladen und prüfen</button><button type="button" class="btn sm ghost" id="u-x">Abbrechen</button></div></form>`;
+    ub.querySelector('#u-x').onclick = () => ub.innerHTML = '';
+    ub.querySelector('form').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { clearErrors();
+      const f = ub.querySelector('#u-f').files[0]; if (!f) throw new ApiError(422, { field: 'file', message: 'Bitte eine Datei wählen.' });
+      const fd = new FormData(); fd.append('candidate_id', ub.querySelector('#u-c').value); fd.append('file', f);
+      await api(`/projects/${p.id}/offers/upload`, { body: fd }); toast('Angebot erfasst und geprüft'); reloadProject(); }); };
+  };
+}
+
+function draftCard(dr, d, ws) {
+  const p = d.project;
+  if (dr.workspace_only) {
+    return ws ? `<div class="draft"><div class="top"><span class="tag warn">${esc(dr.label)}</span><b>${esc(dr.supplier)}</b></div>
+      <details><summary>Rücklauf ansehen</summary><pre class="mail">${esc(dr.body || '')}</pre></details>
+      <form class="nda" data-nda="${dr.id}" data-status="${dr.nda_status}" style="margin-top:10px">${dr.nda_status === 'verified' ? '' :
+        [['version_matches', 'Version entspricht dem versendeten Entwurf'], ['parties_match', 'Parteien stimmen'], ['signatory_authorized', 'Unterzeichner ist berechtigt'], ['countersignature_present', 'Unterschrift liegt vor']]
+        .map(([k, l]) => `<label style="display:flex;gap:8px;margin:4px 0"><input type="checkbox" name="${k}"> ${l}</label>`).join('')}
+        <div class="formbar" style="margin-top:10px"><button class="btn sm ok">Prüfung bestätigen und freigeben</button><button type="button" class="btn sm bad" data-rej="${dr.kind}:${dr.id}">Ablehnen</button></div></form></div>`
+      : `<div class="draft"><div class="top"><span class="tag">${esc(dr.label)}</span><b>${esc(dr.supplier)}</b><span class="dim">wird von Ihrem Procurement-Experten geprüft – Sie müssen nichts tun.</span></div></div>`;
+  }
+  return `<div class="draft"><div class="top"><span class="tag warn">${esc(dr.label)}</span><b>${esc(dr.supplier)}</b>${dr.recipient ? `<span class="dim">an ${esc(dr.recipient)}</span>` : ''}${dr.price ? `<span class="tag">${money(dr.price)}</span>` : ''}
+    <span class="acts"><button class="btn sm ok" data-ok="${dr.kind}:${dr.id}">Freigeben & senden</button><button class="btn sm bad" data-rej="${dr.kind}:${dr.id}">Verwerfen</button></span></div>
+    ${dr.warnings && dr.warnings.length ? `<div class="alert err" style="margin:10px 0 0">${dr.warnings.map(esc).join('<br>')}</div>` : ''}
+    <details><summary>Nachricht lesen: ${esc(dr.subject || '')}</summary><pre class="mail">${esc(dr.body || '')}</pre></details></div>`;
+}
+
+function tabDecisions(box, d, ws) {
+  const p = d.project, v = d.viewer;
+  const msgs = d.decisions.filter(x => x.kind === 'approve_message');
+  const other = d.decisions.filter(x => x.kind !== 'approve_message');
+  const sendable = msgs.filter(x => !x.draft.workspace_only);
+  const canPick = (v.can_decide || v.procurement) && ['sourcing', 'collecting_offers', 'evaluating'].includes(p.status);
+  box.innerHTML = `
+    ${!d.decisions.length ? `<div class="card"><div class="empty">Für dieses Vorhaben ist gerade nichts von Ihnen zu entscheiden.<div class="dim" style="margin-top:6px">${esc(d.next.text || '')}</div></div></div>` : ''}
+    ${other.map(x => `<div class="card next"><div class="card-b"><h3>${esc(x.title)}</h3><p class="muted" style="margin:0 0 12px">${esc(x.context || '')}</p>
+      ${x.kind === 'choose_suppliers' ? '' : `<a class="btn pri" href="${x.tab === 'neu' ? `/vorhaben/${p.id}/auftrag?schritt=${x.kind === 'confirm_order' ? 3 : 1}` : projectUrl(p.id, ws, x.tab)}">${x.kind === 'choose_offer' ? 'Angebote vergleichen' : 'Öffnen'}</a>`}</div></div>`).join('')}
+    ${msgs.length ? `<div class="card"><div class="card-h"><h2>Nachrichten an Dienstleister</h2>${sendable.length > 1 ? `<button class="btn sm ok" id="all-ok">Alle ${sendable.length} freigeben & senden</button>` : ''}</div>
+      <div class="card-b dim" style="padding-bottom:0">Bitte lesen Sie die Nachricht vor der Freigabe. Erst danach wird sie versendet; Änderungen nach Freigabe sind technisch ausgeschlossen.</div>
+      ${msgs.map(x => draftCard(x.draft, d, ws)).join('')}</div>` : ''}
+    ${canPick ? `<div class="card"><div class="card-h"><h2>${d.candidates.length ? 'Weitere Dienstleister anfragen' : 'Dienstleister auswählen'}</h2>
+      <span><button class="btn sm" id="sg">Vorschläge des Agenten</button> <button class="btn sm ghost" id="mn">Manuell hinzufügen</button></span></div><div id="sg-box"></div></div>` : ''}`;
+  const doApprove = async x => { const [k, i] = x.split(':'); await api(`/projects/${p.id}/drafts/${k}/${i}/approve`, { method: 'POST' }); };
+  box.querySelectorAll('[data-ok]').forEach(b => b.onclick = () => busy(b, async () => { await doApprove(b.dataset.ok); toast('Freigegeben und versendet'); reloadProject(); }));
+  box.querySelectorAll('[data-rej]').forEach(b => b.onclick = () => { if (confirm('Diesen Entwurf verwerfen?')) busy(b, async () => { const [k, i] = b.dataset.rej.split(':'); await api(`/projects/${p.id}/drafts/${k}/${i}/reject`, { json: {} }); toast('Verworfen'); reloadProject(); }); });
+  const all = document.getElementById('all-ok');
+  if (all) all.onclick = () => { if (confirm(`Alle ${sendable.length} Nachrichten jetzt freigeben und senden?`)) busy(all, async () => {
+    let n = 0; for (const x of sendable) { try { await doApprove(x.draft.kind + ':' + x.draft.id); n++; } catch (e) { toast(`${x.draft.supplier}: ${e.message}`, true); } }
+    toast(n + ' Nachricht(en) versendet'); reloadProject(); }); };
+  box.querySelectorAll('form.nda').forEach(f => f.onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => {
+    const id = f.dataset.nda;
+    if (f.dataset.status !== 'verified') { const body = {}; f.querySelectorAll('input[type=checkbox]').forEach(c => body[c.name] = c.checked);
+      const r = await fetch(`/api/v1/sourcing/nda/${id}/verify`, { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Prüfung fehlgeschlagen'); }
+    const r2 = await fetch(`/api/v1/sourcing/nda/${id}/approve`, { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    if (!r2.ok) throw new Error((await r2.json().catch(() => ({}))).detail || 'Freigabe fehlgeschlagen');
+    toast('Vertraulichkeitsvereinbarung freigegeben – Angebotsanfrage liegt bereit'); reloadProject(); }); });
+  if (document.getElementById('sg')) {
+    document.getElementById('sg').onclick = () => suggestionsPanel(p, ws);
+    document.getElementById('mn').onclick = () => manualPanel(p, ws);
+    if (!d.candidates.length) suggestionsPanel(p, ws);
+  }
+}
+
+async function suggestionsPanel(p, ws) {
+  const sb = document.getElementById('sg-box');
+  sb.innerHTML = '<div class="card-b dim" role="status">Der Agent durchsucht Lieferantenstamm, frühere Anfragen und Data Center …</div>';
+  let s; try { s = await api(`/projects/${p.id}/suggestions`); } catch (e) { sb.innerHTML = `<div class="card-b alert err">${esc(e.message)}</div>`; return; }
+  const row = (x, i) => `<div class="sugg"><input type="checkbox" id="sg${i}" data-i="${i}" ${x.contactable && i < 3 ? 'checked' : ''} ${x.contactable ? '' : 'disabled'}>
+      <div style="flex:1"><label for="sg${i}"><b>${esc(x.company_name)}</b></label> <span class="dim">${esc(x.contact_email || 'keine E-Mail hinterlegt')}</span>
+      ${x.score != null ? ` <span class="tag" title="inhaltliche Nähe zu Ihrem Bedarf">Passung ${Math.round(x.score * 100)} %</span>` : ''}
+      <div class="dim">${x.reasons.map(esc).join(' · ')}</div>
+      ${x.contactable ? '' : `<input type="email" placeholder="E-Mail ergänzen, um anzufragen" data-mail="${i}" aria-label="E-Mail für ${esc(x.company_name)}" style="margin-top:6px;max-width:320px">`}</div></div>`;
+  const withMail = s.items.map((x, i) => [x, i]).filter(([x]) => x.contactable), noMail = s.items.map((x, i) => [x, i]).filter(([x]) => !x.contactable);
+  sb.innerHTML = `<form class="card-b panel-open"><p class="dim" style="margin-top:0">${esc(s.note || '')}</p>
+    ${withMail.map(([x, i]) => row(x, i)).join('') || (s.items.length ? '<p class="dim">Keine Vorschläge mit hinterlegter E-Mail-Adresse.</p>' : '')}
+    ${noMail.length ? `<details style="margin-top:8px"><summary>${noMail.length} weitere ohne E-Mail-Adresse (z.B. aus dem Data Center)</summary>${noMail.map(([x, i]) => row(x, i)).join('')}</details>` : ''}
+    <div class="formbar">${s.items.length ? '<button class="btn pri">Ausgewählte anfragen</button>' : ''}<span class="dim">Es entstehen nur Entwürfe – Sie geben jede Nachricht frei.</span></div></form>`;
+  sb.querySelectorAll('[data-mail]').forEach(inp => inp.oninput = () => { const cb = sb.querySelector(`[data-i="${inp.dataset.mail}"]`); cb.disabled = !inp.value.includes('@'); cb.checked = inp.value.includes('@'); });
+  const f = sb.querySelector('form');
+  f.onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => {
+    const items = [];
+    sb.querySelectorAll('[data-i]:checked').forEach(cb => { const x = s.items[cb.dataset.i], m = sb.querySelector(`[data-mail="${cb.dataset.i}"]`);
+      items.push({ source: x.source, ref_id: x.ref_id, company_name: x.company_name, contact_email: x.contact_email || (m && m.value.trim()), contact_name: x.contact_name }); });
+    if (!items.length) throw new Error('Bitte mindestens einen Dienstleister auswählen.');
+    const r = await api(`/projects/${p.id}/candidates`, { json: { items } });
+    toast(`${r.created.length} Erstanfrage(n) liegen zur Freigabe bereit${r.skipped.length ? ', ' + r.skipped.length + ' übersprungen' : ''}`); reloadProject(); }); };
+}
+function manualPanel(p, ws) {
+  const sb = document.getElementById('sg-box');
+  sb.innerHTML = `<form class="card-b panel-open"><div class="row">
+    <div><label class="f" for="m-co">Firma *</label><input id="m-co" type="text" data-field="company_name"></div><div><label class="f" for="m-em">E-Mail *</label><input id="m-em" type="email" data-field="contact_email"></div>
+    <div><label class="f" for="m-n">Ansprechpartner</label><input id="m-n" type="text"></div><div><label class="f" for="m-w">Webseite / Quelle</label><input id="m-w" type="text"></div></div>
+    <div class="formbar"><button class="btn pri">Hinzufügen</button><button type="button" class="btn ghost" id="m-x">Abbrechen</button></div></form>`;
+  sb.querySelector('#m-x').onclick = () => sb.innerHTML = '';
+  sb.querySelector('form').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { clearErrors();
+    const co = sb.querySelector('#m-co').value.trim(), em = sb.querySelector('#m-em').value.trim();
+    if (!co) throw new ApiError(422, { field: 'company_name', message: 'Bitte den Firmennamen angeben.' });
+    if (!em) throw new ApiError(422, { field: 'contact_email', message: 'Bitte eine E-Mail-Adresse angeben.' });
+    await api(`/projects/${p.id}/candidates`, { json: { items: [{ source: 'manual', company_name: co, contact_email: em, contact_name: sb.querySelector('#m-n').value.trim() || null, website: sb.querySelector('#m-w').value.trim() || null }] } });
+    toast('Hinzugefügt – Erstanfrage liegt zur Freigabe bereit'); reloadProject(); }); };
+}
+
+function tabDocs(box, d, ws) {
+  const p = d.project;
+  const events = d.events.filter(e => ws || !e.internal);
+  box.innerHTML = `<div class="grid2"><div class="card"><div class="card-h"><h2>Dokumente</h2></div>
+      ${d.documents.length ? `<ul class="list">${d.documents.map(x => `<li><div><b>${esc(x.label)}</b><div class="dim">${esc(x.file_name || '')} · ${dateDe(x.uploaded_at)}</div></div>
+        ${x.downloadable ? `<button class="btn sm" data-dl="${x.id}" data-name="${esc(x.file_name || 'dokument')}">Herunterladen</button>` : '<span class="dim">nicht verfügbar</span>'}</li>`).join('')}</ul>`
+        : `<div class="empty">Noch keine Dokumente. Briefing und Angebote erscheinen hier automatisch.</div>`}</div>
+    <div class="card"><div class="card-h"><h2>Verlauf</h2></div>
+      ${events.length ? `<ul class="tl">${events.map(e => `<li><span class="w">${when(e.at)}${e.emailed ? ' · per E-Mail' : ''}</span>${e.milestone ? '<b>' + esc(e.title) + '</b>' : esc(e.title)}${e.internal ? ' <span class="tag">intern</span>' : ''}
+        ${e.detail ? `<div class="d">${esc(e.detail)}</div>` : ''}</li>`).join('')}</ul>` : '<div class="empty">Noch keine Einträge.</div>'}</div></div>`;
+  box.querySelectorAll('[data-dl]').forEach(b => b.onclick = () => busy(b, async () => {
+    const r = await fetch(`/api/v1/projects/${p.id}/documents/${b.dataset.dl}`, { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('Download nicht möglich.');
+    const url = URL.createObjectURL(await r.blob()); const a = document.createElement('a'); a.href = url; a.download = b.dataset.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }));
+}
+
+async function tabWork(box, d, ws) {
+  const p = d.project;
+  let members = [];
+  try { members = await api('/members/procurement'); } catch (e) {}
+  const internal = d.events.filter(e => e.internal);
+  box.innerHTML = `<div class="grid-side"><div>
+    <div class="card"><div class="card-h"><h2>Dienstleister & Kommunikation</h2><a class="btn sm" href="/sourcing-dashboard">Lieferanten & Ausschreibungen</a></div>
+      ${d.candidates.length ? `<table class="resp"><thead><tr><th>Dienstleister</th><th>Status</th><th>Letzte Nachricht</th></tr></thead><tbody>${d.candidates.map(c => { const m = (c.messages || [])[0]; return `<tr>
+        <td class="first"><b>${esc(c.company_name)}</b><div class="dim">${esc(c.contact_name || '')} ${esc(c.contact_email || 'keine E-Mail')} · Quelle: ${esc(c.source || '—')}</div></td>
+        <td data-l="Status"><span class="tag">${esc(c.status_label)}</span>${c.nda_status ? `<div class="dim">NDA: ${esc(c.nda_status)}</div>` : ''}</td>
+        <td data-l="Letzte Nachricht">${m ? `<details><summary>${m.direction === 'inbound' ? '← ' : '→ '}${esc(m.subject || '')} · ${when(m.at)}</summary><pre class="mail">${esc(m.body)}</pre></details>` : '—'}</td></tr>`; }).join('')}</tbody></table>`
+        : '<div class="empty">Noch keine Dienstleister.</div>'}</div>
+    <div class="card"><div class="card-h"><h2>Interne Ereignisse</h2></div>${internal.length ? `<ul class="tl">${internal.map(e => `<li><span class="w">${when(e.at)}</span>${esc(e.title)}</li>`).join('')}</ul>` : '<div class="empty">Keine internen Ereignisse.</div>'}</div>
+  </div><div>
+    <div class="card"><div class="card-h"><h3>Zuständigkeit</h3></div><form class="card-b" id="resp"><label class="f" for="r-u">Verantwortlicher Procurement-Experte</label>
+      <select id="r-u" data-field="user_id"><option value="">— nicht zugewiesen —</option>${members.map(m => `<option value="${m.user_id}" ${m.user_id === p.responsible_user_id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>
+      <div class="formbar"><button class="btn sm pri">Speichern</button></div></form></div>
+    <div class="card"><div class="card-b"><h3>Kundensicht</h3><p class="dim" style="margin-top:0">Der Auftraggeber sieht dieselben Vorhabendaten ohne interne Ereignisse, Nachrichtentexte und Prüfschritte.</p>
+      <a class="btn sm" href="${projectUrl(p.id)}">Kundenansicht ansehen</a></div></div>
+  </div></div>`;
+  document.getElementById('resp').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { clearErrors(); await api(`/projects/${p.id}/responsible`, { method: 'PUT', json: { user_id: document.getElementById('r-u').value || null } }); toast('Zuständigkeit gespeichert'); reloadProject(); }); };
+}
+
+/* ================= Einsparungen ================= */
+async function viewSavings(qs) {
+  setTitle('Einsparungen');
+  const year = qs.get('jahr') || '';
+  const s = await api('/projects/savings' + (year ? '?year=' + year : ''));
+  const t = s.totals;
+  app.innerHTML = `<div class="head"><div><h1>Einsparungen</h1><p class="lead">Ergebnisse je Vorhaben – Potenzial, vereinbarte und realisierte Einsparung getrennt, jeweils mit Ausgangsbasis.</p></div>
+    <div><label class="sr" for="yr">Zeitraum</label><select id="yr" style="width:auto"><option value="">Gesamter Zeitraum</option>${s.years.map(y => `<option ${String(y) === year ? 'selected' : ''}>${y}</option>`).join('')}</select></div></div>
+    <div class="kpis">
+      <div class="kpi"><div class="l">Potenzial (laufende Vorhaben)</div>${t.potential ? `<div class="v">${money(t.potential)}</div>` : '<div class="v na">noch nicht ermittelt</div>'}<div class="s">noch nicht beauftragt</div></div>
+      <div class="kpi"><div class="l">Vereinbart</div>${t.agreed ? `<div class="v">${money(t.agreed)}</div>` : '<div class="v na">noch nicht ermittelt</div>'}<div class="s">mit Entscheidung</div></div>
+      <div class="kpi"><div class="l">Davon realisiert</div>${t.realized ? `<div class="v">${money(t.realized)}</div>` : '<div class="v na">noch nicht ermittelt</div>'}<div class="s">nach Abrechnung</div></div>
+      <div class="kpi"><div class="l">Gebühren${s.fee_pct ? ' (' + esc(s.fee_pct) + ' %)' : ''}</div>${t.fee ? `<div class="v">${money(t.fee)}</div>` : `<div class="v na">${s.fee_pct ? 'noch nicht ermittelt' : 'kein Satz vereinbart'}</div>`}<div class="s">${t.net ? 'Nettoeffekt ' + money(t.net) : 'Nettoeffekt bei vollständigen Daten'}</div></div>
+    </div>
+    <div class="card"><div class="card-h"><h2>Je Vorhaben</h2></div>
+      ${s.rows.length ? `<table class="resp"><thead><tr><th>Vorhaben</th><th>Ausgangsbasis</th><th class="num">Potenzial</th><th class="num">Vereinbart</th><th class="num">Realisiert</th><th class="num">Gebühr</th><th class="num">Netto</th></tr></thead><tbody>
+        ${s.rows.map(r => `<tr><td class="first"><a class="rowlink" href="/vorhaben/${r.project_id}">${esc(r.title)}</a><div class="dim">${esc(r.phase_label || '')} · ${dateDe(r.period)}</div></td>
+          <td data-l="Ausgangsbasis">${r.baseline ? money(r.baseline, r.currency) + `<div class="dim">${esc(r.baseline_label || '')}</div>` : NA}</td>
+          <td data-l="Potenzial" class="num">${r.potential ? money(r.potential, r.currency) : '<span class="na">—</span>'}</td>
+          <td data-l="Vereinbart" class="num">${money(r.agreed, r.currency)}</td>
+          <td data-l="Realisiert" class="num">${r.realized != null ? money(r.realized, r.currency) : (r.agreed != null ? `<a href="/vorhaben/${r.project_id}" class="dim">Betrag erfassen</a>` : NA)}</td>
+          <td data-l="Gebühr" class="num">${r.fee != null ? money(r.fee, r.currency) + (r.fee_provisional ? '<div class="dim">vorläufig</div>' : '') : NA}</td>
+          <td data-l="Netto" class="num">${money(r.net, r.currency)}</td></tr>`).join('')}</tbody></table>`
+        : `<div class="empty">Noch keine Ergebnisse. Sobald Angebote vorliegen und Sie entscheiden, erscheint hier, was Sie sparen.<br><a class="btn" href="/vorhaben">Zu meinen Vorhaben</a></div>`}</div>
+    <div class="card"><div class="card-b"><h3>So rechnen wir</h3><ul style="margin:0;padding-left:18px">${Object.values(s.definitions).map(x => `<li class="dim" style="margin-bottom:4px">${esc(x)}</li>`).join('')}
+      <li class="dim">Fehlende Angaben werden als „noch nicht ermittelt“ ausgewiesen, nie als 0. Jedes Vorhaben zählt je Kategorie genau einmal.</li></ul></div></div>`;
+  document.getElementById('yr').onchange = e => go('/einsparungen' + (e.target.value ? '?jahr=' + e.target.value : ''), true);
+  focusMain();
+}
+
+/* ================= Entscheidungen ================= */
+async function viewDecisions() {
+  setTitle('Entscheidungen');
+  const items = await api('/projects/decisions');
+  const groups = {};
+  items.forEach(x => (groups[x.project_id] = groups[x.project_id] || { title: x.project_title, items: [] }).items.push(x));
+  app.innerHTML = `<div class="head"><div><h1>Entscheidungen</h1><p class="lead">Nur Ihre Aufgaben: Angaben ergänzen, Nachrichten freigeben, Anbieter wählen und Beauftragungen bestätigen.</p></div></div>
+    ${items.length ? Object.entries(groups).map(([pid, g]) => `<div class="card"><div class="card-h"><h2>${esc(g.title)}</h2><a class="dim" href="/vorhaben/${pid}">Zum Vorhaben</a></div>
+      <ul class="list">${g.items.map(x => `<li><div><b>${esc(x.title)}</b><div class="dim">${esc(x.context || '')}</div></div><a class="btn sm pri" href="${decisionUrl(x)}">${x.kind === 'approve_message' ? 'Lesen & freigeben' : x.kind === 'choose_offer' ? 'Angebote vergleichen' : 'Öffnen'}</a></li>`).join('')}</ul></div>`).join('')
+      : `<div class="card"><div class="empty">Keine offenen Entscheidungen – der Agent meldet sich, sobald Sie gefragt sind.<br><a class="btn" href="/vorhaben">Zu meinen Vorhaben</a></div></div>`}`;
+  focusMain();
+}
+
+/* ================= Hilfe ================= */
+function viewHelp() {
+  setTitle('Hilfe');
+  app.innerHTML = `<div class="help"><h1>Hilfe</h1><p class="lead">So arbeitet NegotiateX für Sie – kurz erklärt.</p>
+    <div class="card"><div class="card-b">
+    <h2 style="margin-top:0">So läuft ein Vorhaben</h2>
+    <ol><li><b>Bedarf beschreiben</b> – oder ein vorhandenes Angebot hochladen. Budget und Termin angeben.</li>
+      <li><b>Auftrag prüfen</b> – der Agent fasst zusammen; Sie bestätigen Leistungsumfang und Verhandlungsmandat.</li>
+      <li><b>Dienstleister ansprechen</b> – aus Ihrem Bestand vorgeschlagen; jede Nachricht geben Sie vorher frei.</li>
+      <li><b>Angebote prüfen</b> – Preise, Umfang, AGB und Abweichungen von Ihren Vorgaben, mit wörtlichem Beleg.</li>
+      <li><b>Verhandeln lassen</b> – in höchstens zwei Runden, nie über Ihrer Obergrenze.</li>
+      <li><b>Entscheiden</b> – nur Sie beauftragen. Zu- und Absagen gehen nach Ihrer Freigabe raus.</li></ol>
+    <h2>Was bedeuten die Status?</h2>
+    <ul><li>${stateChip('draft', 'Entwurf')} Noch nicht beauftragt – Sie können jederzeit weitermachen.</li>
+      <li>${stateChip('in_progress', 'In Bearbeitung')} Der Agent oder die Dienstleister sind dran. Sie müssen nichts tun.</li>
+      <li>${stateChip('waiting_for_you', 'Wartet auf Sie')} Eine Freigabe oder Entscheidung von Ihnen steht an.</li>
+      <li>${stateChip('done', 'Abgeschlossen')} Beauftragt oder abgebrochen.</li></ul>
+    <h2>Angebote: eingegangen und vergleichbar</h2>
+    <p>„Eingegangen“ zählt jedes erhaltene Angebot. „Vergleichbar“ sind Angebote mit erkanntem Preis und dem angefragten Umfang. Angeschriebene Dienstleister ohne Angebot zählen nicht als Angebot.</p>
+    <h2>Wie werden Einsparungen berechnet?</h2>
+    <p>Ausgangsbasis ist Ihr mitgebrachtes Angebot bzw. das Erstangebot des beauftragten Anbieters. <b>Vereinbart</b> ist die Differenz zum beauftragten Preis, <b>realisiert</b> die Differenz zum tatsächlich abgerechneten Betrag. Gebühren werden getrennt ausgewiesen. Fehlende Daten erscheinen als „noch nicht ermittelt“ – nie als 0.</p>
+    <h2>Wer darf was?</h2>
+    <p>Entscheidungen (Auftrag erteilen, Anbieter beauftragen) treffen nur Personen mit Entscheidungsbefugnis. Ihr Administrator vergibt Rollen unter „Administration“.</p>
+    </div></div></div>`;
+  focusMain();
+}
+
+/* Neu registrierte Nutzer haben noch kein Unternehmenskonto: einmalig anlegen. */
+(async () => {
+  try { await api('/tenants/me'); }
+  catch (e) {
+    if (e.status === 403) {
+      let user = null; try { user = JSON.parse(localStorage.getItem('nx_user') || 'null'); } catch (x) {}
+      try { await api('/tenants', { json: { company_name: (user && (user.company_name || user.name)) || 'Mein Unternehmen' } }); } catch (x) {}
+      try { sessionStorage.removeItem('nx_access'); } catch (x) {}
+      location.reload(); return;
+    }
+  }
+  render();
+})();
+</script>
+</body>
+</html>

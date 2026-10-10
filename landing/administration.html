@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Administration – NegotiateX.ai</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/theme.css">
+<style>
+body{font-size:14px;line-height:1.55}
+main{padding:92px 28px 64px;max-width:1100px;margin:0 auto}
+h1{font-family:'Playfair Display',serif;font-size:28px;margin:0 0 4px}
+h2{font-family:'Playfair Display',serif;font-size:19px;font-weight:600;margin:0}
+.lead{color:var(--text-muted);margin:0 0 22px}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:18px;padding:0}
+th{font-family:'DM Sans',sans-serif;text-transform:none;letter-spacing:0}
+label{font-family:'DM Sans',sans-serif;text-transform:none;letter-spacing:0;font-size:inherit;color:inherit;margin:0}
+.checks label{display:flex}
+.card-h{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.card-b{padding:16px 18px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;padding:10px 14px;color:var(--text-muted);font-weight:500;font-size:12px;border-bottom:1px solid var(--border)}
+td{padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.dim{color:var(--text-dim);font-size:12.5px}
+.btn{font-family:'DM Sans',sans-serif;font-size:13px;border-radius:8px;padding:8px 14px;cursor:pointer;border:1px solid var(--border);background:var(--bg-card);color:var(--text);text-decoration:none;display:inline-block}
+.btn.pri{background:var(--gold);border-color:var(--gold);color:#fff}.btn.sm{font-size:12px;padding:5px 10px}.btn.bad{color:var(--status-bad)}
+.btn[disabled]{opacity:.55}
+label.f{display:block;font-size:12.5px;color:var(--text-muted);margin:12px 0 5px;font-weight:500}
+input[type=text],input[type=email],input[type=number]{width:100%;box-sizing:border-box;font-family:inherit;font-size:14px;padding:9px 11px;border:1px solid var(--border);border-radius:8px}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+.checks{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}
+.checks label{display:flex;gap:6px;align-items:center;font-size:13px}
+.invalid{border-color:var(--status-bad)!important}.ferr{color:var(--status-bad);font-size:12.5px;margin-top:4px}
+.tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11.5px;border:1px solid var(--border);color:var(--text-muted);margin:2px 4px 2px 0}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--text);color:#fff;padding:11px 18px;border-radius:9px;z-index:500}
+.toast.err{background:var(--status-bad)}
+.note{font-size:12.5px;color:var(--text-muted);background:var(--bg-card2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:12px}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media(max-width:720px){main{padding:80px 16px 50px}table thead{display:none}table tr{display:block;border-bottom:1px solid var(--border)}table td{display:block;border:none;padding:6px 14px}}
+</style>
+</head>
+<body>
+<header id="app-nav"></header>
+<script src="/assets/app-nav.js"></script>
+<main id="app">
+  <h1>Administration</h1>
+  <p class="lead">Nutzer, Rollen und Einstellungen Ihres Unternehmenskontos. Rechte werden serverseitig geprüft – ausgeblendete Menüpunkte allein schützen keine Daten.</p>
+  <div class="card"><div class="card-h"><h2>Nutzer & Rollen</h2></div><div id="members"><div class="card-b dim">Lade…</div></div></div>
+  <div class="card"><div class="card-h"><h2>Nutzer einladen</h2></div><form class="card-b" id="inv">
+    <div class="row"><div><label class="f" for="i-em">E-Mail *</label><input id="i-em" type="email" data-field="email"></div>
+      <div><label class="f" for="i-n">Name</label><input id="i-n" type="text"></div></div>
+    <label class="f">Rollen</label><div class="checks" data-field="roles">
+      <label><input type="checkbox" name="r" value="customer" checked> Kunde / Auftraggeber</label>
+      <label><input type="checkbox" name="r" value="procurement"> Procurement-Experte</label>
+      <label><input type="checkbox" name="r" value="admin"> Admin</label></div>
+    <label class="f">Befugnis</label><div class="checks"><label><input type="checkbox" id="i-dec"> Entscheidungsbefugt (Auftrag erteilen, Anbieter beauftragen)</label></div>
+    <div class="note">Admin-Sein gewährt keine Entscheidungsbefugnis und keine operative Einkaufsarbeit – beides wird ausdrücklich vergeben. Die eingeladene Person erhält einen Link zum Festlegen ihres Passworts (72 Stunden gültig).</div>
+    <div style="margin-top:14px"><button class="btn pri">Einladung senden</button></div></form></div>
+  <div class="card"><div class="card-h"><h2>Einstellungen</h2></div><form class="card-b" id="set">
+    <div class="row"><div><label class="f" for="s-co">Firmenname</label><input id="s-co" type="text" data-field="company_name"></div>
+      <div><label class="f" for="s-fee">Erfolgsgebühr (% der Einsparung)</label><input id="s-fee" type="number" step="0.01" min="0" max="100" data-field="success_fee_pct" placeholder="nicht vereinbart"></div></div>
+    <div class="note">Ist kein Gebührensatz hinterlegt, weisen Einsparungen die Gebühr als „noch nicht ermittelt“ aus und zeigen keinen Nettoeffekt.</div>
+    <div style="margin-top:14px"><button class="btn pri">Speichern</button></div></form></div>
+  <div class="card"><div class="card-h"><h2>Systembetrieb</h2></div><div class="card-b">
+    <p class="dim" style="margin-top:0">Monitoring und Systemprotokolle sind nur für den Plattformbetrieb zugänglich.</p>
+    <a class="btn sm" href="/monitoring/" target="_blank" rel="noopener">Monitoring öffnen</a></div></div>
+</main>
+<script>
+const token = localStorage.getItem('nx_token');
+const ROLES = [['customer', 'Kunde'], ['procurement', 'Procurement'], ['admin', 'Admin']];
+function esc(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function toast(m, err){ const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.setAttribute('role', 'status'); t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 4000); }
+async function api(path, opts = {}) {
+  const headers = { Authorization: 'Bearer ' + token };
+  if (opts.json !== undefined) headers['Content-Type'] = 'application/json';
+  const r = await fetch('/api/v1' + path, { method: opts.method || 'GET', headers, body: opts.json !== undefined ? JSON.stringify(opts.json) : undefined });
+  if (!r.ok) { const b = await r.json().catch(() => ({})); const e = new Error((b.detail && (b.detail.message || b.detail)) || 'Fehler ' + r.status); e.field = b.detail && b.detail.field; throw e; }
+  return r.json();
+}
+function fieldErr(e) {
+  document.querySelectorAll('.ferr').forEach(x => x.remove()); document.querySelectorAll('.invalid').forEach(x => x.classList.remove('invalid'));
+  const el = e.field && document.querySelector(`[data-field="${e.field}"]`);
+  if (!el) { toast(e.message, true); return; }
+  el.classList.add('invalid'); const m = document.createElement('div'); m.className = 'ferr'; m.textContent = e.message; el.insertAdjacentElement('afterend', m); if (el.focus) el.focus();
+}
+async function loadMembers() {
+  const box = document.getElementById('members');
+  let rows;
+  try { rows = await api('/admin/members'); } catch (e) { box.innerHTML = `<div class="card-b">${esc(e.message)}</div>`; return; }
+  box.innerHTML = `<table><thead><tr><th>Person</th><th>Rollen</th><th>Entscheidungsbefugt</th><th></th></tr></thead><tbody>
+    ${rows.map(m => `<tr data-u="${m.user_id}"><td><b>${esc(m.name || m.email)}</b>${m.is_me ? ' <span class="tag">Sie</span>' : ''}<div class="dim">${esc(m.email)}</div></td>
+      <td><div class="checks">${ROLES.map(([k, l]) => `<label><input type="checkbox" value="${k}" ${m.roles.includes(k) ? 'checked' : ''}> ${l}</label>`).join('')}</div></td>
+      <td><label><input type="checkbox" class="dec" ${m.can_decide ? 'checked' : ''}> ja</label></td>
+      <td style="white-space:nowrap"><button class="btn sm" data-save>Speichern</button> ${m.is_me ? '' : '<button class="btn sm bad" data-del>Entfernen</button>'}</td></tr>`).join('')}</tbody></table>`;
+  box.querySelectorAll('[data-save]').forEach(b => b.onclick = async () => {
+    const tr = b.closest('tr'); b.disabled = true;
+    try { await api('/admin/members/' + tr.dataset.u, { method: 'PUT', json: { roles: [...tr.querySelectorAll('.checks input:checked')].map(x => x.value), can_decide: tr.querySelector('.dec').checked } });
+      toast('Gespeichert'); sessionStorage.removeItem('nx_access'); } catch (e) { toast(e.message, true); }
+    b.disabled = false; loadMembers();
+  });
+  box.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    if (!confirm('Diese Person aus dem Unternehmenskonto entfernen?')) return;
+    try { await api('/admin/members/' + b.closest('tr').dataset.u, { method: 'DELETE' }); toast('Entfernt'); } catch (e) { toast(e.message, true); }
+    loadMembers();
+  });
+}
+document.getElementById('inv').onsubmit = async e => {
+  e.preventDefault(); const b = e.submitter; b.disabled = true;
+  try {
+    const r = await api('/admin/members', { method: 'POST', json: { email: document.getElementById('i-em').value.trim(), name: document.getElementById('i-n').value.trim() || null,
+      roles: [...document.querySelectorAll('input[name=r]:checked')].map(x => x.value), can_decide: document.getElementById('i-dec').checked } });
+    toast(r.invitation_sent ? 'Einladung gesendet' : 'Angelegt – Einladungs-Mail konnte nicht gesendet werden'); e.target.reset(); loadMembers();
+  } catch (err) { fieldErr(err); }
+  b.disabled = false;
+};
+document.getElementById('set').onsubmit = async e => {
+  e.preventDefault(); const b = e.submitter; b.disabled = true;
+  try { await api('/admin/settings', { method: 'PUT', json: { company_name: document.getElementById('s-co').value, success_fee_pct: document.getElementById('s-fee').value } }); toast('Gespeichert'); }
+  catch (err) { fieldErr(err); }
+  b.disabled = false;
+};
+(async () => {
+  loadMembers();
+  try { const s = await api('/admin/settings'); document.getElementById('s-co').value = s.company_name || ''; document.getElementById('s-fee').value = s.success_fee_pct || ''; } catch (e) {}
+})();
+</script>
+</body>
+</html>

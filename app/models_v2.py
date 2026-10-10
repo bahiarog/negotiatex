@@ -61,6 +61,8 @@ class Tenant(Base):
     __tablename__ = "tenants"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_name = Column(String(255), nullable=False)
+    # Erfolgsgebuehr in % der Einsparung; NULL = nicht vereinbart ("noch nicht ermittelt")
+    success_fee_pct = Column(Numeric(5, 2), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 
@@ -73,6 +75,10 @@ class Membership(Base):
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(SAEnum(MembershipRole), default=MembershipRole.member, nullable=False)
+    # Rollen im Sinne von access.py (customer/procurement/admin); leer = aus `role` abgeleitet
+    roles_json = Column(JSON, nullable=True)
+    # Entscheidungsbefugnis (Agent starten, Mandat, Zuschlag) -- unabhaengig von Admin
+    can_decide = Column(Boolean, default=False, nullable=False, server_default="false")
     created_at = Column(DateTime, server_default=func.now())
     __table_args__ = (UniqueConstraint("tenant_id", "user_id", name="uq_membership_tenant_user"),)
 

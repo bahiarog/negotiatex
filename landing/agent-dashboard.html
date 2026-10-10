@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NegotiateX.ai — Agent-Uebersicht</title>
+<title>Arbeitsübersicht – NegotiateX.ai</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/theme.css">
@@ -60,7 +60,7 @@ tr:last-child td{border-bottom:none}
 <body>
 <header id="app-nav"></header>
 <script src="/assets/app-nav.js"></script>
-<main id="app"><div class="loading">Lade Agent-Uebersicht...</div></main>
+<main id="app"><div class="loading">Lade Arbeitsübersicht…</div></main>
 
 <script>
 const token = localStorage.getItem('nx_token');
@@ -80,8 +80,8 @@ function esc(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&am
 function fmtWhen(iso){ return iso ? new Date(iso).toLocaleString('de-DE') : '—'; }
 
 const CATEGORY_LABELS = {
-  negotiation: 'Verhandlung (Teil A)', exception: 'Ausnahme', outreach: 'Erstkontakt/Sourcing (B4)',
-  nda: 'NDA (B6)', rfq: 'RFQ (B7)', contract: 'Vertrag (B9)', mdc: 'Data Center',
+  negotiation: 'Verhandlung', exception: 'Eskalation', outreach: 'Dienstleister-Kontakt',
+  nda: 'Vertraulichkeit', rfq: 'Angebotsanfrage', contract: 'Vertrag', mdc: 'Data Center',
 };
 
 let tenantEnsured = false;
@@ -114,31 +114,43 @@ async function render() {
       <td>${esc(p.subject)}</td>
       <td style="max-width:360px">${esc(p.detail)}</td>
       <td class="mono">${fmtWhen(p.created_at)}</td>
-      <td><a class="open-link" href="${esc(p.link)}">Oeffnen &rarr;</a></td>
+      <td><a class="open-link" href="${esc(p.link)}">Öffnen &rarr;</a></td>
     </tr>`).join('');
 
   const activityRows = activity.map(a => `
     <li>${esc(a.text)} <span class="mono">[${esc(a.actor)}]</span><span class="when">${fmtWhen(a.when)}</span></li>`).join('');
 
+  const deadlines = data.deadlines || [], unassigned = data.unassigned || [];
   app.innerHTML = `
-    <h1>Agent-Uebersicht</h1>
-    <p class="sub">Alles, was der Agent vorbereitet hat und worauf eine menschliche Entscheidung wartet — ueber Verhandlung (Teil A), Sourcing/Erstkontakt/NDA (Teil B) und Vertraege hinweg. Kein Eintrag hier wurde automatisch versendet oder freigegeben.</p>
+    <h1>Arbeitsübersicht</h1>
+    <p class="sub">Offene Fälle, Eskalationen, Fristen und Zuständigkeiten. Kein Eintrag hier wurde automatisch versendet oder freigegeben.</p>
 
     <div class="kpis">
       <div class="kpi"><div class="l">Wartet auf Freigabe</div><div class="v ${approvalCount ? 'warn' : ''}">${approvalCount}</div></div>
-      <div class="kpi"><div class="l">Offene Ausnahmen</div><div class="v ${exceptionCount ? 'bad' : ''}">${exceptionCount}</div></div>
-      <div class="kpi"><div class="l">Gesamt zu pruefen</div><div class="v ${pending.length ? 'warn' : ''}">${pending.length}</div></div>
+      <div class="kpi"><div class="l">Eskalationen</div><div class="v ${exceptionCount ? 'bad' : ''}">${exceptionCount}</div></div>
+      <div class="kpi"><div class="l">Fristen (bald / überfällig)</div><div class="v ${deadlines.some(x => x.overdue) ? 'bad' : deadlines.length ? 'warn' : ''}">${deadlines.length}</div></div>
+      <div class="kpi"><div class="l">Vorhaben ohne Verantwortlichen</div><div class="v ${unassigned.length ? 'warn' : ''}">${unassigned.length}</div></div>
     </div>
 
+    ${deadlines.length || unassigned.length ? `<div class="panel">
+      <div class="panel-h">Fristen & Zuständigkeiten <a class="open-link" href="/arbeitsbereich/vorhaben">Alle Vorhaben &rarr;</a></div>
+      <table><thead><tr><th>Vorhaben</th><th>Thema</th><th>Fällig</th><th></th></tr></thead><tbody>
+      ${deadlines.map(x => `<tr><td>${esc(x.title)}</td><td>${esc(x.kind === 'Angebotsgueltigkeit' ? 'Angebotsgültigkeit' : x.kind)}</td>
+        <td class="mono" style="${x.overdue ? 'color:var(--status-bad)' : ''}">${new Date(x.due).toLocaleDateString('de-DE')}${x.overdue ? ' (überfällig)' : ''}</td>
+        <td><a class="open-link" href="/arbeitsbereich/vorhaben/${x.project_id}">Öffnen &rarr;</a></td></tr>`).join('')}
+      ${unassigned.map(x => `<tr><td>${esc(x.title)}</td><td>Kein Verantwortlicher zugewiesen</td><td class="mono">—</td>
+        <td><a class="open-link" href="/arbeitsbereich/vorhaben/${x.project_id}/bearbeitung">Zuweisen &rarr;</a></td></tr>`).join('')}
+      </tbody></table></div>` : ''}
+
     <div class="panel">
-      <div class="panel-h">Wartet auf deine Entscheidung <span class="cnt">${pending.length}</span></div>
+      <div class="panel-h">Wartet auf Freigabe <span class="cnt">${pending.length}</span></div>
       ${pending.length ? `<table><thead><tr><th>Bereich</th><th>Art</th><th>Firma / Fall</th><th>Detail</th><th>Erstellt</th><th></th></tr></thead><tbody>${pendingRows}</tbody></table>`
                        : '<div class="empty">Nichts offen — der Agent hat aktuell nichts vorbereitet, das auf eine Entscheidung wartet.</div>'}
       <div class="disclaimer">Jede Zeile ist ein vom Agenten erstellter Entwurf bzw. eine erkannte Ausnahme. "Oeffnen" fuehrt zur bestehenden Freigabe-Ansicht im jeweiligen Modul — Versand/Freigabe geschieht ausschliesslich dort, durch einen Menschen, nie automatisch von dieser Seite aus.</div>
     </div>
 
     <div class="panel">
-      <div class="panel-h">Letzte Agent-Aktivitaet <span class="refresh-note">aktualisiert sich alle 30s</span></div>
+      <div class="panel-h">Letzte Aktivität des Agenten <span class="refresh-note">aktualisiert sich alle 30 s</span></div>
       ${activity.length ? `<ul class="activity">${activityRows}</ul>` : '<div class="empty">Noch keine Aktivitaet protokolliert.</div>'}
     </div>`;
 }

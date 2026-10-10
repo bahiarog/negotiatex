@@ -72,6 +72,25 @@ class Project(Base):
     awarded_by = Column(String(100), nullable=True)
     decision_note = Column(Text, nullable=True)
 
+    # Zustaendigkeit und Auftrag
+    responsible_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    shared_with_tenant = Column(Boolean, default=False, nullable=False, server_default="false")
+    mandate_confirmed_at = Column(DateTime, nullable=True)   # Verhandlungsmandat vom Kunden bestaetigt
+    mandate_confirmed_by = Column(String(100), nullable=True)
+
+    # Einstieg "bestehendes Angebot": Angaben bis zum Start im Entwurf
+    offer_document_id = Column(UUID(as_uuid=True), ForeignKey("mdc_documents.id", ondelete="SET NULL"), nullable=True)
+    incumbent_company = Column(String(255), nullable=True)
+    incumbent_email = Column(String(255), nullable=True)
+    incumbent_contact = Column(String(255), nullable=True)
+
+    # Ergebnis: Snapshot bei Entscheidung, Abrechnung fuer realisierte Einsparung
+    result_json = Column(JSON, nullable=True)
+    invoiced_amount = Column(Numeric(18, 2), nullable=True)
+    invoiced_at = Column(DateTime, nullable=True)
+    invoiced_by = Column(String(100), nullable=True)
+    archived_at = Column(DateTime, nullable=True)
+
     created_by = Column(String(100), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
@@ -89,6 +108,7 @@ class ProjectEvent(Base):
     detail = Column(Text, nullable=True)
     actor = Column(String(100), nullable=False, default="agent")
     milestone = Column(Boolean, default=False, nullable=False)
+    customer_visible = Column(Boolean, default=True, nullable=False, server_default="true")
     emailed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), index=True)
 

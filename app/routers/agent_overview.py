@@ -158,8 +158,37 @@ async def agent_overview(membership=Depends(get_current_membership), db: AsyncSe
                           "text": f"NDA-Status: {e.to_status}" + (f" ({e.reason})" if e.reason else ""), "actor": e.actor})
     activity.sort(key=lambda x: x["when"] or "", reverse=True)
 
+    # Zustaendigkeiten und Fristen (Arbeitsuebersicht)
+    from datetime import date, datetime, timedelta
+    from models_projects import Project, ProjectStatus
+    from models_contracts import RFQ, RFQOffer, RFQInvitation
+    active = (await db.execute(select(Project).where(
+        Project.tenant_id == tid, Project.archived_at.is_(None),
+        Project.status.notin_([ProjectStatus.awarded, ProjectStatus.cancelled, ProjectStatus.briefing])))).scalars().all()
+    unassigned = [{"project_id": str(p.id), "title": p.title, "since": p.created_at.isoformat() if p.created_at else None}
+                  for p in active if not p.responsible_user_id]
+    deadlines = []
+    today = date.today()
+    for p in active:
+        if p.needed_by and p.needed_by <= today + timedelta(days=21):
+            deadlines.append({"project_id": str(p.id), "title": p.title, "kind": "Leistungstermin",
+                              "due": p.needed_by.isoformat(), "overdue": p.needed_by < today})
+        if p.sourcing_request_id:
+            for rfq in (await db.execute(select(RFQ).where(RFQ.sourcing_request_id == p.sourcing_request_id))).scalars().all():
+                invited = (await db.execute(select(RFQInvitation).where(RFQInvitation.rfq_id == rfq.id, RFQInvitation.sent_at.isnot(None)))).scalars().all()
+                if invited and rfq.deadline and rfq.deadline <= datetime.utcnow() + timedelta(days=2):
+                    deadlines.append({"project_id": str(p.id), "title": p.title, "kind": "Angebotsfrist",
+                                      "due": rfq.deadline.date().isoformat(), "overdue": rfq.deadline < datetime.utcnow()})
+                for o in (await db.execute(select(RFQOffer).where(RFQOffer.rfq_id == rfq.id, RFQOffer.offer_validity_until.isnot(None)))).scalars().all():
+                    if getattr(o.status, "value", o.status) == "submitted" and o.offer_validity_until <= datetime.utcnow() + timedelta(days=7):
+                        deadlines.append({"project_id": str(p.id), "title": p.title, "kind": "Angebotsgueltigkeit",
+                                          "due": o.offer_validity_until.date().isoformat(), "overdue": o.offer_validity_until < datetime.utcnow()})
+    deadlines.sort(key=lambda x: x["due"])
+
     return {
         "pending_count": len(pending),
         "pending": pending[:100],
         "recent_activity": activity[:25],
+        "unassigned": unassigned,
+        "deadlines": deadlines[:30],
     }

@@ -15,7 +15,9 @@ import models_sourcing  # noqa: F401 -- registers Teil B sourcing/outreach/NDA t
 import models_contracts  # noqa: F401 -- registers Teil B7-B9 RFQ/offer/contract tables on Base.metadata
 import models_mdc  # noqa: F401 -- registers Master Data Center (Etappe 1) tables on Base.metadata
 import models_projects  # noqa: F401 -- registers Vorhaben (Customer Journey) tables on Base.metadata
-from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers, chat, requisitions, invoices, negotiation, sourcing, agent_overview, mdc, mdc_analysis, mdc_ops, projects
+from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers, chat, requisitions, invoices, negotiation, sourcing, agent_overview, mdc, mdc_analysis, mdc_ops, projects, administration
+from fastapi import Depends
+from access import require_procurement, require_platform_admin, platform_admin_except
 from routers.rfq_contracts import rfq_router, contracts_router
 
 limiter = Limiter(key_func=get_remote_address)
@@ -45,38 +47,42 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 
 from prometheus_fastapi_instrumentator import Instrumentator
 Instrumentator().instrument(app).expose(app, endpoint="/api/metrics", include_in_schema=False)
-app.include_router(benchmark.router, prefix="/api/benchmark", tags=["Benchmark"])
+app.include_router(benchmark.router, prefix="/api/benchmark", tags=["Benchmark"], dependencies=[Depends(require_platform_admin)])
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
-app.include_router(audit.router, prefix="/api/audit", tags=["Audit"])
-app.include_router(purchase_orders.router, prefix="/api/po", tags=["Purchase Orders"])
-app.include_router(suppliers.router, prefix="/api/suppliers", tags=["Suppliers"])
+app.include_router(audit.router, prefix="/api/audit", tags=["Audit"], dependencies=[Depends(require_platform_admin)])
+app.include_router(purchase_orders.router, prefix="/api/po", tags=["Purchase Orders"], dependencies=[Depends(require_platform_admin)])
+app.include_router(suppliers.router, prefix="/api/suppliers", tags=["Suppliers"],
+                   dependencies=[Depends(platform_admin_except("/invite/status", "/invite/submit"))])
 app.include_router(chat.router, prefix="/api/chat", tags=["Public Chat"])
-app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
-app.include_router(export.router, prefix="/api/export", tags=["Export"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"], dependencies=[Depends(require_platform_admin)])
+app.include_router(export.router, prefix="/api/export", tags=["Export"], dependencies=[Depends(require_platform_admin)])
 app.include_router(ws.router, prefix="/api", tags=["WebSocket"])
 app.include_router(apikeys.router, prefix="/api", tags=["API Keys"])
 
-app.include_router(webhooks.router, prefix="/api/webhooks", tags=["Webhooks"])
+app.include_router(webhooks.router, prefix="/api/webhooks", tags=["Webhooks"], dependencies=[Depends(require_platform_admin)])
 app.include_router(public.router, prefix="/api/public", tags=["Supplier Portal"])
-app.include_router(requisitions.router, prefix="/api/requisitions", tags=["Requisitions"])
-app.include_router(invoices.router, prefix="/api/invoices", tags=["Invoices"])
+app.include_router(requisitions.router, prefix="/api/requisitions", tags=["Requisitions"],
+                   dependencies=[Depends(platform_admin_except("/approval-status", "/approval-decide"))])
+app.include_router(invoices.router, prefix="/api/invoices", tags=["Invoices"], dependencies=[Depends(require_platform_admin)])
 
 # Phase 1 (CTO briefing 7.10.2026): data model, upload, extraction, policy
 # engine, comparisons, read-only dashboard. Mounted under /api/v1 so the
 # existing nginx `location /api/` proxy on negotiatex.ai already covers it
 # without any nginx changes.
 app.include_router(tenants.router, prefix="/api/v1", tags=["Phase 1 - Tenants"])
-app.include_router(cases.router, prefix="/api/v1", tags=["Phase 1 - Cases"])
-app.include_router(policies.router, prefix="/api/v1", tags=["Phase 1 - Policies"])
-app.include_router(negotiation.router, prefix="/api/v1/negotiation", tags=["Teil A - Negotiation"])
-app.include_router(sourcing.router, prefix="/api/v1/sourcing", tags=["Teil B - Sourcing"])
-app.include_router(rfq_router, prefix="/api/v1/rfq", tags=["Teil B7-B8 - RFQ & Angebote"])
-app.include_router(contracts_router, prefix="/api/v1/contracts", tags=["Teil B9 - Vertraege"])
-app.include_router(agent_overview.router, prefix="/api/v1/agent", tags=["Agent-Uebersicht (Freigaben & Aktivitaet)"])
-app.include_router(projects.router, prefix="/api/v1/projects", tags=["Vorhaben (Customer Journey)"])
-app.include_router(mdc.router, prefix="/api/v1/mdc", tags=["Master Data Center"])
-app.include_router(mdc_analysis.router, prefix="/api/v1/mdc", tags=["Master Data Center - Analyse"])
-app.include_router(mdc_ops.router, prefix="/api/v1/mdc", tags=["Master Data Center - Betrieb"])
+app.include_router(cases.router, prefix="/api/v1", tags=["Phase 1 - Cases"], dependencies=[Depends(require_procurement)])
+app.include_router(policies.router, prefix="/api/v1", tags=["Phase 1 - Policies"], dependencies=[Depends(require_procurement)])
+app.include_router(negotiation.router, prefix="/api/v1/negotiation", tags=["Teil A - Negotiation"], dependencies=[Depends(require_procurement)])
+app.include_router(sourcing.router, prefix="/api/v1/sourcing", tags=["Teil B - Sourcing"], dependencies=[Depends(require_procurement)])
+app.include_router(sourcing.public_router, prefix="/api/v1/sourcing", tags=["Teil B - Dienstleister-Selbstauskunft (oeffentlich, Token)"])
+app.include_router(rfq_router, prefix="/api/v1/rfq", tags=["Teil B7-B8 - RFQ & Angebote"], dependencies=[Depends(require_procurement)])
+app.include_router(contracts_router, prefix="/api/v1/contracts", tags=["Teil B9 - Vertraege"], dependencies=[Depends(require_procurement)])
+app.include_router(agent_overview.router, prefix="/api/v1/agent", tags=["Arbeitsuebersicht"], dependencies=[Depends(require_procurement)])
+app.include_router(projects.router, prefix="/api/v1/projects", tags=["Vorhaben (Kunden- und Arbeitsbereich)"])
+app.include_router(administration.router, prefix="/api/v1", tags=["Zugang & Administration"])
+app.include_router(mdc.router, prefix="/api/v1/mdc", tags=["Master Data Center"], dependencies=[Depends(require_procurement)])
+app.include_router(mdc_analysis.router, prefix="/api/v1/mdc", tags=["Master Data Center - Analyse"], dependencies=[Depends(require_procurement)])
+app.include_router(mdc_ops.router, prefix="/api/v1/mdc", tags=["Master Data Center - Betrieb"], dependencies=[Depends(require_procurement)])
 
 @app.get("/health")
 async def health_root():

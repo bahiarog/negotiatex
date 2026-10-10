@@ -29,9 +29,9 @@ async def project_for_request(db: AsyncSession, sourcing_request_id) -> Optional
 
 
 async def add_event(db: AsyncSession, project: Project, kind: str, title: str, detail: Optional[str] = None,
-                    milestone: bool = False, actor: str = "agent") -> ProjectEvent:
+                    milestone: bool = False, actor: str = "agent", customer_visible: bool = True) -> ProjectEvent:
     ev = ProjectEvent(tenant_id=project.tenant_id, project_id=project.id, kind=kind, title=title[:255],
-                      detail=detail, actor=str(actor), milestone=milestone)
+                      detail=detail, actor=str(actor), milestone=milestone, customer_visible=customer_visible)
     db.add(ev)
     await db.flush()
     if milestone and project.notify_milestones and project.customer_email:
@@ -39,7 +39,7 @@ async def add_event(db: AsyncSession, project: Project, kind: str, title: str, d
         body = (
             f"Guten Tag,\n\nes gibt Neuigkeiten zu Ihrem Vorhaben \"{project.title}\":\n\n{title}\n"
             + (f"\n{detail}\n" if detail else "")
-            + f"\nAktueller Stand und naechste Schritte:\n{APP_URL}/projects#p/{project.id}\n\n"
+            + f"\nAktueller Stand und naechste Schritte:\n{APP_URL}/vorhaben/{project.id}\n\n"
             "Ihr NegotiateX-Agent\n(Automatische Statusmeldung -- bitte nicht auf diese E-Mail antworten.)"
         )
         try:
