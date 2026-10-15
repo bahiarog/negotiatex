@@ -90,6 +90,48 @@ class _JobLock:
         return False
 
 
+_BOUNCE_SENDER_RE = re.compile(r"^(mailer-daemon|postmaster)@", re.IGNORECASE)
+_BOUNCE_SUBJECT_RE = re.compile(r"^(returned mail|undeliver|delivery status notification|mail delivery failed|unzustellbar)", re.IGNORECASE)
+_FAILED_RCPT_RE = re.compile(r"<([^<>\s@]+@[^<>\s@]+\.[a-z]{2,})>\s*:?\s*(?:user does not exist|.*?5\.\d\.\d)", re.IGNORECASE)
+
+
+def _is_bounce(m: dict) -> bool:
+    return bool(_BOUNCE_SENDER_RE.match(m.get("from_addr") or "") or _BOUNCE_SUBJECT_RE.match((m.get("subject") or "").strip()))
+
+
+async def _handle_bounce(db, m: dict) -> dict:
+    """Unzustellbare Mail: betroffene Dienstleister markieren, Erinnerungen
+    stoppen, Vorhaben informieren. Es wird nichts automatisch neu versendet."""
+    from models_sourcing import SupplierCandidate, OutreachReminderTimer
+    from routers.sourcing import _project_event
+    body = m.get("body_text") or ""
+    failed = {x.lower() for x in _FAILED_RCPT_RE.findall(body)}
+    if not failed:
+        failed = {x.lower() for x in re.findall(r"RCPT TO:\s*<([^>]+)>", body, re.IGNORECASE)}
+    if not failed:
+        logger.warning(f"poll_inbox_job: Rueckläufer ohne erkennbaren Empfaenger: {m.get('subject')}")
+        return {"matched": False, "kind": "bounce"}
+    reason = (re.search(r"(5\d\d[ .][^\n]{0,120})", body) or [None, "unzustellbar"])[1]
+    hit = 0
+    for addr in failed:
+        cands = (await db.execute(select(SupplierCandidate).where(SupplierCandidate.contact_email == addr))).scalars().all()
+        for cand in cands:
+            note = f"E-Mail an {addr} ist unzustellbar ({reason.strip()[:120]}) -- bitte Kontaktadresse pruefen."
+            if note not in (cand.open_questions_json or []):
+                cand.open_questions_json = list(cand.open_questions_json or []) + [note]
+            for t in (await db.execute(select(OutreachReminderTimer).where(
+                    OutreachReminderTimer.supplier_candidate_id == cand.id, OutreachReminderTimer.fired == False,  # noqa: E712
+                    OutreachReminderTimer.cancelled == False))).scalars().all():  # noqa: E712
+                t.cancelled = True
+            await _project_event(db, cand, "delivery_failed", f"Nachricht an {cand.company_name} nicht zustellbar",
+                                 f"Die Adresse {addr} existiert offenbar nicht. Bitte eine korrekte Kontaktadresse hinterlegen.",
+                                 milestone=True)
+            hit += 1
+    await db.commit()
+    logger.info(f"poll_inbox_job: Rueckläufer verarbeitet fuer {sorted(failed)} ({hit} Dienstleister)")
+    return {"matched": bool(hit), "kind": "bounce", "failed": sorted(failed)}
+
+
 async def _dispatch_inbound_message(db, m: dict) -> dict:
     """Siehe Moduldoc: versucht Negotiation -> NDA -> generische Outreach-
     Antwort, in dieser Reihenfolge. Jede Stufe prueft selbst per
@@ -106,6 +148,9 @@ async def _dispatch_inbound_message(db, m: dict) -> dict:
     from models_contracts import RFQInvitation
     from models_sourcing import SupplierCandidate
     from services.offer_intake import intake_from_email
+
+    if _is_bounce(m):
+        return await _handle_bounce(db, m)
 
     in_reply_to = m.get("in_reply_to")
     refs = (m.get("references_header") or "").split()

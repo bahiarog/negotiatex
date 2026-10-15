@@ -13,6 +13,7 @@ abgefangen) -- das macht das Polling idempotent auch ohne verlaessliche
 IMAP \\Seen-Flags.
 """
 import email
+import email.message
 import imaplib
 import logging
 import os
