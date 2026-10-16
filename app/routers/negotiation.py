@@ -398,7 +398,12 @@ async def draft_action(
         raise HTTPException(400, "Pre-Render-Policy-Check fehlgeschlagen: " + "; ".join(pre_problems))
 
     counter_price = await _latest_inbound_price(case.id, db) if round_number > 1 else None
-    subject, body = _render_email_text(case, strategy, round_number, price, counter_price)
+    from services.agent_log import track
+    async with track("verhandler", f"Preisvorschlag Runde {round_number} formulieren", tenant_id=case.tenant_id,
+                     object_ref=case.title) as run:
+        subject, body = _render_email_text(case, strategy, round_number, price, counter_price)
+        run.outcome = f"Vorschlag {price} {strategy.currency} netto – wartet auf Freigabe"
+        run.add_pending(1)
     post_problems = _post_render_check(body, price, strategy)
 
     action = NegotiationAction(
@@ -685,6 +690,8 @@ async def ingest_inbound_message(db: AsyncSession, email_record: dict) -> dict:
         await db.commit()
         return {"matched": True, "classification": "unknown_sender"}
 
+    from services.agent_log import annotate
+    annotate(agent_key="verhandler", tenant_id=tenant_id, task="Verhandlungsantwort auswerten", object_ref=case.title)
     classification = classify_reply(case, strategy, inbound.body_text)
 
     if classification in ("scope_change", "new_commitment", "clarifying_question", "prompt_injection_attempt"):

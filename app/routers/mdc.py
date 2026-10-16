@@ -754,7 +754,11 @@ async def extract_lines(
     doc_type = _enum_val(doc.document_type)
     started = time.monotonic()
     try:
-        raw_items, usage = await asyncio.to_thread(extract_line_items, v.extracted_text, doc_type, must)
+        from services.agent_log import track
+        async with track("analyst", "Preispositionen auslesen", tenant_id=membership.tenant_id, object_ref=v.file_name) as run:
+            raw_items, usage = await asyncio.to_thread(extract_line_items, v.extracted_text, doc_type, must)
+            run.outcome = f"{len(raw_items)} Position(en) vorgeschlagen – Prüfung im Data Center"
+            run.add_pending(1 if raw_items else 0)
         v.extraction_input_tokens = usage.get("input_tokens")
         v.extraction_output_tokens = usage.get("output_tokens")
         v.extraction_seconds = round(time.monotonic() - started, 2)

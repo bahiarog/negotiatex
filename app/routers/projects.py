@@ -597,7 +597,7 @@ async def overview(access: Access = Depends(get_access), db: AsyncSession = Depe
         if not access.workspace:
             q = q.where(ProjectEvent.customer_visible == True)  # noqa: E712
         for e, title in (await db.execute(q.order_by(desc(ProjectEvent.created_at)).limit(8))).all():
-            events.append({"project_id": str(e.project_id), "project_title": title, "title": e.title, "detail": e.detail,
+            events.append({"agent": _agent_of(e), "project_id": str(e.project_id), "project_title": title, "title": e.title, "detail": e.detail,
                            "at": e.created_at.isoformat() if e.created_at else None})
     return {
         "active": active[:8], "active_count": len([a for a in active if a["state"] != "done"]),
@@ -787,7 +787,11 @@ async def upload_document(project_id: str, kind: str = Form("briefing"), file: U
         raise field_error("offer_file" if kind == "offer" else "briefing_file",
                           "Das Dokument konnte nicht gelesen werden. Bitte den Bedarf als Text beschreiben.")
     combined = "\n\n".join(x for x in [(text or p.briefing_input or "").strip(), doc_text] if x)
-    proposal = await asyncio.to_thread(draft_briefing, combined, "offer" if kind == "offer" else "document")
+    from services.agent_log import track
+    async with track("briefing", "Briefing aus Angebot ableiten" if kind == "offer" else "Briefing aus Dokument erstellen",
+                     tenant_id=p.tenant_id, project_id=p.id, object_ref=file.filename) as run:
+        proposal = await asyncio.to_thread(draft_briefing, combined, "offer" if kind == "offer" else "document")
+        run.outcome = f"{len(proposal.get('open_questions') or [])} offene Frage(n), {len(proposal.get('must_criteria') or {})} Muss-Kriterien"
     return {"project": await _fresh(db, p), "proposal": proposal, "document_id": str(doc.id), "file_name": file.filename}
 
 
@@ -801,7 +805,11 @@ async def propose_from_text(project_id: str, access: Access = Depends(get_access
     text = (p.briefing_input or p.description or "").strip()
     if len(text) < 15:
         raise field_error("briefing_input", "Bitte den Bedarf in ein, zwei Sätzen beschreiben (Leistung, Umfang, Budget, Termin).")
-    return await asyncio.to_thread(draft_briefing, text, "prompt")
+    from services.agent_log import track
+    async with track("briefing", "Briefing aus Beschreibung erstellen", tenant_id=p.tenant_id, project_id=p.id) as run:
+        proposal = await asyncio.to_thread(draft_briefing, text, "prompt")
+        run.outcome = f"{len(proposal.get('open_questions') or [])} offene Frage(n), {len(proposal.get('must_criteria') or {})} Muss-Kriterien"
+    return proposal
 
 
 class StartPayload(BaseModel):
@@ -899,7 +907,7 @@ async def get_project(project_id: str, access: Access = Depends(get_access), db:
         "offers": s["offers"], "candidates": cand_rows, "result": await compute_result(db, p, tenant),
         "documents": await _documents(db, p),
         "missing": _missing_for_start(p) if _v(p.status) == "briefing" else {},
-        "events": [{"kind": e.kind, "title": e.title, "detail": e.detail, "milestone": e.milestone,
+        "events": [{"kind": e.kind, "agent": _agent_of(e), "title": e.title, "detail": e.detail, "milestone": e.milestone,
                     "internal": not e.customer_visible, "emailed": bool(e.emailed_at),
                     "at": e.created_at.isoformat() if e.created_at else None} for e in events],
         "viewer": {"workspace": access.workspace, "procurement": access.procurement, "can_decide": access.can_decide,
@@ -1027,6 +1035,15 @@ async def suggestions(project_id: str, access: Access = Depends(get_access), db:
     Aehnlichkeit zum Briefing -- ein Vorschlag, keine Auswahl."""
     _require_selector(access)
     p = await _get_project(project_id, access, db)
+    from services.agent_log import track
+    async with track("scout", "Dienstleister im Bestand suchen", tenant_id=p.tenant_id, project_id=p.id) as run:
+        result = await _suggest(db, p, access)
+        n_mail = sum(1 for e in result["items"] if e.get("contactable"))
+        run.outcome = f"{len(result['items'])} Vorschläge, {n_mail} davon direkt anfragbar"
+    return result
+
+
+async def _suggest(db: AsyncSession, p: Project, access: Access) -> dict:
     tid = access.tenant_id
     existing_emails, existing_names = set(), set()
     for c in await _project_candidates(db, p):
@@ -1154,6 +1171,11 @@ async def select_candidates(project_id: str, payload: SelectPayload, access: Acc
                                   status=OutreachActionStatus.draft, created_by=uid))
         created.append({"id": str(cand.id), "company_name": cand.company_name, "draft": bool(email)})
     if created:
+        from services.agent_log import track
+        async with track("korrespondenz", "Erstanfragen vorbereiten", tenant_id=p.tenant_id, project_id=p.id) as run:
+            drafts = sum(1 for c in created if c["draft"])
+            run.add_pending(drafts)
+            run.outcome = f"{drafts} Erstanfrage(n) entworfen – warten auf Freigabe"
         await add_event(db, p, "candidates_selected", f"{len(created)} Dienstleister ausgewählt",
                         ", ".join(c["company_name"] for c in created) + ". Die Erstanfragen liegen zur Freigabe bereit.", actor=uid)
     await db.commit()
@@ -1484,3 +1506,9 @@ async def set_responsible(project_id: str, payload: ResponsiblePayload, access: 
     await add_event(db, p, "responsible", f"Verantwortlich: {names.get(uid, 'nicht zugewiesen')}", actor=str(access.user.id))
     await db.commit()
     return await _fresh(db, p)
+
+
+def _agent_of(e: ProjectEvent):
+    """Welcher digitale Mitarbeiter hat dieses Ereignis ausgeloest (fuer Avatare im Verlauf)."""
+    from services.agent_log import EVENT_AGENT
+    return EVENT_AGENT.get(e.kind) if (e.actor or "agent") in ("agent", "system") else None

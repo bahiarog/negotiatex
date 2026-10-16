@@ -117,6 +117,8 @@ details>summary{cursor:pointer;color:var(--text-muted);font-size:12.5px;margin-t
 .tl li:last-child{border-bottom:none}
 .tl .w{float:right;font-family:'DM Mono',monospace;font-size:11.5px;color:var(--text-dim);margin-left:10px}
 .tl .d{color:var(--text-muted);font-size:13px;margin-top:2px}
+.tl li.ag{display:flex;gap:10px;align-items:flex-start}.tl li.ag .tx{flex:1;min-width:0}.agm{flex-shrink:0;line-height:0;margin-top:1px}
+.agn{font-size:11.5px;font-weight:500;color:var(--text-muted);border:1px solid var(--border);border-radius:5px;padding:0 6px;margin-right:4px}
 .wiz{display:flex;gap:0;margin:6px 0 22px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg-card)}
 .wiz div{flex:1;padding:11px 14px;font-size:13px;color:var(--text-dim);border-right:1px solid var(--border)}
 .wiz div:last-child{border-right:none}
@@ -159,6 +161,7 @@ dialog::backdrop{background:rgba(20,20,20,.35)}
 <body>
 <header id="app-nav"></header>
 <script src="/assets/app-nav.js"></script>
+<script src="/assets/agents.js"></script>
 <main id="app" tabindex="-1"><div class="empty">Lade…</div></main>
 <dialog id="dlg"></dialog>
 
@@ -234,6 +237,7 @@ let refreshTimer = null;
 
 async function render() {
   clearInterval(refreshTimer);
+  await PROFILES_READY;
   const path = location.pathname.replace(/\/+$/, '') || '/uebersicht';
   const qs = new URLSearchParams(location.search);
   if (window.NX_NAV) window.NX_NAV.update();
@@ -267,6 +271,12 @@ function offersLabel(p){ return p.offers_count ? `${p.offers_count} <span class=
 function nextText(n){ return n.label ? `<b>${esc(n.label)}</b>${n.text ? ' – ' + esc(n.text) : ''}` : esc(n.text || ''); }
 const WHO = { you: 'Sie sind dran', you_optional: 'Optional', expert: 'Ihr Experte ist dran', decider: 'Wartet auf Freigabe', suppliers: 'Die Dienstleister sind dran', agent: 'Der Agent arbeitet', nobody: 'Abgeschlossen' };
 
+/* Digitale Mitarbeiter im Verlauf */
+let AGENT_PROFILES = [];
+const PROFILES_READY = window.NX_AGENTS ? window.NX_AGENTS.load().then(p => { AGENT_PROFILES = p || []; }).catch(() => {}) : Promise.resolve();
+function agentMark(k){ const a = k && window.NX_AGENTS ? window.NX_AGENTS.byKey(AGENT_PROFILES, k) : null; return a ? `<span class="agm">${window.NX_AGENTS.avatar(a, 28)}</span>` : ''; }
+function agentName(k){ const a = k && window.NX_AGENTS ? window.NX_AGENTS.byKey(AGENT_PROFILES, k) : null; return a ? `<span class="agn">${esc(a.name)}</span> ` : ''; }
+
 /* ================= Übersicht ================= */
 async function viewOverview() {
   setTitle('Übersicht');
@@ -296,8 +306,8 @@ async function viewOverview() {
             : `<div class="empty">Sie haben noch keine aktiven Vorhaben.<br><a class="btn pri" href="/vorhaben/neu">Erstes Vorhaben anlegen</a></div>`}</div>
       </div>
       <div class="card"><div class="card-h"><h2>Letzte Updates</h2></div>
-        ${o.events.length ? `<ul class="tl">${o.events.map(e => `<li><span class="w">${when(e.at)}</span><a href="${projectUrl(e.project_id)}" style="color:var(--text);text-decoration:none"><b>${esc(e.project_title)}</b></a>
-          <div class="d">${esc(e.title)}</div></li>`).join('')}</ul>` : `<div class="empty">Noch keine Updates.</div>`}</div>
+        ${o.events.length ? `<ul class="tl">${o.events.map(e => `<li class="${e.agent ? 'ag' : ''}">${agentMark(e.agent)}<div class="tx"><span class="w">${when(e.at)}</span><a href="${projectUrl(e.project_id)}" style="color:var(--text);text-decoration:none"><b>${esc(e.project_title)}</b></a>
+          <div class="d">${agentName(e.agent)}${esc(e.title)}</div></div></li>`).join('')}</ul>` : `<div class="empty">Noch keine Updates.</div>`}</div>
     </div>`;
   focusMain();
 }
@@ -797,8 +807,8 @@ function tabDocs(box, d, ws) {
         ${x.downloadable ? `<button class="btn sm" data-dl="${x.id}" data-name="${esc(x.file_name || 'dokument')}">Herunterladen</button>` : '<span class="dim">nicht verfügbar</span>'}</li>`).join('')}</ul>`
         : `<div class="empty">Noch keine Dokumente. Briefing und Angebote erscheinen hier automatisch.</div>`}</div>
     <div class="card"><div class="card-h"><h2>Verlauf</h2></div>
-      ${events.length ? `<ul class="tl">${events.map(e => `<li><span class="w">${when(e.at)}${e.emailed ? ' · per E-Mail' : ''}</span>${e.milestone ? '<b>' + esc(e.title) + '</b>' : esc(e.title)}${e.internal ? ' <span class="tag">intern</span>' : ''}
-        ${e.detail ? `<div class="d">${esc(e.detail)}</div>` : ''}</li>`).join('')}</ul>` : '<div class="empty">Noch keine Einträge.</div>'}</div></div>`;
+      ${events.length ? `<ul class="tl">${events.map(e => `<li class="${e.agent ? 'ag' : ''}">${agentMark(e.agent)}<div class="tx"><span class="w">${when(e.at)}${e.emailed ? ' · per E-Mail' : ''}</span>${agentName(e.agent)}${e.milestone ? '<b>' + esc(e.title) + '</b>' : esc(e.title)}${e.internal ? ' <span class="tag">intern</span>' : ''}
+        ${e.detail ? `<div class="d">${esc(e.detail)}</div>` : ''}</div></li>`).join('')}</ul>` : '<div class="empty">Noch keine Einträge.</div>'}</div></div>`;
   box.querySelectorAll('[data-dl]').forEach(b => b.onclick = () => busy(b, async () => {
     const r = await fetch(`/api/v1/projects/${p.id}/documents/${b.dataset.dl}`, { headers: { Authorization: 'Bearer ' + token } });
     if (!r.ok) throw new Error('Download nicht möglich.');

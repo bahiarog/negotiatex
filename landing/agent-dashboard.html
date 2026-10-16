@@ -54,12 +54,18 @@ tr:last-child td{border-bottom:none}
 .open-link{font-size:12px;color:var(--gold);text-decoration:none;white-space:nowrap}
 .open-link:hover{text-decoration:underline}
 .disclaimer{font-size:11.5px;color:var(--text-dim);padding:12px 18px;border-top:1px dashed var(--border)}
+.team-strip{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 18px;margin-bottom:20px;text-decoration:none;color:inherit}
+.team-strip:hover{border-color:var(--gold-border)}
+.team-l{font-weight:500}
+#team-avatars{display:flex;gap:6px}
+.team-s{font-size:12.5px;color:var(--text-muted);flex:1}
 .refresh-note{font-size:11px;color:var(--text-dim);font-family:'DM Mono',monospace}
 </style>
 </head>
 <body>
 <header id="app-nav"></header>
 <script src="/assets/app-nav.js"></script>
+<script src="/assets/agents.js"></script>
 <main id="app"><div class="loading">Lade Arbeitsübersicht…</div></main>
 
 <script>
@@ -124,6 +130,8 @@ async function render() {
   app.innerHTML = `
     <h1>Arbeitsübersicht</h1>
     <p class="sub">Offene Fälle, Eskalationen, Fristen und Zuständigkeiten. Kein Eintrag hier wurde automatisch versendet oder freigegeben.</p>
+    <a class="team-strip" href="/arbeitsbereich/team" aria-label="Digitales Team öffnen">
+      <span class="team-l">Digitales Team</span><span id="team-avatars"></span><span class="team-s" id="team-status">Lade…</span><span class="open-link">Team ansehen &rarr;</span></a>
 
     <div class="kpis">
       <div class="kpi"><div class="l">Wartet auf Freigabe</div><div class="v ${approvalCount ? 'warn' : ''}">${approvalCount}</div></div>
@@ -155,8 +163,19 @@ async function render() {
     </div>`;
 }
 
-render();
-setInterval(() => { render().catch(() => {}); }, 30000);
+async function renderTeam() {
+  try {
+    const r = await fetch('/api/v1/agents', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) return;
+    const d = await r.json(), box = document.getElementById('team-avatars');
+    if (!box) return;
+    box.innerHTML = d.agents.map(a => `<span title="${esc(a.name)}: ${a.status === 'working' ? 'arbeitet gerade' : a.status === 'waiting' ? 'wartet auf Freigabe' : 'bereit'}">${window.NX_AGENTS.avatar(a, 34, a.status)}</span>`).join('');
+    const w = d.agents.filter(a => a.status === 'working').length, done = d.agents.reduce((s, a) => s + a.today.done, 0);
+    document.getElementById('team-status').textContent = `${w} arbeiten gerade · ${done} Aufgaben heute erledigt`;
+  } catch (e) {}
+}
+render().then(renderTeam);
+setInterval(() => { render().then(renderTeam).catch(() => {}); }, 30000);
 </script>
 </body>
 </html>

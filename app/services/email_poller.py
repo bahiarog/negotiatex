@@ -123,6 +123,8 @@ async def _handle_bounce(db, m: dict) -> dict:
                     OutreachReminderTimer.supplier_candidate_id == cand.id, OutreachReminderTimer.fired == False,  # noqa: E712
                     OutreachReminderTimer.cancelled == False))).scalars().all():  # noqa: E712
                 t.cancelled = True
+            from services.agent_log import annotate
+            annotate(tenant_id=cand.tenant_id, task="Rückläufer auswerten")
             await _project_event(db, cand, "delivery_failed", f"Nachricht an {cand.company_name} nicht zustellbar",
                                  f"Die Adresse {addr} existiert offenbar nicht. Bitte eine korrekte Kontaktadresse hinterlegen.",
                                  milestone=True)
@@ -130,6 +132,28 @@ async def _handle_bounce(db, m: dict) -> dict:
     await db.commit()
     logger.info(f"poll_inbox_job: Rueckläufer verarbeitet fuer {sorted(failed)} ({hit} Dienstleister)")
     return {"matched": bool(hit), "kind": "bounce", "failed": sorted(failed)}
+
+
+def _describe_result(result: dict, m: dict) -> str:
+    sender = m.get("from_addr") or "unbekannt"
+    if not result or not result.get("matched"):
+        return f"Mail von {sender} keinem Vorgang zugeordnet – nichts unternommen"
+    kind = result.get("kind")
+    if kind == "bounce":
+        return f"Unzustellbar: {', '.join(result.get('failed') or [])} – Hinweis im Vorhaben"
+    if kind == "offer":
+        return f"Angebot per Anhang erkannt und an den Angebotsprüfer übergeben"
+    if kind == "nda_return":
+        return "Rücklauf Vertraulichkeitsvereinbarung" + (" – Abweichung gefunden" if result.get("redline_detected") else " – unverändert")
+    if result.get("duplicate"):
+        return "Bereits verarbeitet"
+    labels = {"interest": "Interesse bestätigt", "decline": "Absage", "question": "Rückfrage – braucht Antwort",
+              "no_signal": "unklare Antwort – manuelle Sichtung", "follow_up": "Folgenachricht – zur Sichtung",
+              "counter_price": "Gegenangebot", "acceptance": "Annahme", "no_movement": "keine Bewegung",
+              "unknown_sender": "unbekannter Absender – angehalten", "scope_change": "Umfangsänderung – Eskalation",
+              "prompt_injection_attempt": "verdächtige Anweisung – Eskalation"}
+    c = result.get("classification")
+    return f"Antwort von {sender}: {labels.get(c, c or 'verarbeitet')}"
 
 
 async def _dispatch_inbound_message(db, m: dict) -> dict:
@@ -199,6 +223,8 @@ async def _dispatch_inbound_message(db, m: dict) -> dict:
         else:
             await _nda_transition(db, nda, NDAStatus.returned, actor="system",
                                    reason="Ruecklauf per IMAP erhalten -- identisch zum versendeten Text, bereit fuer manuelle Pruefung.")
+        from services.agent_log import annotate
+        annotate(agent_key="recht", tenant_id=nda.tenant_id, task="Rücklauf Vertraulichkeitsvereinbarung prüfen")
         await db.commit()
         return {"matched": True, "kind": "nda_return", "redline_detected": redline}
 
@@ -261,7 +287,10 @@ async def _poll_inbox():
         # Transaktion) darf die folgenden Nachrichten nicht mitreissen.
         async with AsyncSessionLocal() as db:
             try:
-                result = await _dispatch_inbound_message(db, m)
+                from services.agent_log import track
+                async with track("korrespondenz", "Eingehende E-Mail zuordnen", object_ref=(m.get("subject") or "")[:200]) as run:
+                    result = await _dispatch_inbound_message(db, m)
+                    run.outcome = _describe_result(result, m)
                 logger.info(f"poll_inbox_job: Nachricht verarbeitet -> {result}")
             except Exception:
                 await db.rollback()
@@ -337,6 +366,9 @@ async def _check_reminders():
                     status=NegotiationActionStatus.draft, case_version_at_draft=case.case_version,
                 )
                 db.add(reminder)
+                from services.agent_log import track
+                async with track("verhandler", "Erinnerung vorbereiten (keine Antwort)", tenant_id=case.tenant_id, object_ref=case.title) as run:
+                    run.outcome = "Erinnerung entworfen – wartet auf Freigabe"; run.add_pending(1)
                 db.add(NegotiationException(
                     case_id=case.id, tenant_id=case.tenant_id,
                     exception_type=NegotiationExceptionType.no_reply,
@@ -390,6 +422,9 @@ async def _check_outreach_reminders():
                     status=OutreachActionStatus.draft,
                 )
                 db.add(reminder)
+                from services.agent_log import track
+                async with track("korrespondenz", f"Erinnerung {timer.reminder_number}/2 vorbereiten", tenant_id=timer.tenant_id, object_ref=cand.company_name) as run:
+                    run.outcome = f"Erinnerung an {cand.company_name} entworfen – wartet auf Freigabe"; run.add_pending(1)
                 timer.fired = True
                 logger.info(f"check_outreach_reminders_job: Reminder {timer.reminder_number} fuer Kandidat {cand.id} angelegt (wartet auf Freigabe).")
             await db.commit()

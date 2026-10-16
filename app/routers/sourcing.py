@@ -744,10 +744,14 @@ async def _auto_prepare_after_interest(db: AsyncSession, cand: SupplierCandidate
     #    Vorschlag, kein autonomer Beschluss -- siehe require_nda_approved().
     if cand.nda_assessment_json is None:
         must_criteria_text = "; ".join(str(v) for v in (cand.must_criteria_check_json or {}).values()) or (req.must_criteria_json and str(req.must_criteria_json)) or ""
-        assessment = assess_nda_necessity(
-            bedarf_text=req.bedarf_text, must_criteria_text=must_criteria_text,
-            confidential_notice=req.confidential_notice, public_teaser_text=req.public_teaser_text,
-        )
+        from services.agent_log import track
+        async with track("recht", "Bedarf einer Vertraulichkeitsvereinbarung einschätzen", tenant_id=tenant_id, object_ref=cand.company_name) as run:
+            assessment = assess_nda_necessity(
+                bedarf_text=req.bedarf_text, must_criteria_text=must_criteria_text,
+                confidential_notice=req.confidential_notice, public_teaser_text=req.public_teaser_text,
+            )
+            run.outcome = "NDA empfohlen" if assessment.get("needs_nda", True) else "keine NDA nötig"
+
         assessment["assessed_at"] = datetime.utcnow().isoformat()
         cand.nda_assessment_json = assessment
     needs_nda = bool((cand.nda_assessment_json or {}).get("needs_nda", True))
@@ -916,6 +920,8 @@ async def ingest_inbound_outreach_message(db: AsyncSession, email_record: dict, 
         await db.commit()
         return {"matched": True, "classification": "follow_up", "candidate_status": cand.status.value}
 
+    from services.agent_log import annotate
+    annotate(tenant_id=tenant_id, object_ref=cand.company_name)
     cand.status = CandidateStatus.responded
     classification = classify_outreach_reply(inbound.body_text)
     label = {"decline": "hat abgesagt", "interest": "hat Interesse bestaetigt",
@@ -938,7 +944,11 @@ async def ingest_inbound_outreach_message(db: AsyncSession, email_record: dict, 
         cand.status = CandidateStatus.onboarding_pending
         await db.flush()
         try:
-            await _auto_prepare_after_interest(db, cand, tenant_id)
+            from services.agent_log import track
+            async with track("korrespondenz", "Nächste Schritte nach Interesse vorbereiten", tenant_id=tenant_id, object_ref=cand.company_name) as run:
+                await _auto_prepare_after_interest(db, cand, tenant_id)
+                run.outcome = f"{cand.company_name}: Firmendaten-Link und Unterlagen entworfen – warten auf Freigabe"
+                run.add_pending(2)
         except Exception:
             logger.exception(f"_auto_prepare_after_interest fehlgeschlagen fuer Kandidat {cand.id} -- Status/Klassifikation bleiben trotzdem gueltig, manuelle Nachbereitung noetig.")
     elif classification == "question":

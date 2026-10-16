@@ -22,7 +22,7 @@
   function locate(path) {
     const p = path.replace(/\/+$/, '') || '/';
     const ws = (key, role) => ({ area: 'workspace', key, role: role || 'procurement' });
-    if (p === '/arbeitsbereich' || p === '/agent-dashboard') return ws('arbeitsuebersicht');
+    if (p === '/arbeitsbereich' || p === '/agent-dashboard' || p === '/arbeitsbereich/team') return ws('arbeitsuebersicht');
     if (p.startsWith('/arbeitsbereich/vorhaben') || p === '/cases-dashboard') return ws('ws-vorhaben');
     if (p === '/sourcing-dashboard') return ws('lieferanten');
     if (p === '/rfq-dashboard') return ws('bestellungen');

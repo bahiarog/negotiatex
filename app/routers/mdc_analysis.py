@@ -173,8 +173,11 @@ class AnalysisRequest(BaseModel):
 @router.post("/analyses")
 async def create_analysis(payload: AnalysisRequest, user=Depends(get_current_user),
                           membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
-    snapshot = await run_offer_analysis(db, membership.tenant_id, payload.line_item_id, payload.as_of or date.today(),
-                                        payload.policy_id, payload.purpose[:100], str(user.id))
+    from services.agent_log import track
+    async with track("analyst", "Preis mit Markt vergleichen", tenant_id=membership.tenant_id) as run:
+        snapshot = await run_offer_analysis(db, membership.tenant_id, payload.line_item_id, payload.as_of or date.today(),
+                                            payload.policy_id, payload.purpose[:100], str(user.id))
+        run.outcome = "Vergleich erstellt" 
     await db.commit()
     await db.refresh(snapshot)
     return _snapshot_to_dict(snapshot)

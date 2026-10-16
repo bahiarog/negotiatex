@@ -15,7 +15,8 @@ import models_sourcing  # noqa: F401 -- registers Teil B sourcing/outreach/NDA t
 import models_contracts  # noqa: F401 -- registers Teil B7-B9 RFQ/offer/contract tables on Base.metadata
 import models_mdc  # noqa: F401 -- registers Master Data Center (Etappe 1) tables on Base.metadata
 import models_projects  # noqa: F401 -- registers Vorhaben (Customer Journey) tables on Base.metadata
-from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers, chat, requisitions, invoices, negotiation, sourcing, agent_overview, mdc, mdc_analysis, mdc_ops, projects, administration
+import models_agents  # noqa: F401 -- registers Digitales Team (agent_runs) on Base.metadata
+from routers import audit, purchase_orders, admin, export, auth, benchmark, ws, apikeys, webhooks, public, cases, policies, tenants, suppliers, chat, requisitions, invoices, negotiation, sourcing, agent_overview, mdc, mdc_analysis, mdc_ops, projects, administration, agents
 from fastapi import Depends
 from access import require_procurement, require_platform_admin, platform_admin_except
 from routers.rfq_contracts import rfq_router, contracts_router
@@ -28,6 +29,9 @@ async def lifespan(app: FastAPI):
         # Mehrere uvicorn-Worker starten parallel; ohne Sperre kollidieren ihre CREATE TYPE/TABLE.
         await conn.execute(text("SELECT pg_advisory_xact_lock(7270001)"))
         await conn.run_sync(Base.metadata.create_all)
+    from services.agent_log import install_usage_hook, mark_stale_runs
+    install_usage_hook()  # KI-Tokens dem laufenden Agenten-Arbeitsschritt zurechnen
+    await mark_stale_runs()
     from services.autonomous_agent import start_scheduler
     scheduler = start_scheduler()
     from services.email_poller import register_negotiation_jobs
@@ -80,6 +84,7 @@ app.include_router(contracts_router, prefix="/api/v1/contracts", tags=["Teil B9 
 app.include_router(agent_overview.router, prefix="/api/v1/agent", tags=["Arbeitsuebersicht"], dependencies=[Depends(require_procurement)])
 app.include_router(projects.router, prefix="/api/v1/projects", tags=["Vorhaben (Kunden- und Arbeitsbereich)"])
 app.include_router(administration.router, prefix="/api/v1", tags=["Zugang & Administration"])
+app.include_router(agents.router, prefix="/api/v1/agents", tags=["Digitales Team"])
 app.include_router(mdc.router, prefix="/api/v1/mdc", tags=["Master Data Center"], dependencies=[Depends(require_procurement)])
 app.include_router(mdc_analysis.router, prefix="/api/v1/mdc", tags=["Master Data Center - Analyse"], dependencies=[Depends(require_procurement)])
 app.include_router(mdc_ops.router, prefix="/api/v1/mdc", tags=["Master Data Center - Betrieb"], dependencies=[Depends(require_procurement)])

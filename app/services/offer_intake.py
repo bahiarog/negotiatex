@@ -192,6 +192,24 @@ async def run_review(db: AsyncSession, offer: RFQOffer, project: Optional[Projec
 async def intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, offer_text: str, actor: str = "agent",
                        doc: Optional[MDCDocument] = None, channel: str = "E-Mail", draft_receipt: bool = True,
                        preexisting: bool = False) -> tuple[RFQOffer, OfferReview]:
+    from services.agent_log import track
+    project = await project_for_rfq(db, rfq)
+    async with track("pruefer", f"Angebot von {cand.company_name} prüfen", tenant_id=rfq.tenant_id,
+                     project_id=project.id if project else None, object_ref=channel) as run:
+        offer, review = await _intake_offer(db, rfq, cand, offer_text, actor, doc, channel, draft_receipt, preexisting)
+        crit = sum(1 for f in review.findings_json or [] if f.get("severity") == "critical")
+        warn = sum(1 for f in review.findings_json or [] if f.get("severity") == "warning")
+        total = (offer.unit_price or 0) * (offer.quantity or 1) if offer.unit_price is not None else None
+        run.outcome = (f"Preis {total:.2f} {offer.currency}" if total is not None else "kein Preis erkannt") + \
+                      f" · {crit} kritisch, {warn} Hinweis(e)"
+        if draft_receipt and not preexisting and cand.contact_email:
+            run.add_pending(1)
+    return offer, review
+
+
+async def _intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, offer_text: str, actor: str,
+                        doc: Optional[MDCDocument], channel: str, draft_receipt: bool,
+                        preexisting: bool) -> tuple[RFQOffer, OfferReview]:
     from services.rfq_classifier import extract_offer_fields, _comparability
     extracted = await asyncio.to_thread(extract_offer_fields, offer_text) if offer_text else {}
     extracted = reconcile_prices(extracted, offer_text or "")
@@ -274,6 +292,8 @@ async def intake_from_email(db: AsyncSession, m: dict, cand: SupplierCandidate) 
     if not inv:
         return None
     rfq = (await db.execute(select(RFQ).where(RFQ.id == inv.rfq_id))).scalar_one()
+    from services.agent_log import annotate
+    annotate(tenant_id=cand.tenant_id, object_ref=cand.company_name, task="Angebotsmail entgegennehmen")
 
     if m.get("message_id"):
         if (await db.execute(select(OutreachMessage).where(OutreachMessage.message_id == m["message_id"]))).scalar_one_or_none():
