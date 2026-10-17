@@ -35,7 +35,7 @@ class Project(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     title = Column(String(255), nullable=False)
-    entry_path = Column(String(30), nullable=False)          # new_need | existing_offer
+    entry_path = Column(String(30), nullable=False)          # new_need | existing_offer | offer_check
     status = Column(SAEnum(ProjectStatus, name="project_status"), default=ProjectStatus.briefing, nullable=False)
 
     # Briefing (vom Kunden bestaetigt; KI-Vorschlag nur als Ausgangspunkt)
@@ -90,6 +90,10 @@ class Project(Base):
     invoiced_at = Column(DateTime, nullable=True)
     invoiced_by = Column(String(100), nullable=True)
     archived_at = Column(DateTime, nullable=True)
+
+    # Angebots-Check: Preis des vorliegenden Angebots (Anbieter bleibt anonym) und Sofort-Ergebnis
+    reference_price = Column(Numeric(18, 2), nullable=True)
+    check_json = Column(JSON, nullable=True)
 
     created_by = Column(String(100), nullable=True)
     created_at = Column(DateTime, server_default=func.now())

@@ -111,7 +111,7 @@ pre.mail{white-space:pre-wrap;font-family:'DM Sans',sans-serif;font-size:13px;ba
 details>summary{cursor:pointer;color:var(--text-muted);font-size:12.5px;margin-top:6px}
 .finding{font-size:12.5px;margin:7px 0;padding-left:10px;border-left:3px solid var(--border)}
 .finding.critical{border-color:var(--status-bad)}.finding.warning{border-color:var(--gold)}
-.finding q{display:block;color:var(--text-muted);font-style:italic;margin-top:2px}
+.finding q{display:block;color:var(--text-muted);font-style:italic;margin-top:2px;quotes:"„" "“"}
 .tl{list-style:none;margin:0;padding:0}
 .tl li{padding:11px 18px;border-bottom:1px solid var(--border);font-size:13.5px}
 .tl li:last-child{border-bottom:none}
@@ -142,6 +142,14 @@ details>summary{cursor:pointer;color:var(--text-muted);font-size:12.5px;margin-t
 dialog{border:1px solid var(--border);border-radius:12px;padding:22px;max-width:480px;width:calc(100% - 32px);box-shadow:0 30px 60px rgba(0,0,0,.2)}
 dialog::backdrop{background:rgba(20,20,20,.35)}
 .help h2{margin-top:26px}.help p,.help li{max-width:760px}
+.ocats{display:flex;flex-wrap:wrap;gap:8px}
+.chipbtn{font-family:'DM Sans',sans-serif;font-size:13px;border:1px solid var(--border);background:#fff;color:var(--text);border-radius:20px;padding:7px 13px;cursor:pointer}
+.chipbtn[aria-pressed=true]{background:var(--text);color:#fff;border-color:var(--text)}
+input.big{font-size:20px;font-family:'DM Mono',monospace;padding:12px}
+.octiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.octiles>div{background:var(--bg-card2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:grid;gap:2px}
+.octiles small{font-size:12px;color:var(--text-muted)}.octiles b{font-family:'DM Mono',monospace;font-size:22px;font-weight:500}.octiles b.na{font-family:'DM Sans',sans-serif;font-size:15px}
+.oc-trust ol,.oc-trust ul{margin:8px 0 0;padding-left:18px;display:grid;gap:6px;font-size:13.5px;color:var(--text-muted)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .grid-side>*,.grid2>*{min-width:0}
 @media(max-width:900px){.grid-side,.grid2{grid-template-columns:minmax(0,1fr)}}
@@ -167,7 +175,7 @@ dialog::backdrop{background:rgba(20,20,20,.35)}
 
 <script>
 const token = localStorage.getItem('nx_token');
-if (!token) location.href = '/login';
+if (!token) location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search);
 const app = document.getElementById('app');
 let ACCESS = window.NX_ACCESS || null;
 document.addEventListener('nx:access', e => { ACCESS = e.detail; });
@@ -214,7 +222,7 @@ function showFieldError(e) {
 }
 
 /* ---------------- Router ---------------- */
-const SPA = /^\/(uebersicht|vorhaben|einsparungen|entscheidungen|hilfe|arbeitsbereich\/vorhaben)(\/|$)/;
+const SPA = /^\/(uebersicht|vorhaben|einsparungen|entscheidungen|hilfe|angebots-check|arbeitsbereich\/vorhaben)(\/|$)/;
 function go(url, replace) { if (replace) history.replaceState({}, '', url); else history.pushState({}, '', url); render(); }
 document.addEventListener('click', e => {
   const a = e.target.closest('a');
@@ -247,6 +255,7 @@ async function render() {
     if (path === '/einsparungen') return await viewSavings(qs);
     if (path === '/entscheidungen') return await viewDecisions();
     if (path === '/hilfe') return viewHelp();
+    if (path === '/angebots-check') return await viewOfferCheck();
     if (path === '/vorhaben') return await viewList(false, qs);
     if (path === '/arbeitsbereich/vorhaben') return await viewList(true, qs);
     if (path === '/vorhaben/neu') return await viewWizard(null, 1);
@@ -263,6 +272,7 @@ function setTitle(t){ document.title = t + ' – NegotiateX.ai'; }
 function focusMain(){ app.focus({ preventScroll: true }); }
 
 /* ---------------- Gemeinsame Bausteine ---------------- */
+const ENTRY_LABEL = e => ({ existing_offer: 'Vorhandenes Angebot', offer_check: 'Angebots-Check' })[e] || 'Neuer Bedarf';
 const STATE_CLS = { draft: 's-draft', in_progress: 's-in_progress', waiting_for_you: 's-waiting_for_you', done: 's-done' };
 function stateChip(state, label){ return `<span class="chip ${STATE_CLS[state] || ''}">${esc(label)}</span>`; }
 function projectUrl(id, ws, tab){ return (ws ? '/arbeitsbereich/vorhaben/' : '/vorhaben/') + id + (tab && tab !== 'ueberblick' ? '/' + tab : ''); }
@@ -286,7 +296,7 @@ async function viewOverview() {
   app.innerHTML = `
     <div class="head"><div><h1>Guten Tag${name ? ', ' + esc(name) : ''}</h1>
       <p class="lead">Ihre Vorhaben auf einen Blick: was läuft, was Ihre Entscheidung braucht und was Sie bisher sparen.</p></div>
-      <a class="btn pri" href="/vorhaben/neu">+ Neues Vorhaben</a></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn" href="/angebots-check">Angebot checken</a><a class="btn pri" href="/vorhaben/neu">+ Neues Vorhaben</a></div></div>
     <div class="kpis">
       <a class="kpi" href="/vorhaben" style="text-decoration:none;color:inherit"><div class="l">Aktive Vorhaben</div><div class="v">${o.active_count}</div></a>
       <a class="kpi" href="/entscheidungen" style="text-decoration:none;color:inherit"><div class="l">Wartet auf Ihre Entscheidung</div><div class="v ${o.decisions_count ? '' : ''}" style="${o.decisions_count ? 'color:var(--gold)' : ''}">${o.decisions_count}</div></a>
@@ -345,7 +355,7 @@ async function viewList(ws, qs) {
   } else {
     box.innerHTML = `<table class="resp"><thead><tr><th>Vorhaben</th><th>Status</th><th>Verantwortlich</th><th>Angebote</th><th>Nächster Schritt</th></tr></thead><tbody>
       ${rows.map(p => `<tr><td class="first"><a class="rowlink" href="${projectUrl(p.id, ws)}">${esc(p.title)}</a>
-          <div class="dim">${esc(p.service_type || (p.entry_path === 'existing_offer' ? 'Vorhandenes Angebot' : 'Neuer Bedarf'))}${p.owner && ws ? ' · Auftraggeber: ' + esc(p.owner) : ''}</div></td>
+          <div class="dim">${esc(p.service_type || ENTRY_LABEL(p.entry_path))}${p.owner && ws ? ' · Auftraggeber: ' + esc(p.owner) : ''}</div></td>
         <td data-l="Status">${stateChip(p.state, p.state_label)}<div class="dim">${esc(p.phase_label)}</div></td>
         <td data-l="Verantwortlich">${p.responsible ? esc(p.responsible) : '<span class="dim">NegotiateX-Agent</span>'}</td>
         <td data-l="Angebote">${offersLabel(p)}</td>
@@ -379,7 +389,7 @@ async function viewWizard(id, step) {
   step = Math.min(Math.max(step || 1, 1), 3);
   let d = null, p = null;
   if (id) { d = await api('/projects/' + id); p = d.project;
-    if (p.status !== 'briefing') { go(projectUrl(id), true); return; }
+    if (p.status !== 'briefing' || p.entry_path === 'offer_check') { go(projectUrl(id), true); return; }
     if (!d.viewer.can_edit) throw new Error('Sie können diesen Entwurf nicht bearbeiten.'); }
   if (!id && step > 1) step = 1;
   const canDecide = ACCESS ? ACCESS.can_decide : (d ? d.viewer.can_decide : false);
@@ -396,6 +406,7 @@ async function viewWizard(id, step) {
         <label class="choice"><input type="radio" name="ep" value="new_need" data-field="entry_path" ${ep !== 'existing_offer' ? 'checked' : ''}><span><b>Etwas Neues beschaffen</b><span class="dim">Der Agent sucht Dienstleister, holt Angebote ein, prüft und verhandelt.</span></span></label>
         <label class="choice"><input type="radio" name="ep" value="existing_offer" data-field="entry_path" ${ep === 'existing_offer' ? 'checked' : ''}><span><b>Ich habe schon ein Angebot</b><span class="dim">Der Agent prüft AGB und Konditionen, verhandelt und holt auf Wunsch Vergleichsangebote ein.</span></span></label>
       </div></fieldset>
+      <a class="choice" href="/angebots-check" style="margin-top:12px;text-decoration:none;color:inherit"><span style="font-size:20px;line-height:1">↗</span><span><b>Nur ein Angebot prüfen lassen</b><span class="dim">Eckdaten und Preis eingeben, ohne Namen des Anbieters – sofortige Einschätzung und auf Wunsch Vergleichsangebote.</span></span></a>
       <label class="f" for="w-in">Was brauchen Sie? *</label>
       <textarea id="w-in" rows="6" data-field="briefing_input" placeholder="z.B. Imagevideo ca. 90 Sekunden für unsere neue Produktlinie, ein Drehtag in München, inkl. Schnitt. Nutzungsrechte online für 2 Jahre.">${esc(p ? (p.briefing_input || p.description || '') : '')}</textarea>
       <div class="hint">Leistung, Umfang, besondere Anforderungen – in eigenen Worten. Der Agent macht daraus eine strukturierte Zusammenfassung.</div>
@@ -552,7 +563,7 @@ async function viewProject(id, tab, ws) {
     <nav class="crumbs" aria-label="Brotkrumen"><a href="${listUrl(ws)}">${ws ? 'Vorhaben & Aufgaben' : 'Meine Vorhaben'}</a><span>/</span>
       ${tab === 'ueberblick' ? `<span aria-current="page">${esc(p.title)}</span>` : `<a href="${projectUrl(id, ws)}">${esc(p.title)}</a><span>/</span><span aria-current="page">${esc(tabLabel)}</span>`}</nav>
     <div class="head"><div><h1>${esc(p.title)}</h1>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${stateChip(d.state, d.state_label)}<span class="dim">${esc(p.phase_label)} · ${p.entry_path === 'existing_offer' ? 'Vorhandenes Angebot' : 'Neuer Bedarf'}</span></div></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${stateChip(d.state, d.state_label)}<span class="dim">${esc(p.phase_label)} · ${ENTRY_LABEL(p.entry_path)}</span></div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">${ws ? `<a class="btn sm" href="${projectUrl(id)}">Kundenansicht ansehen</a>` : ''}<a class="btn sm ghost" href="${listUrl(ws)}">Zur Vorhabenliste</a></div></div>
     <nav class="tabs" aria-label="Ansichten des Vorhabens">${TABS.map(([k, l, n, hot]) => `<a href="${projectUrl(id, ws, k)}" ${k === tab ? 'aria-current="page"' : ''}>${l}${n ? `<span class="n ${hot ? 'hot' : ''}">${n}</span>` : ''}</a>`).join('')}</nav>
     <div id="tab"></div>`;
@@ -568,6 +579,7 @@ function reloadProject(){ const y = scrollY; render().then(() => scrollTo(0, y))
 
 function tabOverview(box, d, ws) {
   const p = d.project, n = d.next, r = d.result, v = d.viewer;
+  if (p.entry_path === 'offer_check' && p.status === 'briefing') { box.innerHTML = checkPanel(d); bindCheckPanel(d, ws); return; }
   const actionTab = n.tab === 'neu' ? `/vorhaben/${p.id}/auftrag?schritt=${n.label === 'Auftrag prüfen' ? 3 : 1}` : projectUrl(p.id, ws, n.tab);
   const contacted = d.candidates.filter(c => !['found', 'shortlisted', 'rejected'].includes(c.status));
   const comparable = d.offers.filter(o => o.comparable).length;
@@ -636,10 +648,11 @@ function offerRow(o, d, ws) {
       ${o.negotiation ? `<div class="dim">Verhandlung: ${esc(NEG[o.negotiation.status] || o.negotiation.status)}${o.negotiation.latest_counter ? ' · letztes Gegenangebot ' + money(o.negotiation.latest_counter, o.currency) : ''}</div>` : ''}</td>
     <td data-l="Gesamt netto" class="num"><b>${money(o.total, o.currency, '<span class="na">kein Preis erkannt</span>')}</b>
       ${o.improvement ? `<div class="dim" style="color:var(--status-good)">−${money(o.improvement, o.currency)} ggü. Erstangebot</div>` : ''}
+      ${o.vs_reference != null ? `<div class="dim" style="color:${Number(o.vs_reference) < 0 ? 'var(--status-good)' : 'var(--status-bad)'}">${Number(o.vs_reference) < 0 ? '−' : '+'}${money(Math.abs(o.vs_reference), o.currency)} ggü. Ihrem Angebot</div>` : ''}
       ${o.within_budget === false ? '<div class="dim" style="color:var(--status-bad)">über Budget</div>' : o.within_budget ? '<div class="dim">im Budget</div>' : ''}</td>
     <td data-l="Termin & Zahlung">${esc(o.delivery_date || '—')}<div class="dim">${esc(o.payment_terms || '')}</div>${o.offer_validity_until ? `<div class="dim">gültig bis ${dateDe(o.offer_validity_until)}</div>` : ''}</td>
     <td data-l="Umfang & Abweichungen">${rvTag}${o.scope_note ? `<div class="dim" style="margin-top:4px">${esc(o.scope_note).slice(0, 200)}</div>` : ''}
-      ${findings.length ? `<details><summary>Details zu ${findings.length} Punkt(en)</summary>${findings.map(f => `<div class="finding ${f.severity}">${esc(f.topic ? f.topic + ': ' : '')}${esc(f.message)}${f.quote ? `<q>„${esc(f.quote)}“</q>` : ''}</div>`).join('')}</details>` : ''}</td>
+      ${findings.length ? `<details><summary>Details zu ${findings.length} Punkt(en)</summary>${findings.map(f => `<div class="finding ${f.severity}">${esc(f.topic ? f.topic + ': ' : '')}${esc(f.message)}${f.quote ? `<q>${esc(f.quote)}</q>` : ''}</div>`).join('')}</details>` : ''}</td>
     <td data-l="">${done || !op ? '' : `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
       ${v.can_decide ? `<button class="btn sm pri" data-award="${o.id}" data-name="${esc(o.supplier)}" data-total="${esc(money(o.total, o.currency, ''))}">Beauftragen</button>` : ''}
       ${!o.negotiation && o.total ? `<button class="btn sm" data-neg="${o.id}" data-total="${o.total}">Verhandeln lassen</button>` : ''}
@@ -655,6 +668,7 @@ function tabOffers(box, d, ws) {
   const head = `<thead><tr><th>Anbieter</th><th class="num">Gesamt netto</th><th>Termin & Zahlung</th><th>Umfang & Abweichungen</th><th><span class="sr">Aktionen</span></th></tr></thead>`;
   const canUpload = (v.can_decide || v.procurement) && !['awarded', 'cancelled', 'briefing'].includes(p.status) && d.candidates.length;
   box.innerHTML = `
+    ${p.reference_price ? `<div class="alert info">Ihr vorliegendes Angebot: <b>${money(p.reference_price, p.currency)}</b> netto (Anbieter anonym). Jedes Vergleichsangebot zeigt den Abstand dazu.</div>` : ''}
     ${d.offers.length ? `<p class="lead" style="margin-bottom:14px">${d.offers.length} Angebot(e) eingegangen, davon ${comp.length} direkt vergleichbar. Gesamtpreise netto inkl. ausgewiesener Nebenkosten; Abweichungen von Ihren Vorgaben sind markiert.</p>` : ''}
     <div class="card"><div class="card-h"><h2>Vergleichbare Angebote</h2>${canUpload ? `<button class="btn sm" id="up-btn">Angebot manuell hinzufügen</button>` : ''}</div>
       <div id="up-box"></div>
@@ -837,6 +851,111 @@ async function tabWork(box, d, ws) {
       <a class="btn sm" href="${projectUrl(p.id)}">Kundenansicht ansehen</a></div></div>
   </div></div>`;
   document.getElementById('resp').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { clearErrors(); await api(`/projects/${p.id}/responsible`, { method: 'PUT', json: { user_id: document.getElementById('r-u').value || null } }); toast('Zuständigkeit gespeichert'); reloadProject(); }); };
+}
+
+
+/* ================= Angebots-Check ================= */
+const OC_CATEGORIES = ['Videoproduktion', 'Fotografie', 'Event & Messe', 'Übersetzung', 'Druck', 'Webentwicklung', 'Agenturleistung', 'Beratung'];
+async function viewOfferCheck() {
+  setTitle('Angebots-Check');
+  app.innerHTML = `
+    <div class="crumbs"><a href="/uebersicht">Übersicht</a><span>/</span><span aria-current="page">Angebots-Check</span></div>
+    <div class="head"><div><h1>Ist Ihr Angebot zu teuer?</h1>
+      <p class="lead">Geben Sie die Eckdaten Ihres Angebots ein – ohne Namen des Anbieters. Sie erhalten sofort eine Einschätzung und auf Wunsch echte Vergleichsangebote passender Anbieter.</p></div></div>
+    <div class="grid-side"><form class="card" id="oc" novalidate><div class="card-b">
+      <div id="oc-alert"></div>
+      <h2>1 · Was wurde Ihnen angeboten?</h2>
+      <label class="f" for="oc-svc">Art der Leistung *</label>
+      <div class="ocats" role="group" aria-label="Häufige Leistungen">${OC_CATEGORIES.map(c => `<button type="button" class="chipbtn" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+      <input id="oc-svc" type="text" data-field="service_type" placeholder="oder selbst eintragen, z.B. Messestand-Bau" style="margin-top:8px">
+      <label class="f" for="oc-desc">Was genau ist enthalten? *</label>
+      <textarea id="oc-desc" rows="5" data-field="description" placeholder="z.B. Imagevideo ca. 90 Sekunden, ein Drehtag in München, Schnitt und Farbkorrektur, Online-Nutzungsrechte für 2 Jahre."></textarea>
+      <div class="hint">Je genauer der Umfang, desto besser vergleichbar sind die Angebote. Den Namen Ihres Anbieters brauchen wir nicht.</div>
+      <h2 style="margin-top:26px">2 · Preis und Ziel</h2>
+      <div class="row">
+        <div><label class="f" for="oc-price">Angebotspreis netto (EUR) *</label><input id="oc-price" type="number" min="0" step="0.01" data-field="offer_price" class="big"></div>
+        <div><label class="f" for="oc-target">Ihr Zielbudget (optional)</label><input id="oc-target" type="number" min="0" step="0.01" data-field="target_budget"></div>
+        <div><label class="f" for="oc-date">Benötigt bis</label><input id="oc-date" type="date" data-field="needed_by"></div>
+        <div><label class="f" for="oc-reg">Region / Ort</label><input id="oc-reg" type="text" data-field="region" placeholder="z.B. München"></div>
+      </div>
+      <h2 style="margin-top:26px">3 · Angebot hochladen <span class="dim" style="font-family:'DM Sans',sans-serif;font-size:14px;font-weight:400">(optional)</span></h2>
+      <p class="muted" style="margin:6px 0 0">Mit der Datei prüfen wir zusätzlich Zahlungsbedingungen, Nutzungsrechte, Stornoregeln und versteckte Kosten.</p>
+      <label class="f" for="oc-file">PDF, Word oder Excel</label><input id="oc-file" type="file" data-field="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv">
+      <div class="formbar"><span class="sp"></span><button class="btn pri" id="oc-go" style="font-size:15px;padding:11px 22px">Angebot prüfen</button></div>
+    </div></form>
+    <aside class="card"><div class="card-b oc-trust">
+      <h3>So funktioniert es</h3>
+      <ol><li>Sie erhalten sofort eine Einschätzung: Abstand zum Ziel, Marktreferenz und Vertragsrisiken.</li>
+        <li>Auf Wunsch fragt der Agent passende Anbieter an. Jede Anfrage geben Sie vor dem Versand frei.</li>
+        <li>Sie sehen alle Vergleichsangebote im Verhältnis zu Ihrem Angebot und entscheiden selbst.</li></ol>
+      <h3 style="margin-top:16px">Ihre Daten</h3>
+      <ul><li>Ihr bisheriger Anbieter wird nicht kontaktiert.</li><li>Ihr Preis wird an keinen anderen Anbieter weitergegeben.</li><li>Es werden keine Angebote erfunden – nur echte Antworten zählen.</li></ul>
+    </div></aside></div>`;
+  const $ = s => document.getElementById(s);
+  document.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => {
+    document.querySelectorAll('[data-cat]').forEach(x => x.setAttribute('aria-pressed', x === b)); $('oc-svc').value = b.dataset.cat; saveLocal('check');
+  });
+  if (restoreLocal('check')) $('oc-alert').innerHTML = `<div class="alert info" role="status">Ihre letzten Eingaben wurden wiederhergestellt.</div>`;
+  app.querySelectorAll('[data-field]').forEach(el => el.addEventListener('input', () => saveLocal('check')));
+  $('oc').onsubmit = e => { e.preventDefault(); busy($('oc-go'), async () => {
+    clearErrors();
+    if (!$('oc-svc').value.trim()) throw new ApiError(422, { field: 'service_type', message: 'Bitte die Art der Leistung wählen oder eintragen.' });
+    if ($('oc-desc').value.trim().length < 20) throw new ApiError(422, { field: 'description', message: 'Bitte den Umfang in ein, zwei Sätzen beschreiben.' });
+    if (!$('oc-price').value) throw new ApiError(422, { field: 'offer_price', message: 'Bitte den Nettopreis Ihres Angebots angeben.' });
+    const fd = new FormData();
+    fd.append('service_type', $('oc-svc').value.trim()); fd.append('description', $('oc-desc').value.trim()); fd.append('offer_price', $('oc-price').value);
+    if ($('oc-target').value) fd.append('target_budget', $('oc-target').value);
+    if ($('oc-date').value) fd.append('needed_by', $('oc-date').value);
+    if ($('oc-reg').value.trim()) fd.append('region', $('oc-reg').value.trim());
+    if ($('oc-file').files[0]) fd.append('file', $('oc-file').files[0]);
+    $('oc-alert').innerHTML = `<div class="alert info" role="status">Wir prüfen Ihr Angebot${$('oc-file').files[0] ? ' und das Dokument' : ''} – das dauert etwa ${$('oc-file').files[0] ? '30' : '10'} Sekunden …</div>`;
+    const r = await api('/projects/offer-check', { body: fd });
+    clearLocal('check');
+    go(projectUrl(r.project.id));
+  }).then(() => { const a = $('oc-alert'); if (a && document.querySelector('.ferr')) a.innerHTML = ''; }); };
+}
+
+function checkPanel(d) {
+  const p = d.project, c = p.check || {}, b = c.benchmark || {}, rv = c.review, v = d.viewer;
+  const median = b.available ? Number(b.median) : null, ref = Number(p.reference_price);
+  const verdict = b.available
+    ? (ref > Number(b.p75) ? `Ihr Angebot liegt <b>${Math.abs(c.vs_median_pct).toLocaleString("de-DE")} % über</b> dem mittleren Preis vergleichbarer Angebote – Vergleichsangebote lohnen sich sehr wahrscheinlich.`
+      : ref < Number(b.p25) ? `Ihr Angebot liegt <b>${Math.abs(c.vs_median_pct).toLocaleString("de-DE")} % unter</b> dem mittleren Preis vergleichbarer Angebote – bereits ein guter Preis.`
+      : `Ihr Angebot liegt im üblichen Bereich vergleichbarer Angebote (${money(b.p25)} – ${money(b.p75)}).`)
+    : `Für eine Marktreferenz gibt es noch nicht genug vergleichbare Angebote. Vergleichsangebote zeigen, was der Markt verlangt.`;
+  return `<div class="card"><div class="card-h"><h2>Ihr Ergebnis</h2><span class="dim">geprüft ${when(c.checked_at)}</span></div><div class="card-b">
+    <div class="octiles">
+      <div><small>Ihr Angebot</small><b>${money(p.reference_price, p.currency)}</b><span class="dim">netto</span></div>
+      <div><small>Ihr Ziel</small>${c.target ? `<b>${money(c.target, p.currency)}</b><span class="dim">${money(c.gap, p.currency)} bzw. ${Number(c.gap_pct).toLocaleString("de-DE")} % weniger</span>` : '<b class="na">nicht angegeben</b>'}</div>
+      <div><small>Marktreferenz</small>${b.available ? `<b>${money(b.median, p.currency)}</b><span class="dim">Median aus ${b.n} Angeboten</span>` : '<b class="na">noch zu wenig Daten</b>'}</div>
+    </div>
+    <p style="margin:16px 0 0">${verdict}</p>
+    ${rv ? `<div style="margin-top:18px"><h3>Vertragsprüfung Ihres Angebots</h3>
+      <p class="dim" style="margin:4px 0 8px">${rv.critical ? `<span class="tag bad">${rv.critical} kritisch</span> ` : ''}${rv.warnings ? `<span class="tag warn">${rv.warnings} Hinweis(e)</span>` : ''}${!rv.critical && !rv.warnings ? '<span class="tag good">ohne Auffälligkeiten</span>' : ''}</p>
+      ${rv.price_mismatch ? `<div class="alert err">Im Dokument steht ein anderer Preis (${money(rv.document_price)}) als von Ihnen angegeben. Bitte prüfen Sie, welcher gilt.</div>` : ''}
+      ${rv.findings.filter(f => f.severity !== 'info').slice(0, 5).map(f => `<div class="finding ${f.severity}">${esc(f.topic ? f.topic + ': ' : '')}${esc(f.message)}${f.quote ? `<q>${esc(f.quote)}</q>` : ''}</div>`).join('')}</div>` : ''}
+  </div></div>
+  <div class="card next"><div class="card-b">
+    <h3>Vergleichsangebote einholen</h3>
+    <ul style="margin:8px 0 0;padding-left:18px">
+      <li>Der Agent wählt bis zu drei passende Anbieter aus Ihrem Bestand aus (${c.suppliers_available || 0} mit Kontaktadresse verfügbar) und bereitet die Anfragen vor.</li>
+      <li>Angebote zählen nur, wenn sie unter Ihrem Angebot von <b>${money(p.reference_price, p.currency)}</b> liegen${c.target ? `; Ziel ist <b>${money(c.target, p.currency)}</b>` : ''}.</li>
+      <li>Ihr bisheriger Anbieter und Ihr Preis werden niemandem genannt. Jede Anfrage geben Sie vor dem Versand frei.</li></ul>
+    ${!c.suppliers_available ? `<div class="alert info" style="margin-top:12px">Im Bestand ist noch kein passender Anbieter mit E-Mail-Adresse. Nach dem Start können Sie Anbieter manuell hinzufügen.</div>` : ''}
+    <label style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-weight:500"><input type="checkbox" id="oc-ok" data-field="confirm_mandate" style="margin-top:3px"> Ja, bitte Vergleichsangebote in diesem Rahmen einholen.</label>
+    <div class="formbar">${v.can_decide ? `<button class="btn pri" id="oc-start">Vergleichsangebote einholen</button>` : `<button class="btn pri" id="oc-share">Zur Freigabe vorlegen</button><span class="dim">Ihnen fehlt die Entscheidungsbefugnis.</span>`}
+      <span class="sp"></span><button class="btn ghost bad" id="oc-drop">Check verwerfen</button></div>
+  </div></div>`;
+}
+function bindCheckPanel(d, ws) {
+  const p = d.project, $ = s => document.getElementById(s);
+  if ($('oc-start')) $('oc-start').onclick = e => busy(e.target, async () => {
+    clearErrors();
+    await api(`/projects/${p.id}/start`, { json: { confirm_mandate: $('oc-ok').checked } });
+    toast('Anfragen sind vorbereitet – bitte prüfen und freigeben'); go(projectUrl(p.id, ws, 'entscheidungen'));
+  });
+  if ($('oc-share')) $('oc-share').onclick = e => busy(e.target, async () => { await api('/projects/' + p.id, { method: 'PUT', json: { shared_with_tenant: true } }); toast('Zur Freigabe vorgelegt'); reloadProject(); });
+  $('oc-drop').onclick = e => { if (confirm('Diesen Angebots-Check verwerfen?')) busy(e.target, async () => { await api(`/projects/${p.id}/cancel`, { method: 'POST' }); await api(`/projects/${p.id}/archive`, { method: 'POST' }); go(listUrl(ws)); }); };
 }
 
 /* ================= Einsparungen ================= */

@@ -28,7 +28,7 @@
     if (p === '/rfq-dashboard') return ws('bestellungen');
     if (p === '/data-center') return ws('datacenter');
     if (p === '/administration') return ws('administration', 'admin');
-    if (p.startsWith('/vorhaben')) return { area: 'customer', key: 'vorhaben' };
+    if (p.startsWith('/vorhaben') || p.startsWith('/angebots-check')) return { area: 'customer', key: 'vorhaben' };
     if (p.startsWith('/einsparungen')) return { area: 'customer', key: 'einsparungen' };
     if (p.startsWith('/entscheidungen')) return { area: 'customer', key: 'entscheidungen' };
     if (p.startsWith('/hilfe')) return { area: 'customer', key: 'hilfe' };
@@ -87,7 +87,7 @@
 
   function esc(s) { return (s ?? '').toString().replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   const token = (() => { try { return localStorage.getItem('nx_token'); } catch (e) { return null; } })();
-  if (!token) { location.href = '/login'; return; }
+  if (!token) { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); return; }
 
   async function loadAccess() {
     let cached = null;

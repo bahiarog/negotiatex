@@ -156,7 +156,7 @@ def _project_dict(p: Project, names: dict | None = None) -> dict:
     names = names or {}
     return {
         "id": str(p.id), "title": p.title, "entry_path": p.entry_path, "status": _v(p.status),
-        "phase_label": PHASE_LABEL.get(_v(p.status), _v(p.status)),
+        "phase_label": "Ergebnis liegt vor" if (p.entry_path == "offer_check" and _v(p.status) == "briefing") else PHASE_LABEL.get(_v(p.status), _v(p.status)),
         "service_type": p.service_type, "description": p.description, "must_criteria": p.must_criteria_json or {},
         "conditions_text": p.conditions_text, "budget_target": _s(p.budget_target), "budget_ceiling": _s(p.budget_ceiling),
         "currency": p.currency, "needed_by": p.needed_by.isoformat() if p.needed_by else None, "region": p.region,
@@ -173,6 +173,7 @@ def _project_dict(p: Project, names: dict | None = None) -> dict:
         "awarded_offer_id": _s(p.awarded_offer_id), "awarded_at": p.awarded_at.isoformat() if p.awarded_at else None,
         "decision_note": p.decision_note, "archived_at": p.archived_at.isoformat() if p.archived_at else None,
         "invoiced_amount": _s(p.invoiced_amount), "invoiced_at": p.invoiced_at.isoformat() if p.invoiced_at else None,
+        "reference_price": _s(p.reference_price), "check": p.check_json,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
     }
@@ -200,6 +201,10 @@ def _missing_for_start(p: Project) -> dict:
         missing["description"] = REQUIRED_TO_START["description"]
     if not p.budget_ceiling:
         missing["budget_ceiling"] = REQUIRED_TO_START["budget_ceiling"]
+    if p.entry_path == "offer_check":
+        missing.pop("title", None)
+        if not p.reference_price:
+            missing["offer_price"] = "Bitte den Preis Ihres vorliegenden Angebots angeben."
     if p.entry_path == "existing_offer":
         if not p.offer_document_id:
             missing["offer_file"] = "Bitte das vorhandene Angebot hochladen."
@@ -412,6 +417,7 @@ async def _offers(db: AsyncSession, p: Project, cands: dict) -> list[dict]:
                 "document_id": str(doc.id) if doc else None, "negotiation": neg,
                 "received_at": o.received_at.isoformat() if o.received_at else None,
                 "awarded": p.awarded_offer_id == o.id,
+                "vs_reference": _s((total - Decimal(p.reference_price)).quantize(Decimal("0.01"))) if (total is not None and p.reference_price) else None,
             })
     out.sort(key=lambda x: (not x["comparable"], x["total"] is None, Decimal(x["total"]) if x["total"] else 0))
     return out
@@ -862,6 +868,15 @@ async def start_project(project_id: str, payload: StartPayload, access: Access =
         await intake_offer(db, rfq, cand, (ver.extracted_text or "") if ver else "", actor=uid, doc=doc, channel="Kunde", preexisting=True)
         if p.seek_alternatives:
             p.status = ProjectStatus.sourcing
+    elif p.entry_path == "offer_check":
+        p.status = ProjectStatus.sourcing
+        await _ensure_rfq(db, p, req, uid)
+        await add_event(db, p, "started", "Vergleichsangebote beauftragt",
+                        f"Der Agent fragt passende Anbieter an. Vergleichsangebote müssen unter Ihrem Angebot "
+                        f"({p.reference_price} {p.currency}) liegen. Ihr bisheriger Anbieter wird nicht kontaktiert.",
+                        milestone=True, actor=uid)
+        await db.flush()
+        await _auto_select(db, p, access)  # legt Erstanfragen als Entwuerfe an (eigenes Ereignis)
     else:
         p.status = ProjectStatus.sourcing
         await add_event(db, p, "started", "Auftrag erteilt",
@@ -1512,3 +1527,183 @@ def _agent_of(e: ProjectEvent):
     """Welcher digitale Mitarbeiter hat dieses Ereignis ausgeloest (fuer Avatare im Verlauf)."""
     from services.agent_log import EVENT_AGENT
     return EVENT_AGENT.get(e.kind) if (e.actor or "agent") in ("agent", "system") else None
+
+
+
+# ---------------------------------------------------------------------------
+# Angebots-Check (Einstieg wie bei einem Vergleichsportal): Eckdaten + Preis
+# des vorliegenden Angebots, ohne Namen des Anbieters. Sofort-Ergebnis:
+# Abstand zum Ziel, Marktreferenz aus frueheren vergleichbaren Angeboten (nur
+# bei genug Daten), Vertragspruefung bei hochgeladenem Angebot. Danach holt
+# der Agent echte Vergleichsangebote ein -- es werden nie Angebote erfunden.
+# ---------------------------------------------------------------------------
+
+BENCHMARK_MIN_N = 3
+BENCHMARK_MIN_SIMILARITY = 0.55
+
+
+def _quantile(vals: list, q: float) -> Decimal:
+    vals = sorted(vals)
+    pos = (len(vals) - 1) * q
+    lo, hi = int(pos), min(int(pos) + 1, len(vals) - 1)
+    return (vals[lo] + (vals[hi] - vals[lo]) * Decimal(str(pos - lo))).quantize(Decimal("0.01"))
+
+
+def _profile_text(x: Project) -> str:
+    return " ".join(t for t in [x.service_type or "", x.title or "", (x.description or "")[:1500]] if t)
+
+
+async def _benchmark(db: AsyncSession, p: Project) -> dict:
+    """Marktreferenz aus aktuellen Angeboten frueherer, inhaltlich aehnlicher
+    Vorhaben desselben Mandanten. Erst ab BENCHMARK_MIN_N Treffern."""
+    others = (await db.execute(select(Project).where(Project.tenant_id == p.tenant_id, Project.id != p.id,
+                                                     Project.sourcing_request_id.isnot(None))
+                               .order_by(desc(Project.created_at)).limit(200))).scalars().all()
+    pool = []
+    for o in others:
+        offers = []
+        for rfq in await _project_rfqs(db, o):
+            offers += [x for x in (await db.execute(select(RFQOffer).where(RFQOffer.rfq_id == rfq.id))).scalars().all()
+                       if _v(x.status) == "submitted" and _v(x.comparability_flag) == "comparable"]
+        totals = [t for t in (offer_total(x, o.quantity) for x in offers) if t is not None]
+        if totals:
+            pool.append((o, totals))
+    reason = "Noch zu wenige vergleichbare Angebote in Ihren bisherigen Vorhaben – die Vergleichsangebote liefern die Marktreferenz."
+    if not pool:
+        return {"available": False, "reason": reason, "n": 0}
+    try:
+        from services.mdc_embeddings import embed_texts
+        vecs = await asyncio.to_thread(embed_texts, [_profile_text(p)] + [_profile_text(o) for o, _ in pool])
+    except Exception:
+        logger.exception("Marktreferenz ohne Embeddings nicht moeglich")
+        return {"available": False, "reason": reason, "n": 0}
+    hits = []
+    for (o, totals), v in zip(pool, vecs[1:]):
+        if sum(a * b for a, b in zip(vecs[0], v)) >= BENCHMARK_MIN_SIMILARITY:
+            hits += totals
+    if len(hits) < BENCHMARK_MIN_N:
+        return {"available": False, "reason": reason, "n": len(hits)}
+    return {"available": True, "n": len(hits), "median": str(_quantile(hits, 0.5)), "p25": str(_quantile(hits, 0.25)),
+            "p75": str(_quantile(hits, 0.75)), "basis": "aktuelle Angebote aus inhaltlich ähnlichen früheren Vorhaben"}
+
+
+async def _review_reference(p: Project, text: str) -> dict:
+    """Vertragspruefung des hochgeladenen Angebots (anonym). Der vom Kunden
+    genannte Preis ist massgeblich; weicht der Preis im Dokument ab, wird das gemeldet."""
+    from types import SimpleNamespace
+    from services.rfq_classifier import extract_offer_fields
+    from services.offer_intake import reconcile_prices, _date
+    from services.offer_compliance import review
+    ex = reconcile_prices(await asyncio.to_thread(extract_offer_fields, text), text)
+    pseudo = SimpleNamespace(unit_price=p.reference_price, quantity=Decimal("1"), freight_cost=0, other_costs=0,
+                             currency=p.currency or "EUR", delivery_date=ex.get("delivery_date"), payment_terms=ex.get("payment_terms"),
+                             offer_validity_until=_date(ex.get("offer_validity_until")), spec_confirmed=ex.get("spec_confirmed"),
+                             comparability_flag="comparable", comparability_note=None)
+    res = await asyncio.to_thread(review, pseudo, p, text)
+    findings = [f for f in res["findings"] if f.get("code") not in ("quantity_unknown", "over_target", "over_budget")]
+    doc_total = ex["unit_price"] * (ex.get("quantity") or 1) if ex.get("unit_price") is not None else None
+    return {"status": res["status"], "findings": findings,
+            "critical": sum(1 for f in findings if f["severity"] == "critical"),
+            "warnings": sum(1 for f in findings if f["severity"] == "warning"),
+            "document_price": str(Decimal(doc_total).quantize(Decimal("0.01"))) if doc_total is not None else None,
+            "price_mismatch": bool(doc_total is not None and abs(Decimal(doc_total) - Decimal(p.reference_price)) > Decimal("1")),
+            "delivery_date": ex.get("delivery_date"), "payment_terms": ex.get("payment_terms")}
+
+
+async def _auto_select(db: AsyncSession, p: Project, access: Access, n: int = 3) -> list[str]:
+    """Angebots-Check: die passendsten erreichbaren Anbieter vorauswaehlen.
+    Es entstehen nur Entwuerfe -- jede Anfrage wird vor dem Versand freigegeben."""
+    from services.agent_log import track
+    async with track("scout", "Anbieter für Vergleichsangebote vorauswählen", tenant_id=p.tenant_id, project_id=p.id) as run:
+        sugg = await _suggest(db, p, access)
+        # Den Anbieter des vorliegenden Angebots nie um ein Vergleichsangebot bitten: steht sein Name
+        # im hochgeladenen Dokument, wird er ausgeschlossen (der Kunde bleibt ihm gegenueber anonym).
+        doc_text = ""
+        if p.offer_document_id:
+            ver = (await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.document_id == p.offer_document_id)
+                                    .order_by(desc(MDCDocumentVersion.version_number)))).scalars().first()
+            doc_text = ((ver.extracted_text or "") if ver else "").lower()
+        def _core(name: str) -> str:
+            return " ".join(w for w in name.lower().replace(",", " ").split()
+                            if w not in ("gmbh", "ug", "ag", "kg", "co.", "&", "(haftungsbeschraenkt)", "(haftungsbeschränkt)", "mbh"))
+        excluded = [e["company_name"] for e in sugg["items"] if doc_text and _core(e["company_name"]) and _core(e["company_name"]) in doc_text]
+        top = [e for e in sugg["items"] if e.get("contactable") and e["company_name"] not in excluded][:n]
+        run.outcome = f"{len(top)} von {len(sugg['items'])} Vorschlägen vorausgewählt" + \
+                      (f"; ausgeschlossen (Anbieter des vorliegenden Angebots): {', '.join(excluded)}" if excluded else "")
+    if not top:
+        return []
+    items = [CandidateSelection(source=e["source"], ref_id=e["ref_id"], company_name=e["company_name"],
+                                contact_email=e["contact_email"], contact_name=e["contact_name"]) for e in top]
+    res = await select_candidates(project_id=str(p.id), payload=SelectPayload(items=items), access=access, db=db)
+    return [c["company_name"] for c in res["created"]]
+
+
+@router.post("/offer-check")
+async def offer_check(service_type: str = Form(...), description: str = Form(...), offer_price: str = Form(...),
+                      target_budget: Optional[str] = Form(None), needed_by: Optional[str] = Form(None),
+                      region: Optional[str] = Form(None), file: Optional[UploadFile] = File(None),
+                      access: Access = Depends(get_access), db: AsyncSession = Depends(get_db)):
+    from services.agent_log import track
+    if not service_type.strip():
+        raise field_error("service_type", "Bitte die Art der Leistung wählen.")
+    if len(description.strip()) < 20:
+        raise field_error("description", "Bitte die Leistung in ein, zwei Sätzen beschreiben (Umfang, Ort, Termin).")
+    price = _dec(offer_price, "offer_price")
+    if not price:
+        raise field_error("offer_price", "Bitte den Nettopreis Ihres Angebots angeben.")
+    target = _dec(target_budget, "target_budget")
+    if target is not None and target >= price:
+        raise field_error("target_budget", "Das Zielbudget sollte unter dem Angebotspreis liegen.")
+    due = None
+    if needed_by:
+        try:
+            due = date.fromisoformat(needed_by[:10])
+        except ValueError:
+            raise field_error("needed_by", "Bitte ein Datum angeben.")
+    p = Project(tenant_id=access.tenant_id, title=f"Angebots-Check: {service_type.strip()[:200]}", entry_path="offer_check",
+                status=ProjectStatus.briefing, service_type=service_type.strip()[:255], description=description.strip(),
+                region=(region or "").strip()[:100] or None, needed_by=due, budget_ceiling=price, budget_target=target,
+                reference_price=price, currency="EUR", seek_alternatives=True, briefing_source="offer_check",
+                customer_email=getattr(access.user, "email", None), created_by=str(access.user.id))
+    db.add(p)
+    await db.flush()
+    doc_text = ""
+    if file is not None and file.filename:
+        from services.offer_intake import store_offer_file
+        data = await _read_upload(file, "file")
+        try:
+            doc, _ver, doc_text = await store_offer_file(db, p.tenant_id, file.filename, data, None,
+                                                         actor=str(access.user.id), source="kunde:angebots-check")
+        except ValueError as e:
+            raise field_error("file", str(e))
+        doc.usage_purpose = "Angebots-Check (Anbieter wird nicht kontaktiert)"
+        p.offer_document_id = doc.id
+    await add_event(db, p, "created", "Angebots-Check gestartet", f"Ihr Angebot: {price} EUR netto.", actor=str(access.user.id))
+    await db.commit()
+
+    async with track("analyst", "Marktreferenz für Angebots-Check ermitteln", tenant_id=p.tenant_id, project_id=p.id) as run:
+        bench = await _benchmark(db, p)
+        run.outcome = (f"Median {bench['median']} EUR aus {bench['n']} Angeboten" if bench["available"]
+                       else f"keine belastbare Referenz ({bench['n']} Treffer)")
+    rev = None
+    if doc_text:
+        async with track("pruefer", "Vorliegendes Angebot prüfen (Anbieter anonym)", tenant_id=p.tenant_id, project_id=p.id) as run:
+            rev = await _review_reference(p, doc_text)
+            run.outcome = f"{rev['critical']} kritisch, {rev['warnings']} Hinweis(e)"
+    pool = 0
+    try:
+        pool = sum(1 for e in (await _suggest(db, p, access))["items"] if e.get("contactable"))
+    except Exception:
+        logger.exception("Anbieterzahl fuer Angebots-Check nicht ermittelbar")
+    gap = (price - target) if target is not None else None
+    check = {"reference_price": str(price), "target": _s(target), "gap": _s(gap),
+             "gap_pct": str((gap / price * 100).quantize(Decimal("0.1"))) if gap is not None else None,
+             "benchmark": bench, "review": rev, "suppliers_available": pool,
+             "checked_at": datetime.utcnow().isoformat()}
+    if bench.get("available"):
+        med = Decimal(bench["median"])
+        check["vs_median"] = str((price - med).quantize(Decimal("0.01")))
+        check["vs_median_pct"] = str(((price - med) / med * 100).quantize(Decimal("0.1"))) if med else None
+    p.check_json = check
+    await db.commit()
+    return {"project": await _fresh(db, p), "check": check}

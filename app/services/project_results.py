@@ -75,10 +75,14 @@ async def compute_result(db: AsyncSession, p, tenant: Optional[Tenant] = None) -
         base_offer = _first_of(offers, p.incumbent_candidate_id)
         baseline_label = "Ihr mitgebrachtes Ausgangsangebot"
     awarded = by_id.get(p.awarded_offer_id) if p.awarded_offer_id else None
-    if base_offer is None and awarded is not None:
+    ref_price = getattr(p, "reference_price", None)
+    if p.entry_path == "offer_check" and ref_price:
+        # Angebots-Check: Ausgangsbasis ist das vorliegende Angebot des Kunden (Anbieter anonym)
+        baseline, baseline_label, baseline_date = Decimal(ref_price), "Ihr vorliegendes Angebot", p.created_at
+    if baseline is None and base_offer is None and awarded is not None:
         base_offer = _first_of(offers, awarded.supplier_candidate_id)
         baseline_label = "Erstangebot des beauftragten Anbieters"
-    if base_offer is not None:
+    if base_offer is not None and baseline is None:
         baseline = offer_total(base_offer, p.quantity)
         baseline_date = base_offer.received_at
 
@@ -90,6 +94,12 @@ async def compute_result(db: AsyncSession, p, tenant: Optional[Tenant] = None) -
             realized = max(baseline - Decimal(p.invoiced_amount), Decimal("0"))
     elif status not in ("cancelled",):
         current = [o for o in offers if getattr(o.status, "value", o.status) == "submitted"]
+        if p.entry_path == "offer_check" and ref_price:
+            best = min((t for t in (offer_total(o, p.quantity) for o in current
+                                    if getattr(o.comparability_flag, "value", o.comparability_flag) == "comparable") if t is not None),
+                       default=None)
+            if best is not None and best < Decimal(ref_price):
+                potential, potential_label = Decimal(ref_price) - best, "bestes Vergleichsangebot, noch nicht beauftragt"
         improved = []
         for o in current:
             first = _first_of(offers, o.supplier_candidate_id)
