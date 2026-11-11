@@ -88,6 +88,13 @@ class PasswordResetToken(Base):
 class RegisterPayload(BaseModel):
     name: str; email: str; company_name: Optional[str] = None; password: str
     turnstile_token: Optional[str] = None
+    # Selbstregistrierung kennt nur Kundenkonten. Procurement- und Admin-Zugaenge
+    # entstehen ausschliesslich per Einladung (routers/administration.py).
+    account_type: str = "customer"
+
+
+def _register_error(field: str, message: str):
+    raise HTTPException(422, {"field": field, "message": message})
 
 class LoginPayload(BaseModel):
     email: str; password: str
@@ -107,22 +114,44 @@ async def auth_config():
 
 @router.post("/register")
 async def register(payload: RegisterPayload, request: Request, db: AsyncSession = Depends(get_db)):
+    if payload.account_type != "customer":
+        raise HTTPException(403, "Über die Registrierung können nur Kundenkonten angelegt werden. "
+                                 "Zugänge zum Arbeitsbereich vergibt ein Admin per Einladung.")
     await verify_turnstile(payload.turnstile_token, request.client.host if request.client else None)
 
-    r = await db.execute(select(User).where(User.email == payload.email.lower()))
-    if r.scalar_one_or_none():
-        raise HTTPException(400, "E-Mail bereits registriert.")
+    email = payload.email.strip().lower()
+    if not payload.name.strip():
+        _register_error("name", "Bitte Ihren Namen angeben.")
+    if "@" not in email or "." not in email.split("@")[-1]:
+        _register_error("email", "Bitte eine gültige E-Mail-Adresse angeben.")
+    if not (payload.company_name or "").strip():
+        _register_error("company_name", "Bitte Ihr Unternehmen angeben.")
     if len(payload.password) < 8:
-        raise HTTPException(400, "Passwort muss mindestens 8 Zeichen haben.")
+        _register_error("password", "Das Passwort braucht mindestens 8 Zeichen.")
+    r = await db.execute(select(User).where(User.email == email))
+    if r.scalar_one_or_none():
+        _register_error("email", "Diese E-Mail-Adresse ist bereits registriert. Bitte melden Sie sich an.")
     user = User(
-        name=payload.name,
-        email=payload.email.lower(),
-        company_name=payload.company_name,
+        name=payload.name.strip(),
+        email=email,
+        company_name=payload.company_name.strip(),
         password_hash=hash_password(payload.password),
-        is_admin=(payload.email.lower() == ADMIN_EMAIL),
-        plan="paid" if payload.email.lower() == ADMIN_EMAIL else "free",
+        is_admin=(email == ADMIN_EMAIL),
+        plan="paid" if email == ADMIN_EMAIL else "free",
     )
-    db.add(user); await db.commit(); await db.refresh(user)
+    db.add(user)
+    await db.flush()
+    # Eigenes, abgeschottetes Kundenkonto -- in derselben Transaktion wie der Nutzer.
+    # Rolle ausschliesslich "customer" (entscheidungsbefugt): kein Admin, kein Arbeitsbereich.
+    from sqlalchemy import text
+    from models_v2 import Membership, MembershipRole, Tenant
+    tenant = Tenant(company_name=user.company_name[:255])
+    db.add(tenant)
+    await db.flush()
+    await db.execute(text("SELECT set_config('app.user_id', :uid, false)"), {"uid": str(user.id)})
+    db.add(Membership(tenant_id=tenant.id, user_id=user.id, role=MembershipRole.member,
+                      roles_json=["customer"], can_decide=True))
+    await db.commit(); await db.refresh(user)
     token = make_token(str(user.id), user.email, user.is_admin)
 
     try:

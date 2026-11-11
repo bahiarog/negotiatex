@@ -33,10 +33,10 @@ async def create_tenant(payload: TenantCreate, user=Depends(get_current_user), d
     # `memberships`' RLS policy is keyed on app.user_id (set in get_current_user),
     # not app.tenant_id -- this INSERT is a self-row-creation and needs no
     # tenant context to already exist, unlike every other tenant-scoped table.
-    # Wer ein Unternehmenskonto anlegt, ist dessen Auftraggeber (entscheidungsbefugt)
-    # und verwaltet es; den Arbeitsbereich vergibt ein Admin bei Bedarf gesondert.
-    membership = Membership(tenant_id=tenant.id, user_id=user.id, role=MembershipRole.owner,
-                            roles_json=["admin", "customer"], can_decide=True)
+    # Wer selbst ein Unternehmenskonto anlegt, ist dessen Auftraggeber (entscheidungsbefugt) --
+    # aber nie Admin oder Procurement: diese Rollen vergibt nur ein Admin per Einladung.
+    membership = Membership(tenant_id=tenant.id, user_id=user.id, role=MembershipRole.member,
+                            roles_json=["customer"], can_decide=True)
     db.add(membership)
     await db.commit()
     await db.refresh(tenant)
