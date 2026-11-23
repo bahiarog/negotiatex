@@ -72,15 +72,13 @@ async def generate_counter_offer(
     max_savings = float(savings.get("max_savings_eur") or 0)
 
     neg_points = savings.get("negotiation_points", [])[:5]
-    neg_points_text = "
-".join(
+    neg_points_text = "\n".join(
         f"- {p.get('point','')} (saving: €{p.get('potential_saving',0):,.0f}, difficulty: {p.get('difficulty','')})"
         for p in neg_points
     )
 
     terms_issues = terms.get("critical", [])[:3]
-    terms_text = "
-".join(f"- {t.get('clause','')} → {t.get('recommendation','')}" for t in terms_issues) or "No critical issues found."
+    terms_text = "\n".join(f"- {t.get('clause','')} → {t.get('recommendation','')}" for t in terms_issues) or "No critical issues found."
 
     lang_label = "German" if language == "de" else "English"
 
@@ -121,13 +119,7 @@ async def generate_counter_offer(
             "priority_items": [],
             "negotiation_email": {
                 "subject": f"Verhandlungsanfrage: {title}",
-                "body": f"Sehr geehrte Damen und Herren,
-
-bezugnehmend auf Ihr Angebot {title} (€{total_net:,.2f}) möchten wir Ihnen einen Gegenvorschlag unterbreiten.
-
-Nach unserer Analyse sehen wir Potenzial für eine Preisreduzierung auf €{target:,.2f}. Wir freuen uns auf Ihre Rückmeldung.
-
-Mit freundlichen Grüßen",
+                "body": f"Sehr geehrte Damen und Herren,\n\nbezugnehmend auf Ihr Angebot {title} (€{total_net:,.2f}) möchten wir Ihnen einen Gegenvorschlag unterbreiten.\n\nNach unserer Analyse sehen wir Potenzial für eine Preisreduzierung auf €{target:,.2f}. Wir freuen uns auf Ihre Rückmeldung.\n\nMit freundlichen Grüßen",
             },
             "talking_points": ["Marktpreisvergleich zeigt Einsparpotenzial", "Langfristige Partnerschaft als Argument", "Volumenzusage als Verhandlungsmasse"],
             "walk_away_price": total_net,
