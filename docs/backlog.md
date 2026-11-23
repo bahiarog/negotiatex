@@ -10,7 +10,7 @@ Aufwand: S = bis 2 h, M = halber bis ganzer Tag, L = mehrere Tage.
 
 ## Jetzt
 
-### NX-001 Pauschalangebote für Stückmengen richtig vergleichen · `vorgeschlagen` · M
+### NX-001 Pauschalangebote für Stückmengen richtig vergleichen · `freigegeben` (Rafael, 23.11.2026) · M
 **Problem:** Beide Angebote für „20 höhenverstellbare Schreibtische“ wurden als „Menge 1 (Pauschale)“ erfasst. Der Vergleich mit der erwarteten Menge 20 markiert sie deshalb als „eingeschränkt vergleichbar“ (`services/rfq_classifier.py:_comparability`), und die Auswertung nennt kein günstigstes Angebot – obwohl beide denselben Umfang anbieten.
 **Abnahme:**
 - Ein Gesamtpreis für die angefragte Menge wird als vergleichbar erkannt, wenn die Menge im Angebotstext belegt ist (Zitat).
