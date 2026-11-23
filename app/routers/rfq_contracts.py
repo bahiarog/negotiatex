@@ -462,9 +462,9 @@ def _offer_to_dict(o: RFQOffer) -> dict:
     }
 
 
-async def _apply_comparability(offer: RFQOffer, rfq: RFQ):
+async def _apply_comparability(offer: RFQOffer, rfq: RFQ, lump_sum: Optional[dict] = None):
     from services.rfq_classifier import _comparability
-    flag, note = _comparability(offer.quantity, rfq.expected_quantity, offer.scope_note, offer.spec_confirmed)
+    flag, note = _comparability(offer.quantity, rfq.expected_quantity, offer.scope_note, offer.spec_confirmed, lump_sum)
     offer.comparability_flag = ComparabilityFlag(flag)
     offer.comparability_note = note
 
@@ -577,9 +577,12 @@ async def record_negotiated_offer(rfq_id: str, offer_id: str, payload: Negotiate
         offer_validity_until=original.offer_validity_until, scope_note=original.scope_note,
         spec_confirmed=original.spec_confirmed, comparability_flag=original.comparability_flag,
         comparability_note=(payload.note or original.comparability_note),
+        raw_extracted_json={k: v for k, v in (original.raw_extracted_json or {}).items()
+                            if k in ("lump_sum_quantity", "lump_sum_quote")} or None,  # Mengenbeleg (NX-001)
         created_by=str(user.id),
     )
-    await _apply_comparability(new_offer, rfq)
+    from services.rfq_classifier import lump_sum_from_json
+    await _apply_comparability(new_offer, rfq, lump_sum_from_json(original.raw_extracted_json))
     db.add(new_offer)
     await db.flush()
     original.status = OfferStatus.superseded

@@ -81,6 +81,7 @@ def reconcile_prices(extracted: dict, text: str) -> dict:
             notes.append(f"{name} {val} nicht im Dokument belegt -- verworfen.")
     tp = tp if _in_text(tp, text) else None
     up = up if _in_text(up, text) else None
+    tp, optional_notes, optional_verified = _optional_items(extracted.get("optional_items"), text, tp)
     extras = (fr or Decimal("0")) + (oc or Decimal("0"))
     if tp is not None:
         q = qty or Decimal("1")
@@ -96,8 +97,54 @@ def reconcile_prices(extracted: dict, text: str) -> dict:
             up, qty, fr, oc = tp, Decimal("1"), Decimal("0"), Decimal("0")
     out = dict(extracted)
     out.update({"unit_price": up, "quantity": qty, "freight_cost": fr, "other_costs": oc, "total_price": tp,
-                "price_notes": notes})
+                "price_notes": notes, "optional_notes": optional_notes, "optional_items_verified": optional_verified})
     return out
+
+
+def _optional_items(items, text: str, tp: Optional[Decimal]) -> tuple[Optional[Decimal], list, list]:
+    """Optionale/abwaehlbare Positionen (NX-001): nur mit woertlichem Beleg; sie
+    gehen nie in den Vergleichspreis. Ist ihr belegter Preis laut Extraktion in
+    der Angebotssumme enthalten, rechnet der Code ihn heraus. Rueckgabe:
+    (Vergleichs-Gesamtpreis, Hinweise als Pruefungs-Feststellungen, belegte Positionen)."""
+    from services.rfq_classifier import quote_in_text
+    findings, verified, deduct, unpriced_included = [], [], Decimal("0"), False
+    for it in items if isinstance(items, list) else []:
+        if not isinstance(it, dict):
+            continue
+        desc_ = str(it.get("description") or "").strip()[:200] or "optionale Position"
+        quote = it.get("quote")
+        if not isinstance(quote, str) or not quote_in_text(quote, text):
+            findings.append({"code": "optional_item", "source": "regel", "severity": "info", "quote": None,
+                             "message": f"Optionale Position ohne Beleg im Dokument verworfen: {desc_}."})
+            continue
+        price = _dec(it.get("price"))
+        price = price if _in_text(price, text) else None
+        included = it.get("included_in_total") is True
+        quote = " ".join(quote.split())[:300]
+        verified.append({"description": desc_, "price": str(price) if price is not None else None,
+                         "included_in_total": included, "quote": quote})
+        if included and price is not None:
+            deduct += price
+        elif included:
+            unpriced_included = True
+        price_txt = f" ({price:.2f})" if price is not None else ""
+        where = "in der Angebotssumme enthalten, Preis nicht belegt" if (included and price is None) \
+            else "nicht im Vergleichspreis"
+        findings.append({"code": "optional_item", "source": "regel", "severity": "info", "quote": quote,
+                         "message": f"Optionale Position{price_txt} {where}: {desc_}."})
+    if tp is not None and deduct:
+        if deduct < tp:
+            tp = tp - deduct
+            findings.append({"code": "optional_item", "source": "regel", "severity": "info", "quote": None,
+                             "message": f"Optionale Positionen ({deduct:.2f}) aus der Angebotssumme herausgerechnet: "
+                                        f"Vergleichspreis {tp:.2f}."})
+        else:
+            unpriced_included = True
+    if unpriced_included:
+        findings.append({"code": "optional_item", "source": "regel", "severity": "warning", "quote": None,
+                         "message": "Angebotssumme enthält eine optionale Position, die nicht sicher herausgerechnet "
+                                    "werden kann – Vergleichspreis bitte prüfen."})
+    return tp, findings, verified
 
 
 def _date(v) -> Optional[datetime]:
@@ -264,8 +311,14 @@ async def offers_evaluation(db: AsyncSession, rfq: RFQ, project: Optional[Projec
                      "flagged_different_scope": "eingeschränkt vergleichbar (abweichender Umfang)"}.get(flag, "Vergleichbarkeit offen")
         price = f"{total:,.2f} {o.currency} netto".replace(",", "X").replace(".", ",").replace("X", ".") if total is not None \
             else "Preis nicht erkannt – bitte prüfen"
+        raw = o.raw_extracted_json if isinstance(o.raw_extracted_json, dict) else {}
+        lq = _dec(raw.get("lump_sum_quantity"))
+        if flag == "comparable" and lq is not None and raw.get("lump_sum_quote"):
+            cmp_label += f" (Gesamtpreis für {lq.normalize():f} Stück, belegt: „{str(raw['lump_sum_quote'])[:120]}“)"
+        opt = sum(1 for f in (rv.findings_json if rv else []) or [] if f.get("code") == "optional_item" and f.get("quote"))
         rows.append(f"- {names.get(o.supplier_candidate_id, 'Anbieter')}: {price} · {cmp_label} · "
-                    f"{crit} kritische Punkte, {warn} Hinweise")
+                    f"{crit} kritische Punkte, {warn} Hinweise"
+                    + (f" · {opt} optionale Position(en) nicht im Preis enthalten" if opt else ""))
         if total is not None and flag == "comparable":
             comparable.append((total, names.get(o.supplier_candidate_id, "Anbieter")))
     text = f"Stand der Angebote ({len(offers)}):\n" + "\n".join(rows)
@@ -284,9 +337,13 @@ async def offers_evaluation(db: AsyncSession, rfq: RFQ, project: Optional[Projec
 async def _intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, offer_text: str, actor: str,
                         doc: Optional[MDCDocument], channel: str, draft_receipt: bool,
                         preexisting: bool, reply_to: Optional[str] = None) -> tuple[RFQOffer, OfferReview]:
-    from services.rfq_classifier import extract_offer_fields, _comparability
+    from services.rfq_classifier import extract_offer_fields, _comparability, verify_priced_quantity
     extracted = await asyncio.to_thread(extract_offer_fields, offer_text) if offer_text else {}
     extracted = reconcile_prices(extracted, offer_text or "")
+    # NX-001: Menge, fuer die der Gesamtpreis gilt -- nur mit woertlichem Beleg
+    lump_sum = verify_priced_quantity(extracted, offer_text or "")
+    if lump_sum:
+        extracted["lump_sum_quantity"], extracted["lump_sum_quote"] = lump_sum["quantity"], lump_sum["quote"]
 
     previous = (await db.execute(select(RFQOffer).where(
         RFQOffer.rfq_id == rfq.id, RFQOffer.supplier_candidate_id == cand.id, RFQOffer.status == OfferStatus.submitted,
@@ -304,7 +361,9 @@ async def _intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, off
         raw_extracted_json={**{k: (v if isinstance(v, list) or v is None else str(v)) for k, v in extracted.items()}, "channel": channel},
         created_by=str(actor),
     )
-    flag, note = _comparability(offer.quantity, rfq.expected_quantity, offer.scope_note, offer.spec_confirmed)
+    flag, note = _comparability(offer.quantity, rfq.expected_quantity, offer.scope_note, offer.spec_confirmed, lump_sum)
+    if flag == "comparable" and any(f["severity"] == "warning" for f in extracted.get("optional_notes") or []):
+        flag, note = "flagged_different_scope", "Angebotssumme enthält eine nicht herausrechenbare optionale Position."
     offer.comparability_flag = ComparabilityFlag(flag)
     offer.comparability_note = note
     db.add(offer)
@@ -339,6 +398,8 @@ async def _intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, off
         review.findings_json = list(review.findings_json or []) + [
             {"code": "price_extraction", "source": "regel", "severity": "info", "message": n, "quote": None}
             for n in extracted["price_notes"]]
+    if extracted.get("optional_notes"):
+        review.findings_json = list(review.findings_json or []) + list(extracted["optional_notes"])
 
     if project:
         from services.projects import add_event

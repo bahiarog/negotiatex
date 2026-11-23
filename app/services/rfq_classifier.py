@@ -26,7 +26,7 @@ Gib AUSSCHLIESSLICH ein JSON-Objekt zurueck, exakt mit diesen Feldern (keine zus
 kein Freitext davor/danach):
 {"total_price": null, "unit_price": null, "quantity": null, "currency": null, "freight_cost": null, "other_costs": null, \
 "delivery_date": null, "payment_terms": null, "offer_validity_until": null, "spec_confirmed": null, \
-"scope_note": null}
+"scope_note": null, "priced_quantity": null, "priced_quantity_quote": null, "optional_items": []}
 
 Regeln:
 - Trage NUR Werte ein, die im Dokument eindeutig erkennbar sind. Bei Unsicherheit oder Nichtvorhandensein: null.
@@ -39,7 +39,16 @@ Regeln:
 - Datumsangaben im Format YYYY-MM-DD.
 - "spec_confirmed": true nur wenn der Bieter die Spezifikation ausdruecklich bestaetigt; false, wenn er \
 ausdruecklich eine Abweichung nennt; sonst null.
-- "scope_note": Freitext, falls der Bieter eine Abweichung vom Bedarf/Spezifikation kennzeichnet, sonst null."""
+- "scope_note": Freitext, falls der Bieter eine Abweichung vom Bedarf/Spezifikation kennzeichnet, sonst null.
+  Optionale/abwaehlbare Positionen sind KEINE Abweichung (nicht in scope_note, sondern in "optional_items").
+- "priced_quantity": die Stueckzahl/Menge, fuer die der Gesamtpreis gilt, NUR wenn das Dokument sie ausdruecklich
+  nennt (z. B. "20 hoehenverstellbare Schreibtische"), als Zahl; sonst null.
+- "priced_quantity_quote": woertliches, unveraendertes Zitat (hoechstens 200 Zeichen) aus dem Dokument, in dem diese
+  Menge steht; sonst null.
+- "optional_items": Liste der optionalen, abwaehlbaren oder ausdruecklich separat angebotenen Positionen, je
+  {"description": "...", "price": Zahl oder null, "included_in_total": true/false/null, "quote": "woertliches Zitat"};
+  "included_in_total" = true nur, wenn der Preis dieser Position in dem unter "total_price" genannten Betrag
+  enthalten ist. Keine optionalen Positionen: []."""
 
 
 def _extract_json(text: str) -> dict:
@@ -60,6 +69,7 @@ def extract_offer_fields(document_text: str) -> dict:
         "total_price": None, "unit_price": None, "quantity": None, "currency": None, "freight_cost": None,
         "other_costs": None, "delivery_date": None, "payment_terms": None,
         "offer_validity_until": None, "spec_confirmed": None, "scope_note": None,
+        "priced_quantity": None, "priced_quantity_quote": None, "optional_items": [],
     }
     try:
         import anthropic
@@ -75,7 +85,7 @@ def extract_offer_fields(document_text: str) -> dict:
         raw = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
         data = _extract_json(raw)
         for k in empty:
-            empty[k] = data.get(k, None)
+            empty[k] = data.get(k, empty[k])
         return empty
     except Exception:
         logger.exception("rfq_classifier: Angebots-Extraktion fehlgeschlagen -> alle Felder unknown/null.")
@@ -103,7 +113,47 @@ def compute_total_cost(unit_price, quantity, freight_cost, other_costs) -> Optio
     return (up * qty) + freight + other
 
 
-def _comparability(offer_quantity, expected_quantity, scope_note: Optional[str], spec_confirmed) -> tuple[str, Optional[str]]:
+def _norm_text(s) -> str:
+    import re
+    return re.sub(r"\s+", " ", str(s or "")).strip().lower()
+
+
+def quote_in_text(quote, text: str) -> bool:
+    """Woertliches Zitat (bis auf Leerraum und Gross-/Kleinschreibung) im Dokument?"""
+    q = _norm_text(quote)
+    return len(q) >= 3 and q in _norm_text(text)
+
+
+def _number_in(quote: str, n: Decimal) -> bool:
+    """Ganze Zahl n steht als eigene Zahl im Zitat (nicht Teil von 120, 20,5, 20.11. oder 20 %)."""
+    import re
+    if n != n.to_integral_value():
+        return False
+    return bool(re.search(rf"(?<![\d.,]){int(n)}(?![\d]|[.,]\d|\s*%)", quote or ""))
+
+
+def verify_priced_quantity(extracted: dict, text: str) -> Optional[dict]:
+    """Menge, fuer die der Gesamtpreis gilt -- nur mit woertlichem Beleg im
+    Angebotstext, der die Zahl enthaelt. Sonst None (nichts ohne Beleg)."""
+    qty = _dec((extracted or {}).get("priced_quantity"))
+    quote = (extracted or {}).get("priced_quantity_quote")
+    if qty is None or qty <= 0 or not isinstance(quote, str):
+        return None
+    if not quote_in_text(quote, text) or not _number_in(quote, qty):
+        return None
+    return {"quantity": qty, "quote": " ".join(quote.split())[:300]}
+
+
+def lump_sum_from_json(raw) -> Optional[dict]:
+    """Gespeicherten Mengenbeleg (raw_extracted_json) fuer _comparability lesen."""
+    if not isinstance(raw, dict) or not raw.get("lump_sum_quantity") or not raw.get("lump_sum_quote"):
+        return None
+    qty = _dec(raw.get("lump_sum_quantity"))
+    return {"quantity": qty, "quote": str(raw["lump_sum_quote"])} if qty is not None else None
+
+
+def _comparability(offer_quantity, expected_quantity, scope_note: Optional[str], spec_confirmed,
+                   lump_sum: Optional[dict] = None) -> tuple[str, Optional[str]]:
     """Best-effort (dokumentierte Vereinfachung, wie detect_redline): ein
     Angebot gilt als NICHT direkt vergleichbar, wenn
       (a) eine erwartete Menge (RFQ.expected_quantity) hinterlegt ist und die
@@ -112,16 +162,30 @@ def _comparability(offer_quantity, expected_quantity, scope_note: Optional[str],
           (scope_note gesetzt oder spec_confirmed==False).
     Das ist ein einfacher Feldvergleich, KEIN semantisches Verstehen von
     'gleichwertig' -- bei Unsicherheit wird lieber geflaggt als stillschweigend
-    gleichgesetzt (Playbook-Zitat B8)."""
+    gleichgesetzt (Playbook-Zitat B8).
+
+    Ausnahme (NX-001): Gesamtpreis als Pauschale (Menge 1) fuer die angefragte
+    Stueckzahl. `lump_sum` = {"quantity", "quote"} aus verify_priced_quantity
+    (woertlich im Angebot belegt). Stimmt die belegte Menge mit der erwarteten
+    ueberein, gilt die Menge als vergleichbar (Beleg steht in der Notiz);
+    weicht sie ab, bleibt das Angebot markiert."""
     qty = _dec(offer_quantity)
     exp = _dec(expected_quantity)
+    ok_note = None
     if exp is not None and qty is not None and qty != exp:
-        return "flagged_different_scope", f"Menge {qty} weicht von erwarteter Menge {exp} ab."
+        covered = _dec((lump_sum or {}).get("quantity"))
+        quote = ((lump_sum or {}).get("quote") or "")[:300]
+        if qty != 1 or covered is None or not quote:
+            return "flagged_different_scope", f"Menge {qty} weicht von erwarteter Menge {exp} ab."
+        if covered != exp:
+            return "flagged_different_scope", (f"Gesamtpreis gilt laut Angebot fuer Menge {covered.normalize():f}, "
+                                               f"erwartet {exp.normalize():f} (Beleg: „{quote}“).")
+        ok_note = f"Gesamtpreis fuer die angefragte Menge {exp.normalize():f}, im Angebot belegt: „{quote}“."
     if spec_confirmed is False:
         return "flagged_different_scope", "Bieter hat eine Spezifikationsabweichung ausdruecklich gekennzeichnet."
     if scope_note:
         return "flagged_different_scope", f"Bieter-Hinweis auf Abweichung: {scope_note[:300]}"
-    return "comparable", None
+    return "comparable", ok_note
 
 
 def compute_offer_comparison(rfq, offers: list, weights: dict) -> dict:
@@ -141,7 +205,8 @@ def compute_offer_comparison(rfq, offers: list, weights: dict) -> dict:
         if o.status.value == "withdrawn" if hasattr(o.status, "value") else o.status == "withdrawn":
             continue
         total = compute_total_cost(o.unit_price, o.quantity, o.freight_cost, o.other_costs)
-        flag, note = _comparability(o.quantity, rfq.expected_quantity, o.scope_note, o.spec_confirmed)
+        flag, note = _comparability(o.quantity, rfq.expected_quantity, o.scope_note, o.spec_confirmed,
+                                    lump_sum_from_json(o.raw_extracted_json))
         # Falls bereits bei Ingestion geflaggt (z.B. manuell), nie "entflaggen" --
         # nur zusaetzlich flaggen (strengerer der beiden Zustaende gewinnt).
         existing_flag = o.comparability_flag.value if hasattr(o.comparability_flag, "value") else o.comparability_flag
@@ -188,7 +253,8 @@ def compute_offer_comparison(rfq, offers: list, weights: dict) -> dict:
     for cid, entries in by_candidate.items():
         for o, total in entries:
             if o.version == 1 and total is not None:
-                flag, _ = _comparability(o.quantity, rfq.expected_quantity, o.scope_note, o.spec_confirmed)
+                flag, _ = _comparability(o.quantity, rfq.expected_quantity, o.scope_note, o.spec_confirmed,
+                                         lump_sum_from_json(o.raw_extracted_json))
                 if flag == "comparable":
                     if best_other_as_submitted is None or total < best_other_as_submitted[1]:
                         best_other_as_submitted = (cid, total)

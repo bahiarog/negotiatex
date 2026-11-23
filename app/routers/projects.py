@@ -1383,7 +1383,9 @@ async def record_result(project_id: str, offer_id: str, payload: NegotiatedResul
         freight_cost=offer.freight_cost, other_costs=offer.other_costs, currency=offer.currency, delivery_date=offer.delivery_date,
         payment_terms=offer.payment_terms, offer_validity_until=offer.offer_validity_until, scope_note=offer.scope_note,
         spec_confirmed=offer.spec_confirmed, comparability_flag=offer.comparability_flag,
-        comparability_note=offer.comparability_note, raw_extracted_json={"source": "verhandlungsergebnis", "note": payload.note},
+        comparability_note=offer.comparability_note, raw_extracted_json={
+            "source": "verhandlungsergebnis", "note": payload.note,  # Mengenbeleg (NX-001) bleibt erhalten
+            **{k: v for k, v in (offer.raw_extracted_json or {}).items() if k in ("lump_sum_quantity", "lump_sum_quote")}},
         created_by=str(access.user.id),
     )
     db.add(new)
