@@ -921,7 +921,9 @@ async def ingest_inbound_outreach_message(db: AsyncSession, email_record: dict, 
         return {"matched": True, "classification": "follow_up", "candidate_status": cand.status.value}
 
     from services.agent_log import annotate
-    annotate(tenant_id=tenant_id, object_ref=cand.company_name)
+    from services.projects import project_for_request
+    proj = await project_for_request(db, cand.sourcing_request_id)
+    annotate(tenant_id=tenant_id, object_ref=cand.company_name, project_id=proj.id if proj else None)
     cand.status = CandidateStatus.responded
     classification = classify_outreach_reply(inbound.body_text)
     label = {"decline": "hat abgesagt", "interest": "hat Interesse bestaetigt",

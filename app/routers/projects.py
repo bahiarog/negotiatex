@@ -52,7 +52,7 @@ from models_sourcing import (
 from models_v2 import Case, CaseEvent, CaseStatus, Membership, SupplierV2, Tenant
 from routers.auth import User
 from services.project_results import compute_result, offer_total
-from services.projects import add_event
+from services.projects import add_event, notify_team
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -467,7 +467,8 @@ def _decisions(p: Project, access: Access, drafts: list, offers: list, cands: li
         active_cands = [c for c in cands if _v(c.status) not in ("rejected", "declined")]
         if not active_cands and (access.can_decide or access.procurement):
             items.append({"kind": "choose_suppliers", "title": "Dienstleister für die Anfrage auswählen",
-                          "context": "Der Agent hat Vorschläge aus Ihrem Bestand vorbereitet.", "tab": "entscheidungen"})
+                          "context": "Wählen Sie aus den Vorschlägen aus Ihrem Bestand oder fügen Sie Dienstleister "
+                                     "manuell hinzu.", "tab": "entscheidungen"})
         if offers and access.can_decide:
             items.append({"kind": "choose_offer", "title": "Anbieter wählen",
                           "context": f"{len(offers)} Angebot(e) eingegangen, {sum(1 for o in offers if o['comparable'])} vergleichbar.",
@@ -503,7 +504,8 @@ def _next_action(p: Project, access: Access, decisions: list, offers: list, cand
                 "text": f"{n} Nachricht(en) an Dienstleister warten auf Ihre Freigabe."}
     if "choose_suppliers" in kinds:
         return {"label": "Dienstleister auswählen", "tab": "entscheidungen", "who": "you",
-                "text": "Der Agent hat passende Dienstleister aus Ihrem Bestand vorgeschlagen. Wählen Sie aus, wer angefragt wird."}
+                "text": "Noch kein Dienstleister angefragt. Wählen Sie aus den Vorschlägen aus Ihrem Bestand "
+                        "oder fügen Sie Dienstleister manuell hinzu."}
     ready = [o for o in offers if o["negotiation"] and o["negotiation"]["status"] == "READY_FOR_DECISION"]
     if ready and "choose_offer" in kinds:
         return {"label": "Entscheidung prüfen", "tab": "angebote", "who": "you", "text": "Die Verhandlung ist abgeschlossen."}
@@ -603,7 +605,8 @@ async def overview(access: Access = Depends(get_access), db: AsyncSession = Depe
         if not access.workspace:
             q = q.where(ProjectEvent.customer_visible == True)  # noqa: E712
         for e, title in (await db.execute(q.order_by(desc(ProjectEvent.created_at)).limit(8))).all():
-            events.append({"agent": _agent_of(e), "project_id": str(e.project_id), "project_title": title, "title": e.title, "detail": e.detail,
+            events.append({"agent": _agent_of(e), "kind": e.kind, "project_id": str(e.project_id), "project_title": title,
+                           "title": e.title, "detail": e.detail,
                            "at": e.created_at.isoformat() if e.created_at else None})
     return {
         "active": active[:8], "active_count": len([a for a in active if a["state"] != "done"]),
@@ -882,6 +885,20 @@ async def start_project(project_id: str, payload: StartPayload, access: Access =
         await add_event(db, p, "started", "Auftrag erteilt",
                         "Der Agent sucht passende Dienstleister und bereitet Anfragen vor. Jede Nachricht an "
                         "Dienstleister wird vor dem Versand freigegeben.", milestone=True, actor=uid)
+        await db.flush()
+        # Der Scout startet sofort, waehlt aber nur inhaltlich passende Anbieter vor (Schwelle
+        # AUTO_SELECT_MIN_SCORE). Es entstehen nur Entwuerfe; die Freigabe-Mail ans Team
+        # verschickt select_candidates.
+        chosen = await _auto_select(db, p, access, min_score=AUTO_SELECT_MIN_SCORE,
+                                    label="Passende Dienstleister im Bestand vorauswählen")
+        if not chosen:
+            await add_event(db, p, "no_suppliers", "Keine passenden Dienstleister im Bestand",
+                            "Im Lieferantenstamm, in früheren Anfragen und im Data Center gibt es keinen Anbieter, "
+                            "der inhaltlich zum Bedarf passt. Bitte Dienstleister manuell hinzufügen.",
+                            milestone=True, actor="agent")
+            await notify_team(db, p, "Auftrag erteilt – keine passenden Dienstleister im Bestand",
+                              "Der Agent hat im Bestand keinen passenden Anbieter gefunden. "
+                              "Bitte Dienstleister im Vorhaben manuell hinzufügen.", exclude=(access.user.email,))
     await db.commit()
     return await _fresh(db, p)
 
@@ -1193,6 +1210,10 @@ async def select_candidates(project_id: str, payload: SelectPayload, access: Acc
             run.outcome = f"{drafts} Erstanfrage(n) entworfen – warten auf Freigabe"
         await add_event(db, p, "candidates_selected", f"{len(created)} Dienstleister ausgewählt",
                         ", ".join(c["company_name"] for c in created) + ". Die Erstanfragen liegen zur Freigabe bereit.", actor=uid)
+        if drafts:
+            await notify_team(db, p, f"{drafts} Erstanfrage(n) warten auf Freigabe",
+                              ", ".join(c["company_name"] for c in created if c["draft"])
+                              + ". Bitte im Vorhaben prüfen und freigeben.", exclude=(access.user.email,))
     await db.commit()
     return {"created": created, "skipped": skipped}
 
@@ -1610,11 +1631,16 @@ async def _review_reference(p: Project, text: str) -> dict:
             "delivery_date": ex.get("delivery_date"), "payment_terms": ex.get("payment_terms")}
 
 
-async def _auto_select(db: AsyncSession, p: Project, access: Access, n: int = 3) -> list[str]:
-    """Angebots-Check: die passendsten erreichbaren Anbieter vorauswaehlen.
+AUTO_SELECT_MIN_SCORE = 0.35  # gemessen: passende Anbieter ~0.48-0.57, fachfremde <= 0.26
+
+
+async def _auto_select(db: AsyncSession, p: Project, access: Access, n: int = 3, min_score: Optional[float] = None,
+                       label: str = "Anbieter für Vergleichsangebote vorauswählen") -> list[str]:
+    """Die passendsten erreichbaren Anbieter vorauswaehlen (Angebots-Check, neuer Bedarf).
+    Mit min_score nur Anbieter ab dieser semantischen Naehe zum Bedarf.
     Es entstehen nur Entwuerfe -- jede Anfrage wird vor dem Versand freigegeben."""
     from services.agent_log import track
-    async with track("scout", "Anbieter für Vergleichsangebote vorauswählen", tenant_id=p.tenant_id, project_id=p.id) as run:
+    async with track("scout", label, tenant_id=p.tenant_id, project_id=p.id) as run:
         sugg = await _suggest(db, p, access)
         # Den Anbieter des vorliegenden Angebots nie um ein Vergleichsangebot bitten: steht sein Name
         # im hochgeladenen Dokument, wird er ausgeschlossen (der Kunde bleibt ihm gegenueber anonym).
@@ -1627,7 +1653,8 @@ async def _auto_select(db: AsyncSession, p: Project, access: Access, n: int = 3)
             return " ".join(w for w in name.lower().replace(",", " ").split()
                             if w not in ("gmbh", "ug", "ag", "kg", "co.", "&", "(haftungsbeschraenkt)", "(haftungsbeschränkt)", "mbh"))
         excluded = [e["company_name"] for e in sugg["items"] if doc_text and _core(e["company_name"]) and _core(e["company_name"]) in doc_text]
-        top = [e for e in sugg["items"] if e.get("contactable") and e["company_name"] not in excluded][:n]
+        top = [e for e in sugg["items"] if e.get("contactable") and e["company_name"] not in excluded
+               and (min_score is None or (e.get("score") or 0) >= min_score)][:n]
         run.outcome = f"{len(top)} von {len(sugg['items'])} Vorschlägen vorausgewählt" + \
                       (f"; ausgeschlossen (Anbieter des vorliegenden Angebots): {', '.join(excluded)}" if excluded else "")
     if not top:

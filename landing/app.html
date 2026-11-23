@@ -317,7 +317,7 @@ async function viewOverview() {
       </div>
       <div class="card"><div class="card-h"><h2>Letzte Updates</h2></div>
         ${o.events.length ? `<ul class="tl">${o.events.map(e => `<li class="${e.agent ? 'ag' : ''}">${agentMark(e.agent)}<div class="tx"><span class="w">${when(e.at)}</span><a href="${projectUrl(e.project_id)}" style="color:var(--text);text-decoration:none"><b>${esc(e.project_title)}</b></a>
-          <div class="d">${agentName(e.agent)}${esc(e.title)}</div></div></li>`).join('')}</ul>` : `<div class="empty">Noch keine Updates.</div>`}</div>
+          <div class="d">${agentName(e.agent)}${e.kind === 'offer_received' ? `<a class="link" href="${projectUrl(e.project_id, false, 'angebote')}">${esc(e.title)} →</a>` : esc(e.title)}</div></div></li>`).join('')}</ul>` : `<div class="empty">Noch keine Updates.</div>`}</div>
     </div>`;
   focusMain();
 }
@@ -821,8 +821,8 @@ function tabDocs(box, d, ws) {
         ${x.downloadable ? `<button class="btn sm" data-dl="${x.id}" data-name="${esc(x.file_name || 'dokument')}">Herunterladen</button>` : '<span class="dim">nicht verfügbar</span>'}</li>`).join('')}</ul>`
         : `<div class="empty">Noch keine Dokumente. Briefing und Angebote erscheinen hier automatisch.</div>`}</div>
     <div class="card"><div class="card-h"><h2>Verlauf</h2></div>
-      ${events.length ? `<ul class="tl">${events.map(e => `<li class="${e.agent ? 'ag' : ''}">${agentMark(e.agent)}<div class="tx"><span class="w">${when(e.at)}${e.emailed ? ' · per E-Mail' : ''}</span>${agentName(e.agent)}${e.milestone ? '<b>' + esc(e.title) + '</b>' : esc(e.title)}${e.internal ? ' <span class="tag">intern</span>' : ''}
-        ${e.detail ? `<div class="d">${esc(e.detail)}</div>` : ''}</div></li>`).join('')}</ul>` : '<div class="empty">Noch keine Einträge.</div>'}</div></div>`;
+      ${events.length ? `<ul class="tl">${events.map(e => `<li class="${e.agent ? 'ag' : ''}">${agentMark(e.agent)}<div class="tx"><span class="w">${when(e.at)}${e.emailed ? ' · per E-Mail' : ''}</span>${agentName(e.agent)}${e.kind === 'offer_received' ? `<a class="link" href="${projectUrl(p.id, ws, 'angebote')}"><b>${esc(e.title)}</b> →</a>` : e.milestone ? '<b>' + esc(e.title) + '</b>' : esc(e.title)}${e.internal ? ' <span class="tag">intern</span>' : ''}
+        ${e.detail ? `<div class="d" style="white-space:pre-line">${esc(e.detail)}</div>` : ''}</div></li>`).join('')}</ul>` : '<div class="empty">Noch keine Einträge.</div>'}</div></div>`;
   box.querySelectorAll('[data-dl]').forEach(b => b.onclick = () => busy(b, async () => {
     const r = await fetch(`/api/v1/projects/${p.id}/documents/${b.dataset.dl}`, { headers: { Authorization: 'Bearer ' + token } });
     if (!r.ok) throw new Error('Download nicht möglich.');

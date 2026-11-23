@@ -137,7 +137,7 @@ async function openLog(key) {
   dlg.querySelector('.db').innerHTML = runs.length ? `<h3 style="margin-bottom:6px">Arbeitsprotokoll</h3><ul class="log">${runs.map(x => `<li>
       <div><b>${esc(x.task)}</b>${x.status !== 'done' ? `<span class="st ${x.status}">${x.status === 'running' ? 'läuft' : 'fehlgeschlagen'}</span>` : ''}
         ${x.outcome ? `<div class="dim">${esc(x.outcome)}</div>` : ''}
-        ${x.project_title ? `<div class="dim">Vorhaben: <a class="link" href="/arbeitsbereich/vorhaben/${x.project_id}">${esc(x.project_title)}</a></div>` : x.object_ref ? `<div class="dim">${esc(x.object_ref)}</div>` : ''}</div>
+        ${x.project_title ? `<div class="dim">Vorhaben: <a class="link" href="/arbeitsbereich/vorhaben/${x.project_id}">${esc(x.project_title)}</a>${/Angebot/.test(x.task) ? ` · <a class="link" href="/arbeitsbereich/vorhaben/${x.project_id}/angebote">Angebote ansehen →</a>` : ''}</div>` : x.object_ref ? `<div class="dim">${esc(x.object_ref)}</div>` : ''}</div>
       <div class="w">${new Date(x.started_at + 'Z').toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}<br>${dur(x.duration_ms)}${x.llm_calls ? ` · ${x.llm_calls} KI-Aufruf${x.llm_calls > 1 ? 'e' : ''}` : ''}${x.input_tokens != null && (x.input_tokens + x.output_tokens) ? `<br>${num(x.input_tokens + x.output_tokens)} Tokens` : ''}</div></li>`).join('')}</ul>`
     : `<div class="empty">Für ${esc(a.name)} ist noch nichts protokolliert. Sobald er eine Aufgabe erledigt, erscheint sie hier.</div>`;
 }

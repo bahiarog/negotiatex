@@ -33,7 +33,8 @@ from models_contracts import (
 )
 from models_mdc import MDCDocument, MDCDocumentVersion, MDCDocumentType, MDCImportStatus, MDCSupplier
 from models_projects import Project, ProjectStatus, OfferReview
-from models_sourcing import SupplierCandidate, OutreachMessage, OutreachDirection, OutreachReminderTimer
+from models_sourcing import SupplierCandidate, SourcingRequest, OutreachMessage, OutreachDirection, OutreachReminderTimer
+from services.project_results import offer_total
 
 logger = logging.getLogger(__name__)
 
@@ -191,25 +192,98 @@ async def run_review(db: AsyncSession, offer: RFQOffer, project: Optional[Projec
 
 async def intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, offer_text: str, actor: str = "agent",
                        doc: Optional[MDCDocument] = None, channel: str = "E-Mail", draft_receipt: bool = True,
-                       preexisting: bool = False) -> tuple[RFQOffer, OfferReview]:
+                       preexisting: bool = False, reply_to: Optional[str] = None) -> tuple[RFQOffer, OfferReview]:
     from services.agent_log import track
     project = await project_for_rfq(db, rfq)
     async with track("pruefer", f"Angebot von {cand.company_name} prüfen", tenant_id=rfq.tenant_id,
                      project_id=project.id if project else None, object_ref=channel) as run:
-        offer, review = await _intake_offer(db, rfq, cand, offer_text, actor, doc, channel, draft_receipt, preexisting)
+        offer, review = await _intake_offer(db, rfq, cand, offer_text, actor, doc, channel, draft_receipt, preexisting,
+                                            reply_to)
         crit = sum(1 for f in review.findings_json or [] if f.get("severity") == "critical")
         warn = sum(1 for f in review.findings_json or [] if f.get("severity") == "warning")
-        total = (offer.unit_price or 0) * (offer.quantity or 1) if offer.unit_price is not None else None
+        total = offer_total(offer)
         run.outcome = (f"Preis {total:.2f} {offer.currency}" if total is not None else "kein Preis erkannt") + \
                       f" · {crit} kritisch, {warn} Hinweis(e)"
-        if draft_receipt and not preexisting and cand.contact_email:
+        if draft_receipt and not preexisting and cand.contact_email and channel != "E-Mail":
             run.add_pending(1)
     return offer, review
 
 
+RECEIPT_BODY = ("Guten Tag,\n\nvielen Dank fuer Ihr Angebot -- es ist bei uns eingegangen (Vorgang {ref}).\n"
+                "Wir pruefen es und melden uns in Kuerze bei Ihnen.\n\n"
+                "Freundliche Gruesse,\nNegotiateX – KI-gestuetzte Beschaffungsassistenz\n"
+                "(Automatische Eingangsbestaetigung)")
+
+
+async def _send_receipt(db: AsyncSession, action: RFQAction, cand: SupplierCandidate, reply_to: Optional[str]) -> bool:
+    """Eingangsbestaetigung sofort versenden. Einzige dokumentierte Ausnahme von der
+    Freigabepflicht: fester Standardtext ohne Preise, Inhalte oder Zusagen (vom
+    Inhaber am 11.11.2026 so entschieden). Wird als Outreach-Nachricht im Thread
+    gespeichert, damit weitere Antworten des Dienstleisters zugeordnet werden."""
+    from routers.rfq_contracts import _compute_hash
+    from services.email_sender import send_negotiation_email
+    try:
+        res = await asyncio.to_thread(send_negotiation_email, action.recipient_email, action.rendered_subject,
+                                      action.rendered_body, in_reply_to=reply_to, references=reply_to)
+    except Exception:
+        logger.exception(f"Eingangsbestaetigung an {action.recipient_email} fehlgeschlagen -- bleibt als Entwurf")
+        return False
+    if not res.get("sent"):
+        return False
+    action.payload_hash = _compute_hash(action.recipient_email, action.rendered_subject, action.rendered_body)
+    action.status = RFQActionStatus.sent
+    action.created_by = "agent:auto-eingangsbestaetigung"
+    db.add(OutreachMessage(
+        tenant_id=cand.tenant_id, supplier_candidate_id=cand.id, direction=OutreachDirection.outbound,
+        message_id=res["message_id"], in_reply_to=reply_to, references_header=reply_to,
+        from_addr="info@negotiatex.ai", to_addr=action.recipient_email[:255],
+        subject=action.rendered_subject, body_text=action.rendered_body,
+    ))
+    return True
+
+
+async def offers_evaluation(db: AsyncSession, rfq: RFQ, project: Optional[Project]) -> str:
+    """Deterministische Auswertung aller aktuellen Angebote einer Anfrage (Code rechnet,
+    die KI liefert nur die extrahierten Felder). Geht an Kunde und Einkaufsteam --
+    nie an Dienstleister."""
+    offers = (await db.execute(select(RFQOffer).where(RFQOffer.rfq_id == rfq.id, RFQOffer.status == OfferStatus.submitted)
+                               .order_by(RFQOffer.received_at))).scalars().all()
+    if not offers:
+        return ""
+    names = {c.id: c.company_name for c in (await db.execute(select(SupplierCandidate).where(
+        SupplierCandidate.id.in_([o.supplier_candidate_id for o in offers])))).scalars().all()}
+    rows, comparable = [], []
+    for o in offers:
+        rv = (await db.execute(select(OfferReview).where(OfferReview.offer_id == o.id)
+                               .order_by(desc(OfferReview.created_at)))).scalars().first()
+        crit = sum(1 for f in (rv.findings_json if rv else []) or [] if f.get("severity") == "critical")
+        warn = sum(1 for f in (rv.findings_json if rv else []) or [] if f.get("severity") == "warning")
+        total = offer_total(o)
+        flag = getattr(o.comparability_flag, "value", o.comparability_flag) or ""
+        cmp_label = {"comparable": "vergleichbar",
+                     "flagged_different_scope": "eingeschränkt vergleichbar (abweichender Umfang)"}.get(flag, "Vergleichbarkeit offen")
+        price = f"{total:,.2f} {o.currency} netto".replace(",", "X").replace(".", ",").replace("X", ".") if total is not None \
+            else "Preis nicht erkannt – bitte prüfen"
+        rows.append(f"- {names.get(o.supplier_candidate_id, 'Anbieter')}: {price} · {cmp_label} · "
+                    f"{crit} kritische Punkte, {warn} Hinweise")
+        if total is not None and flag == "comparable":
+            comparable.append((total, names.get(o.supplier_candidate_id, "Anbieter")))
+    text = f"Stand der Angebote ({len(offers)}):\n" + "\n".join(rows)
+    if comparable:
+        best_total, best_name = min(comparable)
+        text += f"\n\nGünstigstes vergleichbares Angebot: {best_name}."
+        ceiling = getattr(project, "budget_ceiling", None) if project else None
+        if ceiling:
+            diff = (Decimal(ceiling) - best_total) / Decimal(ceiling) * 100
+            text += f" Es liegt {abs(diff):.1f} % {'unter' if diff >= 0 else 'ÜBER'} Ihrer Budget-Obergrenze."
+    else:
+        text += "\n\nNoch kein Angebot ist sicher vergleichbar – Details in der Angebotsansicht."
+    return text
+
+
 async def _intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, offer_text: str, actor: str,
                         doc: Optional[MDCDocument], channel: str, draft_receipt: bool,
-                        preexisting: bool) -> tuple[RFQOffer, OfferReview]:
+                        preexisting: bool, reply_to: Optional[str] = None) -> tuple[RFQOffer, OfferReview]:
     from services.rfq_classifier import extract_offer_fields, _comparability
     extracted = await asyncio.to_thread(extract_offer_fields, offer_text) if offer_text else {}
     extracted = reconcile_prices(extracted, offer_text or "")
@@ -243,16 +317,21 @@ async def _intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, off
     if rfq.status in (RFQStatus.draft, RFQStatus.sent):
         rfq.status = RFQStatus.collecting_offers
 
+    receipt_sent = False
     if draft_receipt and cand.contact_email and not preexisting:
-        db.add(RFQAction(
+        action = RFQAction(
             tenant_id=rfq.tenant_id, rfq_id=rfq.id, supplier_candidate_id=cand.id, kind="receipt_confirmation",
             recipient_email=cand.contact_email,
             rendered_subject=f"Eingangsbestaetigung Ihres Angebots / {str(cand.id)[:8]}",
-            rendered_body=(f"Guten Tag,\n\nwir bestaetigen den Eingang Ihres Angebots (Vorgang {str(rfq.id)[:8]}).\n"
-                           "Wir pruefen es im Rahmen der laufenden Angebotsfrist und melden uns.\n\n"
-                           "Freundliche Gruesse,\nNegotiateX – KI-gestuetzte Beschaffungsassistenz."),
+            rendered_body=RECEIPT_BODY.format(ref=str(rfq.id)[:8]),
             status=RFQActionStatus.draft, created_by=str(actor),
-        ))
+        )
+        db.add(action)
+        await db.flush()
+        # Per E-Mail eingegangene Angebote bestaetigt der Agent sofort; bei Upload durch
+        # Kunde/Experte (Post, Portal) bleibt es beim Entwurf.
+        if channel == "E-Mail":
+            receipt_sent = await _send_receipt(db, action, cand, reply_to)
 
     project = await project_for_rfq(db, rfq)
     review = await run_review(db, offer, project, offer_text, actor)
@@ -269,9 +348,19 @@ async def _intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, off
         if offer.version > 1:
             what = f"Neue Angebotsversion {offer.version} von {cand.company_name}"
         detail = f"Pruefung: {crit} kritische Punkte, {warn} Hinweise." if (crit or warn) else "Pruefung ohne Auffaelligkeiten."
-        await add_event(db, project, "offer_received", what, detail, milestone=True)
         if project.status in (ProjectStatus.sourcing, ProjectStatus.collecting_offers, ProjectStatus.briefing):
             project.status = ProjectStatus.evaluating
+        await db.flush()
+        evaluation = "" if preexisting else await offers_evaluation(db, rfq, project)
+        full = detail + (f"\n\n{evaluation}" if evaluation else "")
+        await add_event(db, project, "offer_received", what, full, milestone=True, link_tab="angebote")
+        if receipt_sent:
+            await add_event(db, project, "receipt_sent", f"Eingangsbestätigung an {cand.company_name} versendet",
+                            "Automatische Bestätigung ohne Inhalte oder Zusagen.")
+        if not preexisting:
+            from services.projects import notify_team
+            await notify_team(db, project, what, full + f"\n\nAngebote ansehen: https://negotiatex.ai/arbeitsbereich/vorhaben/"
+                                                      f"{project.id}/angebote")
     return offer, review
 
 
@@ -281,6 +370,36 @@ async def _latest_sent_invitation(db: AsyncSession, cand: SupplierCandidate) -> 
     ).order_by(desc(RFQInvitation.sent_at)))).scalars().first()
 
 
+async def _invitation_from_first_contact(db: AsyncSession, cand: SupplierCandidate) -> Optional[RFQInvitation]:
+    """Dienstleister schicken ihr Angebot oft direkt als Antwort auf die Erstanfrage --
+    ohne den Umweg ueber eine formelle Angebotsanfrage. Gehoert der Kandidat zu einem
+    laufenden Vorhaben und wurde er nachweislich angeschrieben, gilt die Erstanfrage
+    als Einladung: Anfrage (RFQ) anlegen bzw. wiederverwenden und die Einladung mit
+    Zeitpunkt und Message-ID des Erstkontakts nachtragen."""
+    from services.projects import project_for_request
+    project = await project_for_request(db, cand.sourcing_request_id)
+    if not project or getattr(project.status, "value", project.status) in ("briefing", "awarded", "cancelled"):
+        return None
+    first = (await db.execute(select(OutreachMessage).where(
+        OutreachMessage.supplier_candidate_id == cand.id, OutreachMessage.direction == OutreachDirection.outbound,
+    ).order_by(OutreachMessage.occurred_at))).scalars().first()
+    if not first:
+        return None
+    from routers.projects import _ensure_rfq
+    req = (await db.execute(select(SourcingRequest).where(SourcingRequest.id == cand.sourcing_request_id))).scalar_one()
+    rfq = await _ensure_rfq(db, project, req, "agent")
+    inv = (await db.execute(select(RFQInvitation).where(RFQInvitation.rfq_id == rfq.id,
+                                                        RFQInvitation.supplier_candidate_id == cand.id))).scalars().first()
+    if inv is None:
+        inv = RFQInvitation(tenant_id=cand.tenant_id, rfq_id=rfq.id, supplier_candidate_id=cand.id)
+        db.add(inv)
+    inv.sent_at = inv.sent_at or first.occurred_at or datetime.utcnow()
+    inv.message_id = inv.message_id or first.message_id
+    await db.flush()
+    logger.info(f"Angebot von {cand.company_name} direkt auf Erstanfrage -- als Einladung zu RFQ {rfq.id} erfasst")
+    return inv
+
+
 async def intake_from_email(db: AsyncSession, m: dict, cand: SupplierCandidate) -> Optional[dict]:
     """Antwort eines eingeladenen Bieters mit Angebotsanhang. Rueckgabe None,
     wenn die Mail kein Angebot im Sinne dieses Pfades ist (dann greift die
@@ -288,12 +407,14 @@ async def intake_from_email(db: AsyncSession, m: dict, cand: SupplierCandidate) 
     attachments = [a for a in (m.get("attachments") or []) if Path(a["filename"]).suffix.lower() in OFFER_EXTENSIONS]
     if not attachments:
         return None
-    inv = await _latest_sent_invitation(db, cand)
+    inv = await _latest_sent_invitation(db, cand) or await _invitation_from_first_contact(db, cand)
     if not inv:
         return None
     rfq = (await db.execute(select(RFQ).where(RFQ.id == inv.rfq_id))).scalar_one()
     from services.agent_log import annotate
-    annotate(tenant_id=cand.tenant_id, object_ref=cand.company_name, task="Angebotsmail entgegennehmen")
+    proj = await project_for_rfq(db, rfq)
+    annotate(tenant_id=cand.tenant_id, object_ref=cand.company_name, task="Angebotsmail entgegennehmen",
+             project_id=proj.id if proj else None, outcome=f"Angebot von {cand.company_name} empfangen und geprüft")
 
     if m.get("message_id"):
         if (await db.execute(select(OutreachMessage).where(OutreachMessage.message_id == m["message_id"]))).scalar_one_or_none():
@@ -316,7 +437,8 @@ async def intake_from_email(db: AsyncSession, m: dict, cand: SupplierCandidate) 
         doc, version, text = await store_offer_file(db, cand.tenant_id, att["filename"], att["data"], cand.company_name,
                                                     category_id=project.category_id if project else None, source="email")
         full_text = f"{text}\n\n--- Begleittext der E-Mail ---\n{m.get('body_text') or ''}" if text else (m.get("body_text") or "")
-        offer, review = await intake_offer(db, rfq, cand, full_text, actor="agent", doc=doc, channel="E-Mail")
+        offer, review = await intake_offer(db, rfq, cand, full_text, actor="agent", doc=doc, channel="E-Mail",
+                                           reply_to=m.get("message_id"))
         results.append({"offer_id": str(offer.id), "version": offer.version, "review": review.status, "document_id": str(doc.id)})
     await db.commit()
     return {"matched": True, "kind": "offer", "offers": results}
