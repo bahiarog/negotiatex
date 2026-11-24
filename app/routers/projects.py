@@ -950,6 +950,16 @@ async def get_project(project_id: str, access: Access = Depends(get_access), db:
     }
 
 
+def _attachment_ids(o) -> list:
+    out = []
+    for x in (o.raw_extracted_json or {}).get("attachment_document_ids") or []:
+        try:
+            out.append(uuid.UUID(str(x)))
+        except ValueError:
+            continue
+    return out
+
+
 async def _documents(db: AsyncSession, p: Project) -> list[dict]:
     ids, labels = [], {}
     for did, label in ((p.briefing_document_id, "Briefing"), (p.offer_document_id, "Ihr vorhandenes Angebot")):
@@ -967,6 +977,11 @@ async def _documents(db: AsyncSession, p: Project) -> list[dict]:
                 o = next(x for x in offers if x.id == oid)
                 ids.append(d.id)
                 labels[d.id] = f"Angebot {cand_names.get(o.supplier_candidate_id, '')}"
+        for o in offers:  # weitere Anhaenge (z. B. AGB), NX-034
+            for did in _attachment_ids(o):
+                if did not in labels:
+                    ids.append(did)
+                    labels[did] = f"Anhang zum Angebot {cand_names.get(o.supplier_candidate_id, '')}"
     out = []
     for did in ids:
         d = (await db.execute(select(MDCDocument).where(MDCDocument.id == did))).scalar_one_or_none()
@@ -1283,7 +1298,9 @@ async def rerun_review(project_id: str, offer_id: str, access: Access = Depends(
     else:
         prev = (await db.execute(select(OfferReview).where(OfferReview.offer_id == offer.id).order_by(desc(OfferReview.created_at)))).scalars().first()
         text = prev.offer_text_excerpt if prev else ""
-    rv = await run_review(db, offer, p, text, actor=str(access.user.id))
+    from services.offer_intake import attachments_for_offer, compose_review_text
+    text, notes = compose_review_text(text, await attachments_for_offer(db, offer))
+    rv = await run_review(db, offer, p, text, actor=str(access.user.id), extra_findings=notes)
     add_extraction_notes(rv, offer.raw_extracted_json)  # Preis- und Options-Hinweise bleiben erhalten
     await db.commit()
     return {"status": rv.status, "findings": rv.findings_json}
@@ -1482,6 +1499,7 @@ async def _hold_project_documents(db: AsyncSession, p: Project, uid: str) -> int
     for rfq in await _project_rfqs(db, p):
         offers += (await db.execute(select(RFQOffer).where(RFQOffer.rfq_id == rfq.id))).scalars().all()
     ids |= {d.id for d in (await documents_for_offers(db, offers)).values()}
+    ids |= {did for o in offers for did in _attachment_ids(o)}  # Anhaenge wie AGB (NX-034)
     reason = f"Beleg des beauftragten Vorhabens „{(p.title or '')[:120]}“ (Aufbewahrungspflicht)"
     held = 0
     for did in ids:

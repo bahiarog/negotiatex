@@ -637,7 +637,7 @@ function resultHtml(r) {
 function offerRow(o, d, ws) {
   const p = d.project, v = d.viewer, done = ['awarded', 'cancelled'].includes(p.status);
   const rv = o.review;
-  const rvTag = !rv ? '<span class="tag">nicht geprüft</span>' : rv.status === 'critical' ? `<span class="tag bad">${rv.critical} kritisch</span>` : rv.status === 'warning' ? `<span class="tag warn">${rv.warnings} Hinweis(e)</span>` : '<span class="tag good">ohne Auffälligkeiten</span>';
+  const rvTag = !rv ? '<span class="tag">nicht geprüft</span>' : rv.status === 'critical' ? `<span class="tag bad">${rv.critical} kritisch</span>` : rv.status === 'not_checked' ? '<span class="tag warn">Klauseln nicht geprüft</span>' : rv.status === 'warning' ? `<span class="tag warn">${rv.warnings} Hinweis(e)</span>` : rv.status === 'ok' ? '<span class="tag good">ohne Auffälligkeiten</span>' : `<span class="tag">${esc(rv.status)}</span>`;
   const findings = rv ? rv.findings.filter(f => f.severity !== 'info' || f.source === 'ki') : [];
   const NEG = { RECEIVED: 'vorbereitet', READY_TO_DRAFT: 'nächster Vorschlag möglich', AWAITING_APPROVAL: 'Vorschlag wartet auf Freigabe', SEND_PENDING: 'wird gesendet',
     WAITING_SUPPLIER: 'wartet auf Antwort', EVALUATING_RESPONSE: 'Antwort wird ausgewertet', READY_FOR_DECISION: 'abgeschlossen – Ihre Entscheidung', PAUSED: 'angehalten – wird geprüft' };
@@ -658,6 +658,7 @@ function offerRow(o, d, ws) {
       ${!o.negotiation && o.total ? `<button class="btn sm" data-neg="${o.id}" data-total="${o.total}">Verhandeln lassen</button>` : ''}
       ${o.negotiation && o.negotiation.status === 'READY_TO_DRAFT' ? `<button class="btn sm" data-next="${o.id}">Nächsten Vorschlag vorbereiten</button>` : ''}
       ${o.negotiation ? `<button class="btn sm" data-res="${o.id}" data-counter="${o.negotiation.latest_counter || ''}">Ergebnis übernehmen</button>` : ''}
+      <button class="btn sm ghost" data-rerev="${o.id}">Erneut prüfen</button>
     </div>`}</td></tr>
     <tr class="panel-row" id="pr-${o.id}" hidden><td colspan="5"></td></tr>`;
 }
@@ -688,6 +689,7 @@ function tabOffers(box, d, ws) {
     r.querySelector('form').onsubmit = e => { e.preventDefault(); busy(e.submitter, async () => { clearErrors(); await api(`/projects/${p.id}/offers/${b.dataset.neg}/negotiate`, { json: { round1_price: r.querySelector('#n1').value, round2_price: r.querySelector('#n2').value } });
       toast('Preisvorschlag liegt zur Freigabe bereit'); go(projectUrl(p.id, ws, 'entscheidungen')); }); };
   });
+  box.querySelectorAll('[data-rerev]').forEach(b => b.onclick = () => busy(b, async () => { const r = await api(`/projects/${p.id}/offers/${b.dataset.rerev}/review`, { method: 'POST' }); toast(r.status === 'not_checked' ? 'Prüfung erneut nicht vollständig – bitte manuell prüfen' : 'Angebot erneut geprüft'); reloadProject(); }));
   box.querySelectorAll('[data-next]').forEach(b => b.onclick = () => busy(b, async () => { await api(`/projects/${p.id}/offers/${b.dataset.next}/next-round`, { method: 'POST' }); toast('Nächster Vorschlag liegt zur Freigabe bereit'); go(projectUrl(p.id, ws, 'entscheidungen')); }));
   box.querySelectorAll('[data-res]').forEach(b => b.onclick = () => {
     const r = panel(b.dataset.res, `<h3>Verhandlungsergebnis übernehmen</h3><form><label class="f" for="rt">Vereinbarter Gesamtpreis (netto)</label><input id="rt" type="number" step="0.01" data-field="total_price" value="${esc(b.dataset.counter)}" style="max-width:240px">
@@ -931,7 +933,7 @@ function checkPanel(d) {
     </div>
     <p style="margin:16px 0 0">${verdict}</p>
     ${rv ? `<div style="margin-top:18px"><h3>Vertragsprüfung Ihres Angebots</h3>
-      <p class="dim" style="margin:4px 0 8px">${rv.critical ? `<span class="tag bad">${rv.critical} kritisch</span> ` : ''}${rv.warnings ? `<span class="tag warn">${rv.warnings} Hinweis(e)</span>` : ''}${!rv.critical && !rv.warnings ? '<span class="tag good">ohne Auffälligkeiten</span>' : ''}</p>
+      <p class="dim" style="margin:4px 0 8px">${rv.status === 'not_checked' ? '<span class="tag warn">Klauseln nicht geprüft</span> ' : ''}${rv.critical ? `<span class="tag bad">${rv.critical} kritisch</span> ` : ''}${rv.warnings ? `<span class="tag warn">${rv.warnings} Hinweis(e)</span>` : ''}${!rv.critical && !rv.warnings && rv.status === 'ok' ? '<span class="tag good">ohne Auffälligkeiten</span>' : ''}</p>
       ${rv.price_mismatch ? `<div class="alert err">Im Dokument steht ein anderer Preis (${money(rv.document_price)}) als von Ihnen angegeben. Bitte prüfen Sie, welcher gilt.</div>` : ''}
       ${rv.findings.filter(f => f.severity !== 'info').slice(0, 5).map(f => `<div class="finding ${f.severity}">${esc(f.topic ? f.topic + ': ' : '')}${esc(f.message)}${f.quote ? `<q>${esc(f.quote)}</q>` : ''}</div>`).join('')}</div>` : ''}
   </div></div>
