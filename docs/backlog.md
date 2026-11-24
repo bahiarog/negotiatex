@@ -26,7 +26,7 @@ Aufwand: S = bis 2 h, M = halber bis ganzer Tag, L = mehrere Tage.
 **Problem:** Der Scout sucht nur im eigenen Bestand. Neue Kunden haben einen leeren Bestand; der Agent kann dann nichts anfragen (Test „Neue Tische“ am 11.11.2026).
 **Abnahme:** Vorschläge aus einer externen Quelle mit Quellenangabe und Kontaktweg, klar als „extern, ungeprüft“ gekennzeichnet; Auswahl und jede Anfrage weiter nur nach Freigabe. Vorher Entscheidung Rafael: Quelle, Kosten, Rechtsrahmen.
 
-### NX-004 Browser-Tests ins Repository und regelmäßig ausführen · `QA` (Branch agent/NX-004, in Prüfung) · M
+### NX-004 Browser-Tests ins Repository und regelmäßig ausführen · `QA` (FREIGABE für 5f5e885, 24.11.2026; Deploy offen) · M
 **Problem:** Die Playwright-Tests liegen nur auf dem Server (`/root/negotiatex-sim/tests`) und laufen nur von Hand.
 **Abnahme:** Tests im Repo (ohne Zugangsdaten, Token werden kurzlebig erzeugt), ein Befehl führt alle aus, Ergebnis mit Datum protokolliert; Lauf vor jedem Deploy.
 
