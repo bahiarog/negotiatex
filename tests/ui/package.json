@@ -1,0 +1,8 @@
+{
+  "name": "negotiatex-ui-tests",
+  "private": true,
+  "description": "Browser-Tests gegen negotiatex.ai. Start ueber: python ops/ui_tests.py",
+  "dependencies": {
+    "playwright": "1.65.1"
+  }
+}
