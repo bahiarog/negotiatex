@@ -55,6 +55,19 @@ open=$(docker exec negotiatex-db psql -U negotiatex -d negotiatex -At -c \
 line "  info    Entwuerfe, die auf Freigabe warten: ${open:-?}"
 
 line ""
+line "Versprechen (Durchgangstest 05:45, NX-037)"
+E2E_LOG=/var/log/negotiatex-e2e.log
+e2e=$(grep -a "E2E-ERGEBNIS" "$E2E_LOG" 2>/dev/null | tail -1)
+if [ -z "$e2e" ] || [ $(( $(date +%s) - $(stat -c %Y "$E2E_LOG" 2>/dev/null || echo 0) )) -ge 93600 ]; then
+  check warn "kein Durchgangstest in den letzten 26 h"
+elif [[ "$e2e" == *"E2E-ERGEBNIS OK"* ]]; then
+  check ok "${e2e:0:90}"
+else
+  check warn "${e2e:0:90}"
+  while IFS= read -r f; do line "          ${f:0:110}"; done < <(tac "$E2E_LOG" | awk '/^=== /{exit} {print}' | grep -a '^FEHLER' | head -5)
+fi
+
+line ""
 line "Server"
 disk=$(df --output=pcent / | tail -1 | tr -dc 0-9); [ "$disk" -lt 80 ] && check ok "Festplatte ${disk} % belegt" || check warn "Festplatte ${disk} % belegt"
 mem=$(free -m | awk '/Mem:/{printf "%d", $7/$2*100}'); [ "$mem" -gt 10 ] && check ok "Arbeitsspeicher ${mem} % frei" || check warn "Arbeitsspeicher nur ${mem} % frei"

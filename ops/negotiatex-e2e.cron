@@ -1,0 +1,5 @@
+# /etc/cron.d/negotiatex-e2e -- NX-037 taeglicher Durchgangstest des Produktversprechens (keine Mails, keine KI-Kosten).
+# 05:45 UTC, vor dem Tagesbericht (06:30), der das Ergebnis aufnimmt. Manuell: bash /root/negotiatex/ops/e2e_run.sh
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+45 5 * * * root /bin/bash /root/negotiatex/ops/e2e_run.sh >> /var/log/negotiatex-e2e.log 2>&1
