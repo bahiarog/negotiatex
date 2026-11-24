@@ -985,7 +985,7 @@ async def _documents(db: AsyncSession, p: Project) -> list[dict]:
     out = []
     for did in ids:
         d = (await db.execute(select(MDCDocument).where(MDCDocument.id == did))).scalar_one_or_none()
-        if not d:
+        if not d or d.tenant_id != p.tenant_id:  # nur Belege desselben Mandanten
             continue
         v = (await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.document_id == d.id)
                               .order_by(desc(MDCDocumentVersion.version_number)))).scalars().first()
@@ -1288,6 +1288,11 @@ async def rerun_review(project_id: str, offer_id: str, access: Access = Depends(
     _require_operator(access)
     p = await _get_project(project_id, access, db)
     offer = await _get_offer(db, p, offer_id)
+    # Kostenbremse: hoechstens eine erneute Pruefung je Angebot alle 2 Minuten (bis 4 KI-Aufrufe je Pruefung)
+    last = (await db.execute(select(OfferReview.created_at).where(OfferReview.offer_id == offer.id)
+                             .order_by(desc(OfferReview.created_at)).limit(1))).scalar()
+    if last and datetime.utcnow() - last < timedelta(minutes=2):
+        raise HTTPException(429, "Dieses Angebot wurde gerade geprüft. Bitte in zwei Minuten erneut versuchen.")
     from services.offer_intake import documents_for_offers
     doc = (await documents_for_offers(db, [offer])).get(offer.id)
     text = ""
@@ -1504,7 +1509,7 @@ async def _hold_project_documents(db: AsyncSession, p: Project, uid: str) -> int
     held = 0
     for did in ids:
         doc = (await db.execute(select(MDCDocument).where(MDCDocument.id == did))).scalar_one_or_none()
-        if doc is None or doc.legal_hold:
+        if doc is None or doc.legal_hold or doc.tenant_id != p.tenant_id:
             continue
         doc.legal_hold, doc.legal_hold_reason = True, reason
         await audit(db, p.tenant_id, uid, "legal_hold_set", "document", doc.id, reason=reason)

@@ -125,13 +125,16 @@ CHUNK_CHARS = 20000   # Text je KI-Aufruf
 CHUNK_OVERLAP = 500   # Ueberlappung, damit Klauseln an der Grenze nicht zerschnitten werden
 MAX_CHUNKS = 4        # bis knapp 80.000 Zeichen vollstaendig geprueft; darueber Hinweis + Status not_checked
 # Codes, bei denen die Klauselpruefung NICHT vollstaendig gelaufen ist (NX-034) -> Status not_checked
-INCOMPLETE_CODES = ("clause_review_failed", "clause_review_truncated", "no_text", "attachment_unreadable")
+INCOMPLETE_CODES = ("clause_review_failed", "clause_review_truncated", "no_text", "attachment_unreadable",
+                    "attachments_not_checked")
 
 
 def _chunks(text: str) -> list[str]:
     out, start = [], 0
     while start < len(text):
         out.append(text[start:start + CHUNK_CHARS])
+        if start + CHUNK_CHARS >= len(text):  # Rest vollstaendig erfasst -- kein Abschnitt nur aus Ueberlappung
+            break
         start += CHUNK_CHARS - CHUNK_OVERLAP
     return out
 
@@ -187,19 +190,23 @@ def clause_review(offer_text: str, project) -> tuple[list[dict], int]:
                  "quote": None}], 0
     chunks = _chunks(offer_text)
     vorgaben = _vorgaben(project)
-    out, dropped, seen = [], 0, set()
+    out, dropped, seen, failed = [], 0, set(), []
     for i, chunk in enumerate(chunks[:MAX_CHUNKS]):
         part, d = _clause_review_chunk(chunk, vorgaben, offer_text, i, len(chunks))
         if part is None:
-            return [{"code": "clause_review_failed", "source": "regel", "severity": "warning",
-                     "message": "Klausel-Durchsicht technisch fehlgeschlagen -- Klauseln nicht geprueft. Bitte erneut "
-                                "pruefen lassen oder manuell pruefen.", "quote": None}], 0
+            failed.append(i + 1)
+            continue  # belegte Befunde anderer Abschnitte bleiben erhalten (QA NX-034)
         dropped += d
         for f in part:
             key = (f["quote"] or "").lower()
             if key not in seen:
                 seen.add(key)
                 out.append(f)
+    if failed:
+        where = "" if len(chunks) == 1 else f" (Abschnitt {', '.join(map(str, failed))} von {min(len(chunks), MAX_CHUNKS)})"
+        out.append({"code": "clause_review_failed", "source": "regel", "severity": "warning",
+                    "message": f"Klausel-Durchsicht technisch fehlgeschlagen{where} -- Klauseln nicht vollstaendig "
+                               "geprueft. Bitte erneut pruefen lassen oder manuell pruefen.", "quote": None})
     if len(chunks) > MAX_CHUNKS:
         checked = CHUNK_CHARS * MAX_CHUNKS - CHUNK_OVERLAP * (MAX_CHUNKS - 1)
         out.append({"code": "clause_review_truncated", "source": "regel", "severity": "warning",

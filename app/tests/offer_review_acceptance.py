@@ -111,7 +111,36 @@ def main():
     check("... Hinweis auf Kuerzung", any(f["code"] == "clause_review_truncated" for f in r["findings"]), True)
     check("... Status not_checked", r["status"], "not_checked")
 
+    print("== Teilausfall und Grenzen (QA Runde 1) ==")
+    CALLS.clear()
+    crit_first = json.dumps({"findings": [{"topic": "Haftung", "severity": "critical", "message": "Haftung ausgeschlossen",
+                                           "quote": "Die Haftung ist ausgeschlossen."}]})
+    RESPONSES = [crit_first, RuntimeError("API down")]
+    r = oc.review(offer(), PROJECT, "Die Haftung ist ausgeschlossen. " + "y" * 30000)
+    check("Abschnitt 2 faellt aus: belegter kritischer Befund aus Abschnitt 1 bleibt", r["status"], "critical")
+    check("... Hinweis auf Teilausfall dabei", any(f["code"] == "clause_review_failed" and "Abschnitt 2" in f["message"]
+                                                   for f in r["findings"]), True)
+    check("19.600 Zeichen -> genau 1 Abschnitt", len(oc._chunks("z" * 19600)), 1)
+    check("20.000 Zeichen -> genau 1 Abschnitt", len(oc._chunks("z" * 20000)), 1)
+    check("78.500 Zeichen -> 4 Abschnitte, nicht gekuerzt", len(oc._chunks("z" * 78500)), 4)
+    check("78.501 Zeichen -> 5 Abschnitte (gekuerzt)", len(oc._chunks("z" * 78501)), 5)
+    joined = oc._chunks("".join(chr(65 + i % 26) for i in range(60000)))
+    check("Abschnitte decken den Text lueckenlos ab", joined[-1][-10:], "".join(chr(65 + i % 26) for i in range(60000))[-10:])
+
+    print("== Hinweise in Auswertung ==")
+    from services.offer_intake import review_incomplete, NOT_CHECKED_TEXT
+    check("review_incomplete: not_checked", review_incomplete(types.SimpleNamespace(status="not_checked", findings_json=[])), True)
+    check("review_incomplete: kritisch + Teilausfall", review_incomplete(types.SimpleNamespace(
+        status="critical", findings_json=[{"code": "clause_review_failed"}])), True)
+    check("review_incomplete: ok", review_incomplete(types.SimpleNamespace(status="ok", findings_json=[])), False)
+    check("Text fuer Kunde/Team", "nicht" in NOT_CHECKED_TEXT and "manuell" in NOT_CHECKED_TEXT, True)
+
     print("== Anhaenge ==")
+    _t, n2 = compose_review_text("Angebot", [{"name": f"Anlage{i}.pdf", "text": "x", "skip": i >= 5} for i in range(7)])
+    check("ab dem 6. weiteren Anhang: Hinweis 'nicht geprueft'", [n["code"] for n in n2], ["attachments_not_checked"])
+    check("... nennt die Dateien", "Anlage5.pdf" in n2[0]["message"] and "Anlage6.pdf" in n2[0]["message"], True)
+    RESPONSES = [json.dumps({"findings": []})]
+    check("... Status not_checked", oc.review(offer(), PROJECT, _t, n2)["status"], "not_checked")
     text, notes = compose_review_text("Angebot", [{"name": "AGB.pdf", "text": "Die Haftung ist ausgeschlossen."},
                                                   {"name": "Scan.pdf", "text": ""}])
     check("AGB-Text im Pruefungstext", "--- Anhang: AGB.pdf ---\nDie Haftung ist ausgeschlossen." in text, True)
