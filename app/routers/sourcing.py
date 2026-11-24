@@ -62,6 +62,10 @@ public_router = APIRouter()  # tokengebundene Endpunkte fuer Dienstleister (ohne
 # Schemas
 # ---------------------------------------------------------------------------
 
+class RejectBody(BaseModel):
+    reason: Optional[str] = None
+
+
 class SourcingRequestCreate(BaseModel):
     title: str
     case_id: Optional[str] = None
@@ -646,12 +650,18 @@ async def approve_outreach(
 
 
 @router.post("/candidates/{candidate_id}/outreach/{action_id}/reject")
-async def reject_outreach(candidate_id: str, action_id: str, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+async def reject_outreach(candidate_id: str, action_id: str, payload: Optional[RejectBody] = None,
+                          user=Depends(get_current_user), membership=Depends(get_current_membership),
+                          db: AsyncSession = Depends(get_db)):
+    from services.approvals import record_rejection
     cand = await _get_candidate_or_404(candidate_id, membership.tenant_id, db)
     action = await _get_action_or_404(action_id, cand.id, db)
     if action.status not in (OutreachActionStatus.draft, OutreachActionStatus.approved):
         raise HTTPException(400, f"Aktion im Status '{action.status.value}' kann nicht abgelehnt werden.")
     action.status = OutreachActionStatus.rejected
+    await record_rejection(db, tenant_id=membership.tenant_id, kind="outreach", action_id=action.id, rejected_by=user.id,
+                           reason=payload.reason if payload else None, recipient=action.recipient_email,
+                           subject=action.rendered_subject, body=action.rendered_body)
     await db.commit()
     return _action_to_dict(action)
 

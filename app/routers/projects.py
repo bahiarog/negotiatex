@@ -381,7 +381,9 @@ async def _offers(db: AsyncSession, p: Project, cands: dict) -> list[dict]:
             first = min(history + [o], key=lambda x: x.version)
             rv = (await db.execute(select(OfferReview).where(OfferReview.offer_id.in_([h.id for h in history] + [o.id]))
                                    .order_by(desc(OfferReview.created_at)))).scalars().first()
-            doc = (await db.execute(select(MDCDocument).where(MDCDocument.rfq_offer_id.in_([x.id for x in history] + [o.id])))).scalars().first()
+            from services.offer_intake import documents_for_offers
+            docs_by_offer = await documents_for_offers(db, history + [o])
+            doc = docs_by_offer.get(o.id) or next(iter(docs_by_offer.values()), None)
             case_id = None
             for oid in [str(x.id) for x in history] + [str(o.id)]:
                 case_id = (p.negotiations_json or {}).get(oid) or case_id
@@ -959,9 +961,10 @@ async def _documents(db: AsyncSession, p: Project) -> list[dict]:
         offers += (await db.execute(select(RFQOffer).where(RFQOffer.rfq_id == rfq.id))).scalars().all()
     if offers:
         cand_names = {c.id: c.company_name for c in await _project_candidates(db, p)}
-        for d in (await db.execute(select(MDCDocument).where(MDCDocument.rfq_offer_id.in_([o.id for o in offers])))).scalars().all():
+        from services.offer_intake import documents_for_offers
+        for oid, d in (await documents_for_offers(db, offers)).items():
             if d.id not in labels:
-                o = next(x for x in offers if x.id == d.rfq_offer_id)
+                o = next(x for x in offers if x.id == oid)
                 ids.append(d.id)
                 labels[d.id] = f"Angebot {cand_names.get(o.supplier_candidate_id, '')}"
     out = []
@@ -1039,11 +1042,13 @@ async def reject_draft(project_id: str, kind: str, draft_id: str, payload: Rejec
     from routers import sourcing, rfq_contracts, negotiation
     u, m = access.user, access.membership
     if kind == "outreach":
-        return await sourcing.reject_outreach(candidate_id=d["scope_id"], action_id=draft_id, membership=m, db=db)
+        return await sourcing.reject_outreach(candidate_id=d["scope_id"], action_id=draft_id,
+                                              payload=sourcing.RejectBody(reason=payload.reason), user=u, membership=m, db=db)
     if kind == "nda":
         return await sourcing.reject_nda(nda_id=draft_id, user=u, membership=m, db=db)
     if kind == "rfq":
-        return await rfq_contracts.reject_rfq_action(rfq_id=d["scope_id"], action_id=draft_id, membership=m, db=db)
+        return await rfq_contracts.reject_rfq_action(rfq_id=d["scope_id"], action_id=draft_id,
+                                                     payload=rfq_contracts.RejectBody(reason=payload.reason), user=u, membership=m, db=db)
     if kind == "negotiation":
         return await negotiation.reject_action(case_id=d["scope_id"], action_id=draft_id,
                                                payload=negotiation.RejectRequest(reason=payload.reason or "im Vorhaben verworfen"),
@@ -1268,7 +1273,8 @@ async def rerun_review(project_id: str, offer_id: str, access: Access = Depends(
     _require_operator(access)
     p = await _get_project(project_id, access, db)
     offer = await _get_offer(db, p, offer_id)
-    doc = (await db.execute(select(MDCDocument).where(MDCDocument.rfq_offer_id == offer.id))).scalars().first()
+    from services.offer_intake import documents_for_offers
+    doc = (await documents_for_offers(db, [offer])).get(offer.id)
     text = ""
     if doc:
         ver = (await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.document_id == doc.id)
@@ -1457,12 +1463,35 @@ async def award(project_id: str, payload: AwardPayload, access: Access = Depends
             status=RFQActionStatus.draft, created_by=uid))
         declined += 1
     await db.flush()
+    await _hold_project_documents(db, p, uid)
     p.result_json = await compute_result(db, p, await _tenant(db, p.tenant_id))  # Snapshot zum Entscheidungszeitpunkt
     await add_event(db, p, "awarded", f"Entscheidung: {winner.company_name}",
                     f"Gesamtpreis {total} {offer.currency}. Zusage und {declined} Absage(n) liegen zur Freigabe bereit.",
                     milestone=True, actor=uid)
     await db.commit()
     return await _fresh(db, p)
+
+
+async def _hold_project_documents(db: AsyncSession, p: Project, uid: str) -> int:
+    """NX-033: Mit dem Zuschlag werden alle Belege des Vorhabens (Briefing, vorhandenes Angebot, alle
+    Angebotsdokumente) unter Aufbewahrungspflicht gestellt -- Loeschen ist danach gesperrt (mdc.py)."""
+    from services.mdc_governance import audit
+    from services.offer_intake import documents_for_offers
+    ids = {d for d in (p.briefing_document_id, p.offer_document_id) if d}
+    offers = []
+    for rfq in await _project_rfqs(db, p):
+        offers += (await db.execute(select(RFQOffer).where(RFQOffer.rfq_id == rfq.id))).scalars().all()
+    ids |= {d.id for d in (await documents_for_offers(db, offers)).values()}
+    reason = f"Beleg des beauftragten Vorhabens „{(p.title or '')[:120]}“ (Aufbewahrungspflicht)"
+    held = 0
+    for did in ids:
+        doc = (await db.execute(select(MDCDocument).where(MDCDocument.id == did))).scalar_one_or_none()
+        if doc is None or doc.legal_hold:
+            continue
+        doc.legal_hold, doc.legal_hold_reason = True, reason
+        await audit(db, p.tenant_id, uid, "legal_hold_set", "document", doc.id, reason=reason)
+        held += 1
+    return held
 
 
 class InvoicePayload(BaseModel):
@@ -1517,6 +1546,10 @@ async def cancel(project_id: str, access: Access = Depends(get_access), db: Asyn
         a = (await db.execute(select(model).where(model.id == uuid.UUID(d["id"])))).scalar_one_or_none()
         if a is not None:
             a.status = type(a.status)("rejected")
+            from services.approvals import record_rejection
+            await record_rejection(db, tenant_id=p.tenant_id, kind=d["kind"], action_id=a.id, rejected_by=access.user.id,
+                                   reason="Vorhaben abgebrochen", recipient=a.recipient_email,
+                                   subject=a.rendered_subject, body=a.rendered_body, project_id=p.id)
     await add_event(db, p, "cancelled", "Vorhaben abgebrochen", "Offene Entwürfe wurden verworfen.", milestone=True, actor=str(access.user.id))
     await db.commit()
     return await _fresh(db, p)

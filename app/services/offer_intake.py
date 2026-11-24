@@ -245,7 +245,8 @@ async def store_offer_file(db: AsyncSession, tenant_id, filename: str, data: byt
         raise ValueError(f"Dateityp {suffix or '?'} wird nicht unterstuetzt.")
     file_hash = hashlib.sha256(data).hexdigest()
     dup = (await db.execute(select(MDCDocumentVersion).where(
-        MDCDocumentVersion.tenant_id == tenant_id, MDCDocumentVersion.file_hash == file_hash))).scalar_one_or_none()
+        MDCDocumentVersion.tenant_id == tenant_id, MDCDocumentVersion.file_hash == file_hash)
+        .order_by(MDCDocumentVersion.created_at).limit(1))).scalars().first()
     if dup:
         doc = (await db.execute(select(MDCDocument).where(MDCDocument.id == dup.document_id))).scalar_one()
         return doc, dup, dup.extracted_text or ""
@@ -293,6 +294,32 @@ async def store_offer_file(db: AsyncSession, tenant_id, filename: str, data: byt
     await audit(db, tenant_id, actor, "document_uploaded", "document_version", version.id,
                 document_id=str(doc.id), version_number=1, file_hash=file_hash, source=source)
     return doc, version, text
+
+
+async def documents_for_offers(db: AsyncSession, offers) -> dict:
+    """Beleg-Dokument je Angebot (offer.id -> MDCDocument): eigenes Dokument (rfq_offer_id) oder,
+    wenn dieselbe Datei schon Beleg eines anderen Angebots ist, das verknuepfte (NX-033)."""
+    import uuid as _uuid
+    offers = list(offers)
+    out = {}
+    if not offers:
+        return out
+    for d in (await db.execute(select(MDCDocument).where(MDCDocument.rfq_offer_id.in_([o.id for o in offers])))).scalars().all():
+        out.setdefault(d.rfq_offer_id, d)
+    linked = {}
+    for o in offers:
+        did = (o.raw_extracted_json or {}).get("mdc_document_id") if o.id not in out else None
+        try:
+            linked[o.id] = _uuid.UUID(str(did)) if did else None
+        except ValueError:
+            linked[o.id] = None
+    wanted = {v for v in linked.values() if v}
+    if wanted:
+        docs = {d.id: d for d in (await db.execute(select(MDCDocument).where(MDCDocument.id.in_(wanted)))).scalars().all()}
+        for oid, did in linked.items():
+            if did in docs:
+                out[oid] = docs[did]
+    return out
 
 
 async def project_for_rfq(db: AsyncSession, rfq: RFQ) -> Optional[Project]:
@@ -444,7 +471,8 @@ async def _intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, off
         delivery_date=(str(extracted["delivery_date"])[:100] if extracted.get("delivery_date") else None),
         payment_terms=extracted.get("payment_terms"), offer_validity_until=_date(extracted.get("offer_validity_until")),
         scope_note=extracted.get("scope_note"), spec_confirmed=extracted.get("spec_confirmed"),
-        raw_extracted_json={**{k: (v if isinstance(v, list) or v is None else str(v)) for k, v in extracted.items()}, "channel": channel},
+        raw_extracted_json={**{k: (v if isinstance(v, list) or v is None else str(v)) for k, v in extracted.items()}, "channel": channel,
+                            **({"mdc_document_id": str(doc.id)} if doc is not None else {})},
         created_by=str(actor),
     )
     flag, note = _comparability(offer.quantity, rfq.expected_quantity, offer.scope_note, offer.spec_confirmed, lump_sum)
@@ -455,7 +483,9 @@ async def _intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, off
     if previous:
         previous.status = OfferStatus.superseded
         previous.superseded_by_id = offer.id
-    if doc is not None:
+    if doc is not None and doc.rfq_offer_id is None:
+        # Gleiche Datei schon Beleg eines anderen Angebots: dort bleiben (nicht umhaengen, NX-033);
+        # dieses Angebot verweist ueber raw_extracted_json["mdc_document_id"] darauf.
         doc.rfq_offer_id = offer.id
     if rfq.status in (RFQStatus.draft, RFQStatus.sent):
         rfq.status = RFQStatus.collecting_offers

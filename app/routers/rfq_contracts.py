@@ -181,6 +181,10 @@ async def _check_cross_bidder_confidentiality(db: AsyncSession, rfq_id, tenant_i
 # B7 -- RFQ Schemas
 # ---------------------------------------------------------------------------
 
+class RejectBody(BaseModel):
+    reason: Optional[str] = None
+
+
 class RFQCreate(BaseModel):
     sourcing_request_id: str
     spec_text: str
@@ -418,12 +422,18 @@ async def approve_rfq_action(rfq_id: str, action_id: str, user=Depends(get_curre
 
 
 @rfq_router.post("/{rfq_id}/actions/{action_id}/reject")
-async def reject_rfq_action(rfq_id: str, action_id: str, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+async def reject_rfq_action(rfq_id: str, action_id: str, payload: Optional[RejectBody] = None,
+                            user=Depends(get_current_user), membership=Depends(get_current_membership),
+                            db: AsyncSession = Depends(get_db)):
+    from services.approvals import record_rejection
     rfq = await _get_rfq_or_404(rfq_id, membership.tenant_id, db)
     action = await _get_rfq_action_or_404(action_id, rfq.id, db)
     if action.status not in (RFQActionStatus.draft, RFQActionStatus.approved):
         raise HTTPException(400, f"Aktion im Status '{action.status.value}' kann nicht abgelehnt werden.")
     action.status = RFQActionStatus.rejected
+    await record_rejection(db, tenant_id=membership.tenant_id, kind="rfq", action_id=action.id, rejected_by=user.id,
+                           reason=payload.reason if payload else None, recipient=action.recipient_email,
+                           subject=action.rendered_subject, body=action.rendered_body)
     await db.commit()
     return {"status": "rejected"}
 
@@ -1127,12 +1137,18 @@ async def approve_contract_action(contract_id: str, action_id: str, user=Depends
 
 
 @contracts_router.post("/{contract_id}/actions/{action_id}/reject")
-async def reject_contract_action(contract_id: str, action_id: str, membership=Depends(get_current_membership), db: AsyncSession = Depends(get_db)):
+async def reject_contract_action(contract_id: str, action_id: str, payload: Optional[RejectBody] = None,
+                                 user=Depends(get_current_user), membership=Depends(get_current_membership),
+                                 db: AsyncSession = Depends(get_db)):
+    from services.approvals import record_rejection
     c = await _get_contract_or_404(contract_id, membership.tenant_id, db)
     a = await _get_contract_action_or_404(action_id, c.id, db)
     if a.status not in (ContractActionStatus.draft, ContractActionStatus.approved):
         raise HTTPException(400, f"Aktion im Status '{a.status.value}' kann nicht abgelehnt werden.")
     a.status = ContractActionStatus.rejected
+    await record_rejection(db, tenant_id=membership.tenant_id, kind="contract", action_id=a.id, rejected_by=user.id,
+                           reason=payload.reason if payload else None, recipient=a.recipient_email,
+                           subject=a.rendered_subject, body=a.rendered_body)
     await db.commit()
     return {"status": "rejected"}
 

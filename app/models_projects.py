@@ -117,6 +117,24 @@ class ProjectEvent(Base):
     created_at = Column(DateTime, server_default=func.now(), index=True)
 
 
+class ActionRejection(Base):
+    """Prüfpfad für abgelehnte oder verworfene Entwürfe (NX-033): wer, wann, warum und welcher Inhalt
+    (Hash über Empfänger, Betreff, Text). Für die Anwendung nur anlegbar, nicht änderbar
+    (migrations/audit_immutability.sql)."""
+    __tablename__ = "action_rejections"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind = Column(String(30), nullable=False)          # outreach | nda | rfq | negotiation | contract
+    action_id = Column(String(64), nullable=False, index=True)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
+    rejected_by = Column(String(100), nullable=False)  # Nutzer-ID oder "system:<Anlass>"
+    reason = Column(Text, nullable=True)
+    recipient_email = Column(String(255), nullable=True)
+    subject = Column(String(500), nullable=True)
+    payload_hash = Column(String(64), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), index=True)
+
+
 class OfferReview(Base):
     """AGB-/Compliance-Pruefung eines Angebots. Jede Feststellung mit
     woertlichem, im Angebot nachgewiesenem Zitat oder als deterministische

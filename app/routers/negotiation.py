@@ -507,6 +507,10 @@ async def reject_action(
         raise HTTPException(400, f"Aktion im Status '{action.status.value}' kann nicht abgelehnt werden.")
 
     action.status = NegotiationActionStatus.rejected
+    from services.approvals import record_rejection
+    await record_rejection(db, tenant_id=membership.tenant_id, kind="negotiation", action_id=action.id, rejected_by=user.id,
+                           reason=payload.reason, recipient=action.recipient_email,
+                           subject=action.rendered_subject, body=action.rendered_body)
     # Judgment call (siehe Bericht): Fall geht zurueck nach READY_TO_DRAFT,
     # nicht AWAITING_APPROVAL -- "Freigabe verweigern" bedeutet hier
     # "bitte neu entwerfen", nicht "Fall haengt in der Warteschlange fest".
