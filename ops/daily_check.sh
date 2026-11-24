@@ -57,14 +57,18 @@ line "  info    Entwuerfe, die auf Freigabe warten: ${open:-?}"
 line ""
 line "Versprechen (Durchgangstest 05:45, NX-037)"
 E2E_LOG=/var/log/negotiatex-e2e.log
-e2e=$(grep -a "E2E-ERGEBNIS" "$E2E_LOG" 2>/dev/null | tail -1)
-if [ -z "$e2e" ] || [ $(( $(date +%s) - $(stat -c %Y "$E2E_LOG" 2>/dev/null || echo 0) )) -ge 93600 ]; then
+# Nur der LETZTE Lauf zaehlt (ab der letzten Kopfzeile "=== "), nie eine Ergebniszeile von gestern.
+last_run=$(tac "$E2E_LOG" 2>/dev/null | awk '{print} /^=== /{exit}' | tac)
+e2e=$(grep -a "^E2E-ERGEBNIS" <<<"$last_run" | tail -1)
+if [ -z "$last_run" ] || [ $(( $(date +%s) - $(stat -c %Y "$E2E_LOG" 2>/dev/null || echo 0) )) -ge 93600 ]; then
   check warn "kein Durchgangstest in den letzten 26 h"
-elif [[ "$e2e" == *"E2E-ERGEBNIS OK"* ]]; then
+elif [ -z "$e2e" ]; then
+  check warn "Durchgangstest ohne Ergebnis abgebrochen ($(head -1 <<<"$last_run"))"
+elif [[ "$e2e" == "E2E-ERGEBNIS OK"* ]]; then
   check ok "${e2e:0:90}"
 else
   check warn "${e2e:0:90}"
-  while IFS= read -r f; do line "          ${f:0:110}"; done < <(tac "$E2E_LOG" | awk '/^=== /{exit} {print}' | grep -a '^FEHLER' | head -5)
+  while IFS= read -r f; do line "          ${f:0:110}"; done < <(grep -a '^FEHLER' <<<"$last_run" | head -5)
 fi
 
 line ""

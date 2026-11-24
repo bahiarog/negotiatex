@@ -27,8 +27,8 @@ import sys
 import tempfile
 import time
 import types
-import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 
 TMP = tempfile.mkdtemp(prefix="nx-e2e-")
 os.environ["MDC_UPLOAD_DIR"] = os.path.join(TMP, "uploads")
@@ -39,8 +39,12 @@ os.environ["MDC_UPLOAD_DIR"] = os.path.join(TMP, "uploads")
 import smtplib  # noqa: E402
 
 
+SMTP_ATTEMPTS = []
+
+
 class _NoSMTP:
     def __init__(self, *a, **k):
+        SMTP_ATTEMPTS.append(a[:1])
         raise RuntimeError("E2E: SMTP gesperrt")
 
 
@@ -122,6 +126,13 @@ def check(part, name, ok, detail=""):
     print(("OK     " if ok else "FEHLER ") + f"[{part}] {name}" + (f" ({detail})" if detail else ""))
 
 
+def dec(v):
+    try:
+        return Decimal(str(v))
+    except Exception:
+        return None
+
+
 def mails_to(addr):
     return [m for m in SENT if m["to"] == addr.lower()]
 
@@ -140,55 +151,65 @@ def docx_bytes(lines):
 
 
 async def setup():
+    """Mandant A (Kundin + Experte) fuer den Fall, Mandant B (ein Nutzer mit allen Rollen) als Gegenprobe.
+    Eine Transaktion: entweder alles oder nichts."""
     async with AdminSessionLocal() as db:
-        tenant = Tenant(company_name=f"E2E-Test {STAMP}")
-        db.add(tenant)
+        ta, tb = Tenant(company_name=f"E2E-Test {STAMP} A"), Tenant(company_name=f"E2E-Test {STAMP} B")
+        db.add_all([ta, tb])
         await db.flush()
-        kunde = User(name="E2E Kundin", email=f"e2e-kunde-{STAMP}@example.invalid", company_name=tenant.company_name)
-        experte = User(name="E2E Experte", email=f"e2e-experte-{STAMP}@example.invalid", company_name=tenant.company_name)
-        db.add_all([kunde, experte])
+        kunde = User(name="E2E Kundin", email=f"e2e-kunde-{STAMP}@example.invalid", company_name=ta.company_name)
+        experte = User(name="E2E Experte", email=f"e2e-experte-{STAMP}@example.invalid", company_name=ta.company_name)
+        fremd = User(name="E2E Fremd", email=f"e2e-fremd-{STAMP}@example.invalid", company_name=tb.company_name)
+        db.add_all([kunde, experte, fremd])
         await db.flush()
         db.add_all([
-            Membership(tenant_id=tenant.id, user_id=kunde.id, role=MembershipRole.member, roles_json=["customer"], can_decide=True),
+            Membership(tenant_id=ta.id, user_id=kunde.id, role=MembershipRole.member, roles_json=["customer"], can_decide=True),
             # Experte ist Inhaber: Loeschen im Data Center verlangt Einkaufsrolle UND Inhaber (Pruefung der Sperre)
-            Membership(tenant_id=tenant.id, user_id=experte.id, role=MembershipRole.owner, roles_json=["procurement"],
+            Membership(tenant_id=ta.id, user_id=experte.id, role=MembershipRole.owner, roles_json=["procurement"],
                        can_decide=False),
+            Membership(tenant_id=tb.id, user_id=fremd.id, role=MembershipRole.owner, roles_json=["customer", "procurement"],
+                       can_decide=True),
         ])
         await db.commit()
-        return tenant.id, kunde, experte
+        return {"a": ta.id, "b": tb.id, "kunde": kunde, "experte": experte, "fremd": fremd}
 
 
-async def cleanup(tenant_id, user_ids):
-    """Alles mit tenant_id des Test-Mandanten loeschen (als Eigentuemer; Reihenfolge per Wiederholung)."""
+async def cleanup(tenant_ids, user_ids):
+    """Alles mit tenant_id der Test-Mandanten loeschen (als Eigentuemer; Reihenfolge per Wiederholung)."""
+    remaining = []
     async with admin_engine.connect() as c:
         tables = [r[0] for r in (await c.execute(text(
             "SELECT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='tenant_id'"))).all()]
         await c.commit()
-        remaining = list(tables)
-        for _round in range(8):
-            failed = []
-            for t in remaining:
-                try:
-                    await c.execute(text(f'DELETE FROM "{t}" WHERE tenant_id = :t'), {"t": tenant_id})
-                    await c.commit()
-                except Exception:
-                    await c.rollback()
-                    failed.append(t)
-            remaining = failed
-            if not remaining:
-                break
-        await c.execute(text("DELETE FROM tenants WHERE id = :t"), {"t": tenant_id})
+        for tid in tenant_ids:
+            remaining = list(tables)
+            for _round in range(8):
+                failed = []
+                for t in remaining:
+                    try:
+                        await c.execute(text(f'DELETE FROM "{t}" WHERE tenant_id = :t'), {"t": tid})
+                        await c.commit()
+                    except Exception:
+                        await c.rollback()
+                        failed.append(t)
+                remaining = failed
+                if not remaining:
+                    break
+            await c.execute(text("DELETE FROM tenants WHERE id = :t"), {"t": tid})
+            await c.commit()
         for uid in user_ids:
             await c.execute(text("DELETE FROM users WHERE id = :u"), {"u": uid})
         await c.commit()
-        left = (await c.execute(text("SELECT count(*) FROM tenants WHERE id = :t"), {"t": tenant_id})).scalar()
-    shutil.rmtree(TMP, ignore_errors=True)
-    return left == 0 and not remaining, remaining
+        left = (await c.execute(text("SELECT count(*) FROM tenants WHERE id = ANY(:t)"), {"t": list(tenant_ids)})).scalar()
+        users_left = (await c.execute(text("SELECT count(*) FROM users WHERE id = ANY(:u)"), {"u": list(user_ids)})).scalar()
+    return left == 0 and users_left == 0 and not remaining, remaining
 
 
-async def run(tenant_id, kunde, experte):
+async def run(ctx):
+    tenant_id, kunde, experte, fremd = ctx["a"], ctx["kunde"], ctx["experte"], ctx["fremd"]
     hk = {"Authorization": "Bearer " + make_token(str(kunde.id), kunde.email, False)}
     he = {"Authorization": "Bearer " + make_token(str(experte.id), experte.email, False)}
+    hb = {"Authorization": "Bearer " + make_token(str(fremd.id), fremd.email, False)}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://e2e") as cl:
         async def call(method, path, headers, **kw):
             r = await cl.request(method, "/api/v1" + path, headers=headers, **kw)
@@ -228,7 +249,7 @@ async def run(tenant_id, kunde, experte):
 
         # ---- 2. Angebot mit AGB-Anhang geht ein --------------------------------------------------------
         offer_bytes, ext = docx_bytes([f"Angebot E2E {STAMP}", "Imagefilm 90 Sekunden inkl. Drehtag und Schnitt.",
-                                       f"Gesamtpreis netto: 10.000,00 EUR", "Zahlungsziel 30 Tage netto."])
+                                       "Gesamtpreis netto: 10.000,00 EUR", "Zahlungsziel 30 Tage netto."])
         agb_bytes, ext2 = docx_bytes(["Allgemeine Geschaeftsbedingungen", AGB_CLAUSE, "Gerichtsstand ist Hamburg."])
         from services.email_poller import _dispatch_inbound_message
         mail = {"message_id": f"<e2e-{STAMP}@example.invalid>", "in_reply_to": sent[0]["message_id"] if sent else None,
@@ -246,7 +267,7 @@ async def run(tenant_id, kunde, experte):
         offers = d["offers"]
         check("Einkaufen", "Angebot im Vorhaben sichtbar", len(offers) == 1)
         o = offers[0] if offers else {}
-        check("Konditionen", "Preis aus dem Dokument uebernommen", o.get("total") in ("10000.00", "10000.0000", "10000"), o.get("total"))
+        check("Konditionen", "Preis aus dem Dokument uebernommen", dec(o.get("total")) == Decimal("10000"), o.get("total"))
         check("Konditionen", "Ueber Budget erkannt", o.get("within_budget") is False)
         rv = o.get("review") or {}
         check("AGB", "Klausel aus dem AGB-Anhang gefunden (mit Zitat)",
@@ -265,7 +286,9 @@ async def run(tenant_id, kunde, experte):
             nb = (await c.execute(text("SELECT a.rendered_body FROM negotiation_actions a WHERE a.tenant_id = :t "
                                        "ORDER BY a.created_at DESC LIMIT 1"), {"t": tenant_id})).scalar() or ""
         # Preis aus der bestaetigten Strategie (Ziel 8.000, hoechstens 15 % unter Angebot -> 8.500), nie ueber dem Angebot
-        check("Verhandlung", "Preis aus der Strategie, unter dem Angebotspreis", "8500" in nb.replace(".", "").replace(",00", ""),
+        import re
+        prices = [dec(x.replace(".", "").replace(",", ".")) if "," in x else dec(x) for x in re.findall(r"\d[\d.,]*\d", nb)]
+        check("Verhandlung", "Preis aus der Strategie, unter dem Angebotspreis", Decimal("8500") in prices,
               nb[:120].replace("\n", " "))
         before = len(mails_to(SUPPLIER))
         if neg:
@@ -281,7 +304,11 @@ async def run(tenant_id, kunde, experte):
         a = await call("POST", f"/projects/{pid}/award", hk, json={"offer_id": o["id"]})
         check("Zuschlag", "Vorhaben beauftragt", a["status"] == "awarded", a["status"])
         d = await call("GET", f"/projects/{pid}", he)
-        check("Zuschlag", "Zusage nur als Entwurf (keine Mail ohne Freigabe)", len(mails_to(SUPPLIER)) == before)
+        async with admin_engine.connect() as c:
+            award_drafts = (await c.execute(text("SELECT count(*) FROM rfq_actions WHERE tenant_id = :t AND kind = 'award_notice' "
+                                                 "AND status = 'draft'"), {"t": tenant_id})).scalar()
+        check("Zuschlag", "Zusage nur als Entwurf (keine Mail ohne Freigabe)",
+              len(mails_to(SUPPLIER)) == before and award_drafts == 1, f"{award_drafts} Entwurf")
         async with admin_engine.connect() as c:
             holds = (await c.execute(text("SELECT count(*), count(*) FILTER (WHERE legal_hold) FROM mdc_documents "
                                           "WHERE tenant_id = :t"), {"t": tenant_id})).first()
@@ -293,36 +320,67 @@ async def run(tenant_id, kunde, experte):
         await call("POST", f"/projects/{pid}/invoice", hk, json={"amount": "9500"})
         d = await call("GET", f"/projects/{pid}", he)
         res_ = d.get("result") or {}
-        check("Savings", "Ausgangsbasis = Erstangebot", str(res_.get("baseline") or "").startswith("10000"), res_.get("baseline"))
-        check("Savings", "Realisierte Einsparung berechnet (500)", str(res_.get("realized") or "").startswith("500"), res_.get("realized"))
+        check("Savings", "Ausgangsbasis = Erstangebot (10.000)", dec(res_.get("baseline")) == Decimal("10000"), res_.get("baseline"))
+        check("Savings", "Realisierte Einsparung berechnet (500)", dec(res_.get("realized")) == Decimal("500"), res_.get("realized"))
 
         # ---- 5. Pruefpfad und Mandantentrennung ------------------------------------------------------------
         kinds = [e["kind"] for e in d.get("events") or []]
         check("Pruefpfad", "Zeitstrahl vollstaendig", all(k in kinds for k in ("created", "started", "offer_received", "awarded", "invoiced")),
               ", ".join(sorted(set(kinds)))[:150])
+        # Gegenprobe mit zweitem Test-Mandanten B: sieht nichts von A
+        r = await cl.get(f"/api/v1/projects/{pid}", headers=hb)
+        check("Mandanten", "Mandant B sieht das Vorhaben von A nicht", r.status_code in (403, 404), str(r.status_code))
+        r = await cl.get("/api/v1/projects", headers=hb)
+        check("Mandanten", "Mandant B: Vorhabenliste ohne A", r.status_code == 200 and all(x.get("id") != pid for x in r.json()),
+              str(r.status_code))
+        r = await cl.get(f"/api/v1/projects/{pid}/documents/{doc_id}", headers=hb)
+        check("Mandanten", "Mandant B kann Beleg von A nicht laden", r.status_code in (403, 404), str(r.status_code))
+        r = await cl.get(f"/api/v1/mdc/documents/{doc_id}", headers=hb)
+        check("Mandanten", "Mandant B: Data-Center-Dokument von A unsichtbar", r.status_code in (403, 404), str(r.status_code))
+        r = await cl.post(f"/api/v1/projects/{pid}/offers/{o['id']}/review", headers=hb)
+        check("Mandanten", "Mandant B kann Angebot von A nicht pruefen lassen", r.status_code in (403, 404), str(r.status_code))
+        # zusaetzlich: echtes fremdes Vorhaben fuer A unsichtbar (nur wenn es eins gibt; zaehlt nicht mit)
         async with admin_engine.connect() as c:
-            other = (await c.execute(text("SELECT id FROM projects WHERE tenant_id <> :t LIMIT 1"), {"t": tenant_id})).scalar()
+            other = (await c.execute(text("SELECT id FROM projects WHERE tenant_id <> ALL(:t) LIMIT 1"),
+                                     {"t": [tenant_id, ctx["b"]]})).scalar()
         if other:
             r = await cl.get(f"/api/v1/projects/{other}", headers=hk)
-            check("Mandanten", "Fremdes Vorhaben fuer Test-Mandant unsichtbar", r.status_code in (403, 404), str(r.status_code))
-        check("Sicherheit", "Keine echte Mail, kein echter KI-Aufruf", True, f"{len(SENT)} Mails abgefangen, {len(AI_CALLS)} KI-Attrappen")
+            print(("HINWEIS" if r.status_code in (403, 404) else "FEHLER ") + f" [Mandanten] echtes Vorhaben fuer A unsichtbar ({r.status_code})")
+            if r.status_code not in (403, 404):
+                check("Mandanten", "Echtes fremdes Vorhaben fuer A unsichtbar", False, str(r.status_code))
+
+        foreign = [m["to"] for m in SENT if not m["to"].endswith("@example.invalid")]
+        check("Sicherheit", "Alle abgefangenen Mails nur an Test-Adressen", not foreign, ", ".join(foreign)[:120])
+        check("Sicherheit", "Kein SMTP-Versuch, KI nur als Attrappe", not SMTP_ATTEMPTS and len(AI_CALLS) > 0,
+              f"{len(SENT)} Mails abgefangen, {len(AI_CALLS)} KI-Attrappen, {len(SMTP_ATTEMPTS)} SMTP-Versuche")
+
+
+EXPECTED_CHECKS = 34  # bei neuen Pruefungen anpassen; eine stillschweigend ausgelassene Pruefung faellt so auf
 
 
 async def main():
     t0 = time.time()
-    tenant_id, kunde, experte = await setup()
-    print(f"E2E-Test-Mandant {str(tenant_id)[:8]}… angelegt")
+    ctx = None
     try:
-        await run(tenant_id, kunde, experte)
+        ctx = await setup()
+        print(f"E2E-Test-Mandanten {str(ctx['a'])[:8]}… (A) und {str(ctx['b'])[:8]}… (B) angelegt")
+        await run(ctx)
     except Exception as e:
         check("Ablauf", "Durchlauf ohne Abbruch", False, f"{type(e).__name__}: {str(e)[:300]}")
     finally:
-        ok, remaining = await cleanup(tenant_id, [kunde.id, experte.id])
-        check("Aufraeumen", "Test-Mandant vollstaendig geloescht", ok, ", ".join(remaining))
+        try:
+            if ctx:
+                ok, remaining = await cleanup([ctx["a"], ctx["b"]], [ctx["kunde"].id, ctx["experte"].id, ctx["fremd"].id])
+                check("Aufraeumen", "Test-Mandanten vollstaendig geloescht", ok, ", ".join(remaining))
+        except Exception as e:
+            check("Aufraeumen", "Test-Mandanten vollstaendig geloescht", False, f"{type(e).__name__}: {str(e)[:200]}")
+        shutil.rmtree(TMP, ignore_errors=True)
+    if len(RESULTS) != EXPECTED_CHECKS and all(r[2] for r in RESULTS):
+        check("Ablauf", f"Alle {EXPECTED_CHECKS} Pruefungen gelaufen", False, f"{len(RESULTS)} gelaufen")
     bad = [r for r in RESULTS if not r[2]]
     print(f"Dauer {int(time.time() - t0)} s")
-    print(f"E2E-ERGEBNIS {'OK' if not bad else 'FEHLER'} ({len(bad)} von {len(RESULTS)} fehlgeschlagen)"
-          if bad else f"E2E-ERGEBNIS OK ({len(RESULTS)}/{len(RESULTS)})")
+    print(f"E2E-ERGEBNIS FEHLER ({len(bad)} von {len(RESULTS)} fehlgeschlagen)" if bad
+          else f"E2E-ERGEBNIS OK ({len(RESULTS)}/{len(RESULTS)})")
     return 1 if bad else 0
 
 
