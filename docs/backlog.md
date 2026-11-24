@@ -10,7 +10,7 @@ Aufwand: S = bis 2 h, M = halber bis ganzer Tag, L = mehrere Tage.
 
 ## Jetzt
 
-### NX-001 Pauschalangebote für Stückmengen richtig vergleichen · `freigegeben` (Rafael, 23.11.2026) · M
+### NX-001 Pauschalangebote für Stückmengen richtig vergleichen · `QA` (FREIGABE für a12630b, 24.11.2026; Deploy offen) · M
 **Problem:** Beide Angebote für „20 höhenverstellbare Schreibtische“ wurden als „Menge 1 (Pauschale)“ erfasst. Der Vergleich mit der erwarteten Menge 20 markiert sie deshalb als „eingeschränkt vergleichbar“ (`services/rfq_classifier.py:_comparability`), und die Auswertung nennt kein günstigstes Angebot – obwohl beide denselben Umfang anbieten.
 **Abnahme:**
 - Ein Gesamtpreis für die angefragte Menge wird als vergleichbar erkannt, wenn die Menge im Angebotstext belegt ist (Zitat).
@@ -29,6 +29,10 @@ Aufwand: S = bis 2 h, M = halber bis ganzer Tag, L = mehrere Tage.
 ### NX-004 Browser-Tests ins Repository und regelmäßig ausführen · `vorgeschlagen` · M
 **Problem:** Die Playwright-Tests liegen nur auf dem Server (`/root/negotiatex-sim/tests`) und laufen nur von Hand.
 **Abnahme:** Tests im Repo (ohne Zugangsdaten, Token werden kurzlebig erzeugt), ein Befehl führt alle aus, Ergebnis mit Datum protokolliert; Lauf vor jedem Deploy.
+
+### NX-005 Feinschliff Beleg-Regeln aus QA NX-001 · `vorgeschlagen` · S
+**Problem (QA 24.11.2026, alle niedrig):** `_dec` liest englische Dezimalzahlen mit drei Nachkommastellen als Tausender („0.125“ = 125), wenn die KI Text statt Zahl liefert; die Options-Schlagworte sind grob („Montage ohne Aufpreis enthalten“ gilt als Option); „ab 20 Stück … Rabatt“ und „20 x 20 cm“ gelten als Mengenbeleg; legitime Belege wie „Gemäß Ihrer Anfrage bieten wir 20 Schreibtische an“, „Menge: 20“, „20 Tagungsstühle“ werden abgelehnt (sichere Richtung). `rerun_review` verliert Options-Hinweise.
+**Abnahme:** Tausender-Regel nur im Optionspfad; Ausschlüsse für „ab/mindestens“ und Maßangaben; die genannten legitimen Belege werden angenommen; Funktionstests für alle genannten Fälle.
 
 ## Fahrplan (Analyse 17.10.2026)
 
