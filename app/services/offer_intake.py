@@ -236,7 +236,9 @@ def _date(v) -> Optional[datetime]:
 
 
 async def store_offer_file(db: AsyncSession, tenant_id, filename: str, data: bytes, supplier_name: Optional[str],
-                           category_id=None, actor: str = "system", source: str = "email") -> tuple[MDCDocument, MDCDocumentVersion, str]:
+                           category_id=None, actor: str = "system", source: str = "email",
+                           document_type: MDCDocumentType = MDCDocumentType.offer,
+                           usage_purpose: str = "Angebotsbewertung im Vorhaben") -> tuple[MDCDocument, MDCDocumentVersion, str]:
     """Legt die Datei als MDC-Dokument (Typ offer) ab und liefert den Text.
     Exakt gleiche Datei (Hash) beim gleichen Mandanten -> bestehende Version."""
     from services.pdf_parser import extract_text
@@ -262,8 +264,8 @@ async def store_offer_file(db: AsyncSession, tenant_id, filename: str, data: byt
         supplier_id = s.id
 
     doc = MDCDocument(tenant_id=tenant_id, category_id=category_id, supplier_id=supplier_id,
-                      document_type=MDCDocumentType.offer, title=filename, created_by=str(actor),
-                      usage_purpose="Angebotsbewertung im Vorhaben")
+                      document_type=document_type, title=filename, created_by=str(actor),
+                      usage_purpose=usage_purpose)
     db.add(doc)
     await db.flush()
     tenant_dir = UPLOAD_DIR / str(tenant_id)
@@ -330,9 +332,53 @@ async def project_for_rfq(db: AsyncSession, rfq: RFQ) -> Optional[Project]:
     return (await db.execute(select(Project).where(Project.sourcing_request_id == rfq.sourcing_request_id))).scalars().first()
 
 
-async def run_review(db: AsyncSession, offer: RFQOffer, project: Optional[Project], offer_text: str, actor: str = "agent") -> OfferReview:
+def compose_review_text(offer_text: str, attachments: list) -> tuple[str, list]:
+    """Pruefungstext = Angebot + Text weiterer Anhaenge (gekennzeichnet). Unlesbare Anhaenge ergeben einen
+    Hinweis mit Code attachment_unreadable (Klauseln dann nicht vollstaendig geprueft, NX-034)."""
+    parts, notes = [offer_text or ""], []
+    skipped = [str(a.get("name") or "Anhang")[:200] for a in attachments or [] if a.get("skip")]
+    if skipped:
+        notes.append({"code": "attachments_not_checked", "source": "regel", "severity": "warning", "quote": None,
+                      "message": f"{len(skipped)} weitere(r) Anhang/Anhänge abgelegt, aber nicht auf Klauseln geprüft "
+                                 f"({', '.join(skipped)[:300]}) -- bitte manuell prüfen."})
+    for a in attachments or []:
+        if a.get("skip"):
+            continue
+        name = str(a.get("name") or "Anhang")[:200]
+        if (a.get("text") or "").strip():
+            parts.append(f"--- Anhang: {name} ---\n{a['text']}")
+        else:
+            notes.append({"code": "attachment_unreadable", "source": "regel", "severity": "warning", "quote": None,
+                          "message": f"Anhang „{name}“ enthält keinen lesbaren Text (z. B. Scan) -- darin enthaltene "
+                                     "Bedingungen wurden nicht geprüft, bitte manuell prüfen."})
+    return "\n\n".join(p for p in parts if p), notes
+
+
+async def attachments_for_offer(db: AsyncSession, offer: RFQOffer) -> list:
+    """Weitere Anhaenge eines Angebots (aus raw_extracted_json) mit aktuellem Text, fuer die erneute Pruefung."""
+    import uuid as _uuid
+    ids = []
+    for x in (offer.raw_extracted_json or {}).get("attachment_document_ids") or []:
+        try:
+            ids.append(_uuid.UUID(str(x)))
+        except ValueError:
+            continue
+    out = []
+    for did in ids:
+        d = (await db.execute(select(MDCDocument).where(MDCDocument.id == did))).scalar_one_or_none()
+        if d is None or d.tenant_id != offer.tenant_id:  # nur Belege desselben Mandanten
+            continue
+        v = (await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.document_id == d.id)
+                              .order_by(desc(MDCDocumentVersion.version_number)))).scalars().first()
+        out.append({"doc": d, "name": (v.file_name if v else d.title) or "Anhang", "text": (v.extracted_text if v else "") or "",
+                    "skip": len(out) >= MAX_EXTRA_ATTACHMENTS})
+    return out
+
+
+async def run_review(db: AsyncSession, offer: RFQOffer, project: Optional[Project], offer_text: str, actor: str = "agent",
+                     extra_findings: Optional[list] = None) -> OfferReview:
     from services.offer_compliance import review
-    res = await asyncio.to_thread(review, offer, project, offer_text or "")
+    res = await asyncio.to_thread(review, offer, project, offer_text or "", extra_findings)
     rv = OfferReview(tenant_id=offer.tenant_id, offer_id=offer.id, project_id=project.id if project else None,
                      status=res["status"],
                      findings_json=res["findings"], offer_text_excerpt=(offer_text or "")[:4000],
@@ -344,18 +390,21 @@ async def run_review(db: AsyncSession, offer: RFQOffer, project: Optional[Projec
 
 async def intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, offer_text: str, actor: str = "agent",
                        doc: Optional[MDCDocument] = None, channel: str = "E-Mail", draft_receipt: bool = True,
-                       preexisting: bool = False, reply_to: Optional[str] = None) -> tuple[RFQOffer, OfferReview]:
+                       preexisting: bool = False, reply_to: Optional[str] = None,
+                       attachments: Optional[list] = None) -> tuple[RFQOffer, OfferReview]:
+    """attachments: weitere Anhaenge derselben Mail (z. B. AGB) als [{"doc", "name", "text"}] -- sie gehen in die
+    AGB-/Klauselpruefung ein, nicht in die Preisextraktion (NX-034)."""
     from services.agent_log import track
     project = await project_for_rfq(db, rfq)
     async with track("pruefer", f"Angebot von {cand.company_name} prüfen", tenant_id=rfq.tenant_id,
                      project_id=project.id if project else None, object_ref=channel) as run:
         offer, review = await _intake_offer(db, rfq, cand, offer_text, actor, doc, channel, draft_receipt, preexisting,
-                                            reply_to)
+                                            reply_to, attachments or [])
         crit = sum(1 for f in review.findings_json or [] if f.get("severity") == "critical")
         warn = sum(1 for f in review.findings_json or [] if f.get("severity") == "warning")
         total = offer_total(offer)
         run.outcome = (f"Preis {total:.2f} {offer.currency}" if total is not None else "kein Preis erkannt") + \
-                      f" · {crit} kritisch, {warn} Hinweis(e)"
+                      f" · {crit} kritisch, {warn} Hinweis(e)" + (" · " + NOT_CHECKED_TEXT if review_incomplete(review) else "")
         if draft_receipt and not preexisting and cand.contact_email and channel != "E-Mail":
             run.add_pending(1)
     return offer, review
@@ -392,6 +441,19 @@ async def _send_receipt(db: AsyncSession, action: RFQAction, cand: SupplierCandi
         subject=action.rendered_subject, body_text=action.rendered_body,
     ))
     return True
+
+
+NOT_CHECKED_TEXT = "Klauseln nicht (vollständig) geprüft – bitte manuell prüfen"
+
+
+def review_incomplete(rv) -> bool:
+    """Klauselpruefung nicht vollstaendig gelaufen -- auch wenn der Status wegen kritischer Regelbefunde
+    'critical' lautet (NX-034)."""
+    from services.offer_compliance import INCOMPLETE_CODES
+    if rv is None:
+        return False
+    return rv.status == "not_checked" or any(isinstance(f, dict) and f.get("code") in INCOMPLETE_CODES
+                                             for f in rv.findings_json or [])
 
 
 async def offers_evaluation(db: AsyncSession, rfq: RFQ, project: Optional[Project]) -> str:
@@ -432,7 +494,8 @@ async def offers_evaluation(db: AsyncSession, rfq: RFQ, project: Optional[Projec
         if any(it.get("price") is None for it in opts):
             opt_txt += " · optionale Position mit unklarem Preis – bitte prüfen"
         rows.append(f"- {names.get(o.supplier_candidate_id, 'Anbieter')}: {price} · {cmp_label} · "
-                    f"{crit} kritische Punkte, {warn} Hinweise" + opt_txt)
+                    f"{crit} kritische Punkte, {warn} Hinweise" + (" · " + NOT_CHECKED_TEXT if review_incomplete(rv) else "")
+                    + opt_txt)
         if total is not None and flag == "comparable":
             comparable.append((total, names.get(o.supplier_candidate_id, "Anbieter")))
     text = f"Stand der Angebote ({len(offers)}):\n" + "\n".join(rows)
@@ -450,8 +513,10 @@ async def offers_evaluation(db: AsyncSession, rfq: RFQ, project: Optional[Projec
 
 async def _intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, offer_text: str, actor: str,
                         doc: Optional[MDCDocument], channel: str, draft_receipt: bool,
-                        preexisting: bool, reply_to: Optional[str] = None) -> tuple[RFQOffer, OfferReview]:
+                        preexisting: bool, reply_to: Optional[str] = None,
+                        attachments: Optional[list] = None) -> tuple[RFQOffer, OfferReview]:
     from services.rfq_classifier import extract_offer_fields, _comparability, verify_priced_quantity
+    attachments = attachments or []
     extracted = await asyncio.to_thread(extract_offer_fields, offer_text) if offer_text else {}
     extracted = reconcile_prices(extracted, offer_text or "")
     # NX-001: Menge, fuer die der Gesamtpreis gilt -- nur mit woertlichem Beleg
@@ -473,7 +538,8 @@ async def _intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, off
         payment_terms=extracted.get("payment_terms"), offer_validity_until=_date(extracted.get("offer_validity_until")),
         scope_note=extracted.get("scope_note"), spec_confirmed=extracted.get("spec_confirmed"),
         raw_extracted_json={**{k: (v if isinstance(v, list) or v is None else str(v)) for k, v in extracted.items()}, "channel": channel,
-                            **({"mdc_document_id": str(doc.id)} if doc is not None else {})},
+                            **({"mdc_document_id": str(doc.id)} if doc is not None else {}),
+                            **({"attachment_document_ids": [str(a["doc"].id) for a in attachments]} if attachments else {})},
         created_by=str(actor),
     )
     flag, note = _comparability(offer.quantity, rfq.expected_quantity, offer.scope_note, offer.spec_confirmed, lump_sum)
@@ -508,7 +574,8 @@ async def _intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, off
             receipt_sent = await _send_receipt(db, action, cand, reply_to)
 
     project = await project_for_rfq(db, rfq)
-    review = await run_review(db, offer, project, offer_text, actor)
+    review_text, notes = compose_review_text(offer_text, attachments)
+    review = await run_review(db, offer, project, review_text, actor, extra_findings=notes)
     add_extraction_notes(review, extracted)
 
     if project:
@@ -519,6 +586,8 @@ async def _intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, off
         if offer.version > 1:
             what = f"Neue Angebotsversion {offer.version} von {cand.company_name}"
         detail = f"Pruefung: {crit} kritische Punkte, {warn} Hinweise." if (crit or warn) else "Pruefung ohne Auffaelligkeiten."
+        if review_incomplete(review):
+            detail += f" {NOT_CHECKED_TEXT}."
         if project.status in (ProjectStatus.sourcing, ProjectStatus.collecting_offers, ProjectStatus.briefing):
             project.status = ProjectStatus.evaluating
         await db.flush()
@@ -571,6 +640,25 @@ async def _invitation_from_first_contact(db: AsyncSession, cand: SupplierCandida
     return inv
 
 
+MAX_EXTRA_ATTACHMENTS = 5
+_TERMS_WORDS = ("agb", "geschäftsbedingung", "geschaeftsbedingung", "bedingungen", "terms", "conditions", "vertragsbedingung",
+                "lieferbedingung", "zahlungsbedingung", "datenschutz", "avv", "auftragsverarbeitung")
+_OFFER_WORDS = ("angebot", "offer", "quote", "quotation", "kostenvoranschlag", "kva", "preis")
+
+
+def _looks_like_terms(filename: str) -> bool:
+    n = (filename or "").lower()
+    return any(w in n for w in _TERMS_WORDS)
+
+
+def _attachment_rank(att: dict) -> int:
+    """0 = sieht nach Angebot aus, 1 = neutral, 2 = sieht nach Bedingungen aus."""
+    n = (att.get("filename") or "").lower()
+    if any(w in n for w in _OFFER_WORDS) and not _looks_like_terms(n):
+        return 0
+    return 2 if _looks_like_terms(n) else 1
+
+
 async def intake_from_email(db: AsyncSession, m: dict, cand: SupplierCandidate) -> Optional[dict]:
     """Antwort eines eingeladenen Bieters mit Angebotsanhang. Rueckgabe None,
     wenn die Mail kein Angebot im Sinne dieses Pfades ist (dann greift die
@@ -604,12 +692,27 @@ async def intake_from_email(db: AsyncSession, m: dict, cand: SupplierCandidate) 
 
     project = await project_for_rfq(db, rfq)
     results = []
-    for att in attachments[:1]:  # ein Angebot pro Mail; weitere Anhaenge bleiben im Rohtext nachvollziehbar
+    # Ein Angebot pro Mail. Welcher Anhang das Angebot ist, entscheidet der Dateiname; alle weiteren
+    # (z. B. AGB) werden ebenfalls abgelegt und in die Klauselpruefung einbezogen (NX-034).
+    ordered = sorted(attachments, key=_attachment_rank)
+    # Alle weiteren Anhaenge werden abgelegt; in die Klauselpruefung gehen hoechstens MAX_EXTRA_ATTACHMENTS
+    # (Bedingungen zuerst). Nicht gepruefte erscheinen als Hinweis -- nichts faellt stumm weg (QA NX-034).
+    main, extras = ordered[0], sorted(ordered[1:], key=lambda a: not _looks_like_terms(a["filename"]))
+    cat_id = project.category_id if project else None
+    extra_docs = []
+    for i, att in enumerate(extras):
+        is_terms = _looks_like_terms(att["filename"])
+        d, _v, t = await store_offer_file(db, cand.tenant_id, att["filename"], att["data"], cand.company_name, category_id=cat_id,
+                                          source="email", document_type=MDCDocumentType.contract if is_terms else MDCDocumentType.other,
+                                          usage_purpose="Anhang zum Angebot (Bedingungen)" if is_terms else "Anhang zum Angebot")
+        extra_docs.append({"doc": d, "name": att["filename"], "text": t, "skip": i >= MAX_EXTRA_ATTACHMENTS})
+    for att in (main,):
         doc, version, text = await store_offer_file(db, cand.tenant_id, att["filename"], att["data"], cand.company_name,
-                                                    category_id=project.category_id if project else None, source="email")
+                                                    category_id=cat_id, source="email")
         full_text = f"{text}\n\n--- Begleittext der E-Mail ---\n{m.get('body_text') or ''}" if text else (m.get("body_text") or "")
         offer, review = await intake_offer(db, rfq, cand, full_text, actor="agent", doc=doc, channel="E-Mail",
-                                           reply_to=m.get("message_id"))
-        results.append({"offer_id": str(offer.id), "version": offer.version, "review": review.status, "document_id": str(doc.id)})
+                                           reply_to=m.get("message_id"), attachments=extra_docs)
+        results.append({"offer_id": str(offer.id), "version": offer.version, "review": review.status, "document_id": str(doc.id),
+                        "attachments": [str(a["doc"].id) for a in extra_docs]})
     await db.commit()
     return {"matched": True, "kind": "offer", "offers": results}

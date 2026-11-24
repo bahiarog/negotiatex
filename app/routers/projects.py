@@ -950,6 +950,16 @@ async def get_project(project_id: str, access: Access = Depends(get_access), db:
     }
 
 
+def _attachment_ids(o) -> list:
+    out = []
+    for x in (o.raw_extracted_json or {}).get("attachment_document_ids") or []:
+        try:
+            out.append(uuid.UUID(str(x)))
+        except ValueError:
+            continue
+    return out
+
+
 async def _documents(db: AsyncSession, p: Project) -> list[dict]:
     ids, labels = [], {}
     for did, label in ((p.briefing_document_id, "Briefing"), (p.offer_document_id, "Ihr vorhandenes Angebot")):
@@ -967,10 +977,15 @@ async def _documents(db: AsyncSession, p: Project) -> list[dict]:
                 o = next(x for x in offers if x.id == oid)
                 ids.append(d.id)
                 labels[d.id] = f"Angebot {cand_names.get(o.supplier_candidate_id, '')}"
+        for o in offers:  # weitere Anhaenge (z. B. AGB), NX-034
+            for did in _attachment_ids(o):
+                if did not in labels:
+                    ids.append(did)
+                    labels[did] = f"Anhang zum Angebot {cand_names.get(o.supplier_candidate_id, '')}"
     out = []
     for did in ids:
         d = (await db.execute(select(MDCDocument).where(MDCDocument.id == did))).scalar_one_or_none()
-        if not d:
+        if not d or d.tenant_id != p.tenant_id:  # nur Belege desselben Mandanten
             continue
         v = (await db.execute(select(MDCDocumentVersion).where(MDCDocumentVersion.document_id == d.id)
                               .order_by(desc(MDCDocumentVersion.version_number)))).scalars().first()
@@ -1273,6 +1288,11 @@ async def rerun_review(project_id: str, offer_id: str, access: Access = Depends(
     _require_operator(access)
     p = await _get_project(project_id, access, db)
     offer = await _get_offer(db, p, offer_id)
+    # Kostenbremse: hoechstens eine erneute Pruefung je Angebot alle 2 Minuten (bis 4 KI-Aufrufe je Pruefung)
+    last = (await db.execute(select(OfferReview.created_at).where(OfferReview.offer_id == offer.id)
+                             .order_by(desc(OfferReview.created_at)).limit(1))).scalar()
+    if last and datetime.utcnow() - last < timedelta(minutes=2):
+        raise HTTPException(429, "Dieses Angebot wurde gerade geprüft. Bitte in zwei Minuten erneut versuchen.")
     from services.offer_intake import documents_for_offers
     doc = (await documents_for_offers(db, [offer])).get(offer.id)
     text = ""
@@ -1283,7 +1303,9 @@ async def rerun_review(project_id: str, offer_id: str, access: Access = Depends(
     else:
         prev = (await db.execute(select(OfferReview).where(OfferReview.offer_id == offer.id).order_by(desc(OfferReview.created_at)))).scalars().first()
         text = prev.offer_text_excerpt if prev else ""
-    rv = await run_review(db, offer, p, text, actor=str(access.user.id))
+    from services.offer_intake import attachments_for_offer, compose_review_text
+    text, notes = compose_review_text(text, await attachments_for_offer(db, offer))
+    rv = await run_review(db, offer, p, text, actor=str(access.user.id), extra_findings=notes)
     add_extraction_notes(rv, offer.raw_extracted_json)  # Preis- und Options-Hinweise bleiben erhalten
     await db.commit()
     return {"status": rv.status, "findings": rv.findings_json}
@@ -1482,11 +1504,12 @@ async def _hold_project_documents(db: AsyncSession, p: Project, uid: str) -> int
     for rfq in await _project_rfqs(db, p):
         offers += (await db.execute(select(RFQOffer).where(RFQOffer.rfq_id == rfq.id))).scalars().all()
     ids |= {d.id for d in (await documents_for_offers(db, offers)).values()}
+    ids |= {did for o in offers for did in _attachment_ids(o)}  # Anhaenge wie AGB (NX-034)
     reason = f"Beleg des beauftragten Vorhabens „{(p.title or '')[:120]}“ (Aufbewahrungspflicht)"
     held = 0
     for did in ids:
         doc = (await db.execute(select(MDCDocument).where(MDCDocument.id == did))).scalar_one_or_none()
-        if doc is None or doc.legal_hold:
+        if doc is None or doc.legal_hold or doc.tenant_id != p.tenant_id:
             continue
         doc.legal_hold, doc.legal_hold_reason = True, reason
         await audit(db, p.tenant_id, uid, "legal_hold_set", "document", doc.id, reason=reason)
