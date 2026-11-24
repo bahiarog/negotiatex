@@ -8,6 +8,8 @@
 -- Loeschungen ueber Fremdschluessel-Kaskaden (z. B. Mandant geloescht) laufen mit den Rechten des
 -- Tabelleneigentuemers und sind davon nicht betroffen.
 -- requisition_approvals bleibt aenderbar: dort ist die Zeile selbst der Arbeitsschritt (Status wird gesetzt).
+-- ACHTUNG: rls_tenant_isolation.sql (GRANT ... ON ALL TABLES) und projects_journey.sql oeffnen diese Rechte
+-- wieder. Nach jedem erneuten Lauf jener Dateien diese Datei ebenfalls erneut ausfuehren.
 
 DO $$
 DECLARE t text;

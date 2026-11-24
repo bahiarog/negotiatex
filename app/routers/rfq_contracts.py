@@ -497,7 +497,10 @@ async def submit_offer(rfq_id: str, payload: OfferCreate, user=Depends(get_curre
         other_costs=payload.other_costs or Decimal("0"), currency=payload.currency, delivery_date=payload.delivery_date,
         payment_terms=payload.payment_terms, offer_validity_until=payload.offer_validity_until,
         scope_note=payload.scope_note, spec_confirmed=payload.spec_confirmed,
-        raw_extracted_json=payload.raw_extracted_json, created_by=str(user.id),
+        # Verknuepfungen zu Belegen setzt nur das System, nie der Client (NX-033).
+        raw_extracted_json={k: v for k, v in (payload.raw_extracted_json or {}).items()
+                            if k not in ("mdc_document_id", "attachment_document_ids")} or None,
+        created_by=str(user.id),
     )
     await _apply_comparability(offer, rfq)
     db.add(offer)
@@ -816,6 +819,12 @@ async def award_rfq(rfq_id: str, payload: AwardPayload, user=Depends(get_current
     rfq.awarded_by = str(user.id)
     rfq.awarded_at = datetime.utcnow()
     rfq.awarded_case_id = case.id
+    # NX-033: auch dieser Zuschlagsweg stellt die Belege des zugehoerigen Vorhabens unter Aufbewahrungspflicht.
+    from services.offer_intake import project_for_rfq
+    from routers.projects import _hold_project_documents
+    project = await project_for_rfq(db, rfq)
+    if project is not None:
+        await _hold_project_documents(db, project, str(user.id))
     await db.commit()
     await db.refresh(strategy)
 

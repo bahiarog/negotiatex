@@ -315,9 +315,10 @@ async def documents_for_offers(db: AsyncSession, offers) -> dict:
             linked[o.id] = None
     wanted = {v for v in linked.values() if v}
     if wanted:
+        tenant_of = {o.id: o.tenant_id for o in offers}
         docs = {d.id: d for d in (await db.execute(select(MDCDocument).where(MDCDocument.id.in_(wanted)))).scalars().all()}
         for oid, did in linked.items():
-            if did in docs:
+            if did in docs and docs[did].tenant_id == tenant_of.get(oid):  # nur Belege desselben Mandanten
                 out[oid] = docs[did]
     return out
 

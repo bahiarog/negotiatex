@@ -56,8 +56,12 @@ async def main():
         tenant = (await c.execute(text("SELECT tenant_id FROM project_events ORDER BY created_at DESC LIMIT 1"))).scalar()
         ev = (await c.execute(text("SELECT id FROM project_events WHERE tenant_id = :t LIMIT 1"), {"t": tenant})).scalar()
         appr = {}
-        for t in ("outreach_approvals", "rfq_approvals", "negotiation_approvals"):
+        for t in ("outreach_approvals", "rfq_approvals", "negotiation_approvals", "contract_approvals"):
             appr[t] = (await c.execute(text(f"SELECT a.id FROM {t} a LIMIT 1"))).scalar()
+        other = (await c.execute(text("SELECT id FROM tenants WHERE id <> :t LIMIT 1"), {"t": tenant})).scalar()
+        rls = (await c.execute(text("SELECT relrowsecurity AND relforcerowsecurity FROM pg_class "
+                                    "WHERE oid = 'public.action_rejections'::regclass"))).scalar()
+    check("action_rejections: RLS aktiv und erzwungen", bool(rls))
     tenant = str(tenant)
     print(f"Mandant {tenant[:8]}…, Ereignis {str(ev)[:8]}…")
 
@@ -77,24 +81,26 @@ async def main():
     await expect_denied("action_rejections: UPDATE verweigert", tenant, "UPDATE action_rejections SET reason = reason")
     await expect_denied("action_rejections: DELETE verweigert", tenant, "DELETE FROM action_rejections")
 
-    # Mandantentrennung: Eintrag fuer fremden Mandanten anlegen -> RLS verweigert
-    await expect_denied_rls(tenant)
+    # Mandantentrennung: Eintrag fuer einen ANDEREN, existierenden Mandanten anlegen -> nur RLS darf verweigern
+    if other is None:
+        print("HINWEIS kein zweiter Mandant vorhanden -- RLS-Gegenprobe nur ueber pg_class (oben)")
+    else:
+        await expect_denied_rls(tenant, str(other))
 
     print(f"\n{FAILS} FEHLER" if FAILS else "\nALLE PRUEFUNGEN BESTANDEN")
     return 1 if FAILS else 0
 
 
-async def expect_denied_rls(tenant):
+async def expect_denied_rls(tenant, other):
     async with engine.connect() as c:
         tx = await c.begin()
         try:
             await c.execute(text("SELECT set_config('app.tenant_id', :t, false)"), {"t": tenant})
             await c.execute(text("INSERT INTO action_rejections (id, tenant_id, kind, action_id, rejected_by, created_at) "
-                                 "VALUES (gen_random_uuid(), gen_random_uuid(), 'rfq', 'dryrun', 'dryrun', now())"))
+                                 "VALUES (gen_random_uuid(), :o, 'rfq', 'dryrun', 'dryrun', now())"), {"o": other})
             check("action_rejections: fremder Mandant verweigert (RLS)", False, "wurde angelegt")
         except Exception as e:
-            msg = str(e).lower()
-            check("action_rejections: fremder Mandant verweigert (RLS)", "row-level security" in msg or "foreign key" in msg,
+            check("action_rejections: fremder Mandant verweigert (RLS)", "row-level security" in str(e).lower(),
                   str(e).splitlines()[0][:120])
         finally:
             await tx.rollback()
