@@ -6,3 +6,10 @@ __pycache__/
 uploads/
 *.log
 .DS_Store
+
+# Browser-Tests (NX-004): lokale Konfiguration, Abhaengigkeiten, Ergebnisse
+ops/ui_tests.local.json
+ops/ui-results/
+tests/ui/node_modules/
+tests/ui/out/
+tests/ui/package-lock.json

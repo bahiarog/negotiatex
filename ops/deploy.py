@@ -12,6 +12,9 @@ Regeln:
 - Danach: Backend neu bauen (nur wenn Backend-Dateien betroffen), nginx pruefen und neu laden,
   Health-Checks fuer NegotiateX und die Nachbar-Domains. Schlaegt ein Check fehl, wird
   automatisch auf die Sicherung zurueckgesetzt.
+- Browser-Tests (ops/ui_tests.py, NX-004): vor dem Deploy als Ausgangslage -- schlagen sie fehl, wird
+  nicht deployt. Nach dem Deploy erneut -- schlagen sie dann fehl, wird zurueckgesetzt.
+  "--ohne-ui" ueberspringt beides (nur mit Begruendung, z. B. wenn die Tests selbst kaputt sind).
 - Zugang per SSH-Schluessel ~/.ssh/negotiatex_deploy (kein Passwort).
 """
 import hashlib
@@ -23,6 +26,8 @@ import sys
 import tarfile
 import time
 from datetime import datetime, timezone
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # ops/ui_tests importierbar
 
 HOST = "root@187.124.10.46"
 KEY = os.path.expanduser("~/.ssh/negotiatex_deploy")
@@ -130,6 +135,16 @@ def main():
         print("\nPlan only. Ausfuehren mit: python ops/deploy.py --apply  (nur nach Freigabe durch Rafael)")
         return
 
+    ui = "--ohne-ui" not in sys.argv
+    if ui:
+        from ui_tests import run as ui_run
+        print("\n0. Browser-Tests vor dem Deploy (Ausgangslage)")
+        if not ui_run(label="vor-deploy"):
+            raise SystemExit("Browser-Tests schlagen schon VOR dem Deploy fehl -- nicht deployt. "
+                             "Erst klaeren (Protokoll oben); nur begruendet mit --ohne-ui deployen.")
+    else:
+        print("\nBrowser-Tests uebersprungen (--ohne-ui).")
+
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     bdir = f"/root/negotiatex-deploy/{stamp}"
     backend = any(not f.startswith("landing/") for f in changed)
@@ -165,6 +180,13 @@ done""", stdin=(paths + "\n").encode())
     ok = reload_nginx() and ok
     print("5. Pruefungen")
     ok = checks() and ok
+    if ok and ui:
+        print("6. Browser-Tests nach dem Deploy")
+        try:
+            ok = ui_run(label="nach-deploy")
+        except (SystemExit, Exception) as e:  # auch Abbruch der Tests fuehrt zum Ruecksprung
+            print(f"  Browser-Tests abgebrochen: {e}")
+            ok = False
 
     if ok:
         remote(f'echo "{head} {stamp}" > {REMOTE_APP}/DEPLOYED')
