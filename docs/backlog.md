@@ -10,7 +10,7 @@ Aufwand: S = bis 2 h, M = halber bis ganzer Tag, L = mehrere Tage.
 
 ## Jetzt
 
-### NX-001 Pauschalangebote für Stückmengen richtig vergleichen · `QA` (FREIGABE für a12630b, 24.11.2026; Deploy offen) · M
+### NX-001 Pauschalangebote für Stückmengen richtig vergleichen · `erledigt` (deployt 24.11.2026, e6c6213) · M
 **Problem:** Beide Angebote für „20 höhenverstellbare Schreibtische“ wurden als „Menge 1 (Pauschale)“ erfasst. Der Vergleich mit der erwarteten Menge 20 markiert sie deshalb als „eingeschränkt vergleichbar“ (`services/rfq_classifier.py:_comparability`), und die Auswertung nennt kein günstigstes Angebot – obwohl beide denselben Umfang anbieten.
 **Abnahme:**
 - Ein Gesamtpreis für die angefragte Menge wird als vergleichbar erkannt, wenn die Menge im Angebotstext belegt ist (Zitat).
@@ -68,3 +68,4 @@ Aufwand: S = bis 2 h, M = halber bis ganzer Tag, L = mehrere Tage.
 | – | Registrierung nur für Kundenkonten, eigene Seite | `8d41d21` |
 | – | Angebote aus Antworten auf die Erstanfrage, Eingangsbestätigung, Auswertung an Kunde und Team, Team-Mails, Scout-Autostart | `2626b8d` |
 | – | Deploy-Skript mit Sicherung und Rücksprung, Tagesbericht, kein CI-Deploy | `80c7395` |
+| NX-001 | Pauschalangebote für Stückmengen vergleichen, optionale Positionen als Hinweis | `a12630b` |
