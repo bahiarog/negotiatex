@@ -147,12 +147,14 @@ def verify_priced_quantity(extracted: dict, text: str) -> Optional[dict]:
 # Einheiten direkt hinter der Zahl, die KEINE Stueckmenge bedeuten (QA NX-001: "Lieferung in 20 Werktagen").
 # Ganze Woerter mit Pluralformen, damit "20 Tagungsstuehle" nicht als "20 Tag..." verworfen wird (NX-005).
 _NOT_A_QUANTITY_RE = (r"(werktag|arbeitstag|kalendertag|tag|woche|monat|jahr|stunde|minute|sekunde)(e|en|n|s)?"
-                      r"|std\.?|min\.?|prozent|uhr|km|kg|cm|mm|m|m²|m2|qm|meter|liter|l|g|t")
+                      r"|std\.?|min\.?|tg\.?|prozent|uhr|km|kg|cm|mm|m|m²|m2|qm|meter|lfm|liter|l|g|t"
+                      r"|euro|eur|€|teillieferung(en)?|raten?")
 # Woerter direkt vor der Zahl, nach denen sie eine Schwelle oder Grenze ist ("ab 20 Stueck Rabatt").
-_THRESHOLD_BEFORE_RE = r"(^|[^a-zäöüß])(ab|mindestens|mind\.|min\.|bis|bis zu|höchstens|hoechstens|max\.|maximal)$"
+_THRESHOLD_BEFORE_RE = (r"(^|[^a-zäöüß])(ab|mindestens|mind\.|min\.|bis|bis zu|höchstens|hoechstens|max\.|maximal"
+                        r"|mehr als|weniger als|mindestabnahme|mindestmenge:?|mindestbestellmenge:?|kw|seite|raum"
+                        r"|art\.?-nr\.?|artikel-nr\.?|anfrage-nr\.?)$")
 # Beschriftete Mengenangabe ("Menge: 20").
 _QTY_LABEL_RE = r"(^|[^a-zäöüß])(menge|anzahl|stückzahl|stueckzahl|stück|stueck)\s*:?$"
-_OFFER_VERBS = ("bieten", "biete", "liefern", "liefere", "offerieren", "unser angebot")  # nicht "angebot": "Angebotsanfrage"
 
 
 def _is_quantity_quote(quote: str, qty: Decimal) -> bool:
@@ -164,10 +166,20 @@ def _is_quantity_quote(quote: str, qty: Decimal) -> bool:
     import re
     q = " ".join(str(quote or "").split())
     low = q.lower()
+    if any(w in low for w in ("rabatt", "staffel", "optional", "zubuchbar", "auf wunsch")):
+        return False  # Menge in einer Rabatt-/Staffel-/Optionsangabe ist nicht die angebotene Menge
+    if "angefragt" in low:
+        return False
+    if "anfrag" in low:
+        # Bezug auf die Anfrage nur in der engen Form "Gemaess Ihrer Anfrage bieten wir (Ihnen) 20 ..." und nur
+        # einmal im Zitat; sonst ist es meist die zitierte Anfragemenge ("statt der angefragten 20", QA NX-005).
+        if low.count("anfrag") != 1 or not re.search(
+                rf"(gemäß|gemaess|laut|entsprechend) ihrer anfrage,? (bieten|liefern|offerieren) wir (ihnen )?"
+                rf"{int(qty)}(?![\d]|[.,]\d)", low):
+            return False
     for m in re.finditer(rf"(?<![\d.,]){int(qty)}(?![\d]|[.,]\d)", q):
         before = low[:m.start()].rstrip()
         after = low[m.end():].lstrip()
-        clause = re.split(r"[.;:!?]\s", before)[-1]
         if before.endswith(("pos.", "pos", "position", "nr.", "nr")):
             continue
         if re.search(_THRESHOLD_BEFORE_RE, before):
@@ -176,8 +188,6 @@ def _is_quantity_quote(quote: str, qty: Decimal) -> bool:
             continue  # Massangabe "160 x 20" / "20 x 20 cm"
         if re.match(rf"({_NOT_A_QUANTITY_RE})(?![a-zäöüß0-9])", after):
             continue
-        if ("anfrage" in clause or "angefragt" in clause) and not any(v in clause for v in _OFFER_VERBS):
-            continue  # Menge der Anfrage, nicht des Angebots
         if re.search(_QTY_LABEL_RE, before) and (not after or not after[0].isdigit()):
             return True  # "Menge: 20" / "Stück: 20"
         if len(q) < 12 or not after or not (after[0].isalpha() or after[0] in "x×"):

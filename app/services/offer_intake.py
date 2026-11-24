@@ -68,14 +68,28 @@ def _in_text(v: Optional[Decimal], text: str) -> bool:
     return bool(digits) and digits in re.sub(r"\D", "", text or "")
 
 
+def _price_dec(v, text: str, name: str, notes: list) -> Optional[Decimal]:
+    """Preis aus der KI-Antwort. Ein Text wie "13.832" ist mehrdeutig (13.832 € oder 13,832 €): er gilt nur,
+    wenn der deutsche Betrag im Dokument steht ("13.832,00" / "13.832 EUR"); sonst noch nicht ermittelt (NX-005)."""
+    import re
+    if isinstance(v, str):
+        s = v.strip().replace("EUR", "").replace("€", "").strip()
+        if re.fullmatch(r"-?[1-9]\d{0,2}(\.\d{3})+", s):
+            if re.search(rf"(?<![\d.,]){re.escape(s)}(,\d{{1,2}}|\s*(€|eur)|(?![\d.,]))", text or "", re.IGNORECASE):
+                return _dec_de(s)
+            notes.append(f"{name} „{s}“ nicht eindeutig lesbar -- noch nicht ermittelt.")
+            return None
+    return _dec(v)
+
+
 def reconcile_prices(extracted: dict, text: str) -> dict:
     """Bringt Einzelpreis, Menge, Zusatzkosten und ausdruecklich genannten
     Gesamtpreis in Einklang. Massgeblich ist im Zweifel der im Dokument
     stehende Gesamtpreis; Betraege ohne Beleg im Text werden verworfen."""
-    up, qty = _dec(extracted.get("unit_price")), _dec(extracted.get("quantity"))
-    fr, oc = _dec(extracted.get("freight_cost")), _dec(extracted.get("other_costs"))
-    tp = _dec(extracted.get("total_price"))
     notes = []
+    up, qty = _price_dec(extracted.get("unit_price"), text, "Einzelpreis", notes), _dec(extracted.get("quantity"))
+    fr, oc = _dec(extracted.get("freight_cost")), _dec(extracted.get("other_costs"))
+    tp = _price_dec(extracted.get("total_price"), text, "Gesamtpreis", notes)
     for name, val in (("Gesamtpreis", tp), ("Einzelpreis", up)):
         if val is not None and not _in_text(val, text):
             notes.append(f"{name} {val} nicht im Dokument belegt -- verworfen.")
