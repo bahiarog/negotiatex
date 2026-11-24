@@ -52,14 +52,14 @@ Abgleich des Versprechens „kauft ein, prüft AGB und Konditionen, verhandelt, 
 
 | ID | Thema | Status | Aufwand | Risiko |
 |---|---|---|---|---|
-| NX-030 | Produktivbetrieb statt festem „Testlauf, keine Beauftragung“: Einstellung je Mandant/Vorhaben, Standard Test, Umschalten nur Admin und protokolliert | vorgeschlagen | M | hoch (vorher Rechtsrahmen/Haftung) |
-| NX-031 | Auftragsdokument aus dem Zuschlag: PDF mit Zahlen nur aus der beauftragten Angebotsversion, im Data Center mit SHA-256, Versand nur nach hash-gebundener Freigabe, Rückbestätigung zuordnen | vorgeschlagen | L | hoch (Vorlage von Legal freigeben) |
-| NX-032 | Prüfpaket je Vorhaben: ZIP mit Zeitstrahl, Freigaben/Ablehnungen, Mails im Original, Dokumentversionen, Prüfberichten, Ergebnis und manifest.json mit Hashes; Mandantentrennung getestet | vorgeschlagen | L | mittel |
-| NX-033 | Unveränderlichkeit: kein UPDATE/DELETE auf Freigaben und Zeitstrahl für die App-Rolle, Ablehnungen mit Akteur, Aufbewahrungssperre der Belege ab Zuschlag, Dubletten verknüpfen statt umhängen | vorgeschlagen | M | mittel |
-| NX-034 | AGB-Prüfung belastbar: alle Anhänge, sichtbarer Status „nicht geprüft“ bei Fehlschlag/Kürzung, Knopf „erneut prüfen“ | vorgeschlagen | M | mittel |
-| NX-035 | Stammdaten nach Zuschlag in den Lieferantenstamm übernehmen; Bankdaten-Prüfung im Vier-Augen-Prinzip mit Protokoll | vorgeschlagen | M | mittel |
-| NX-036 | Belegte Einsparungen: Verhandlungsergebnis und Rechnungsbetrag nur mit Beleg oder als „manuell“ gekennzeichnet; CSV-Export | vorgeschlagen | M | niedrig |
-| NX-037 | End-to-End-Abnahmetest je Versprechensteil (Mail-Stub, zweiter Mandant als Gegenprobe, Rollback), täglich | vorgeschlagen | M | niedrig |
+| NX-030 | Produktivbetrieb statt festem „Testlauf, keine Beauftragung“: Einstellung je Mandant/Vorhaben, Standard Test, Umschalten nur Admin und protokolliert | freigegeben (Rafael, 24.11.2026) | M | hoch (vorher Rechtsrahmen/Haftung) |
+| NX-031 | Auftragsdokument aus dem Zuschlag: PDF mit Zahlen nur aus der beauftragten Angebotsversion, im Data Center mit SHA-256, Versand nur nach hash-gebundener Freigabe, Rückbestätigung zuordnen | freigegeben (Rafael, 24.11.2026) | L | hoch (Vorlage von Legal freigeben) |
+| NX-032 | Prüfpaket je Vorhaben: ZIP mit Zeitstrahl, Freigaben/Ablehnungen, Mails im Original, Dokumentversionen, Prüfberichten, Ergebnis und manifest.json mit Hashes; Mandantentrennung getestet | freigegeben (Rafael, 24.11.2026) | L | mittel |
+| NX-033 | Unveränderlichkeit: kein UPDATE/DELETE auf Freigaben und Zeitstrahl für die App-Rolle, Ablehnungen mit Akteur, Aufbewahrungssperre der Belege ab Zuschlag, Dubletten verknüpfen statt umhängen | freigegeben (Rafael, 24.11.2026) | M | mittel |
+| NX-034 | AGB-Prüfung belastbar: alle Anhänge, sichtbarer Status „nicht geprüft“ bei Fehlschlag/Kürzung, Knopf „erneut prüfen“ | freigegeben (Rafael, 24.11.2026) | M | mittel |
+| NX-035 | Stammdaten nach Zuschlag in den Lieferantenstamm übernehmen; Bankdaten-Prüfung im Vier-Augen-Prinzip mit Protokoll | freigegeben (Rafael, 24.11.2026) | M | mittel |
+| NX-036 | Belegte Einsparungen: Verhandlungsergebnis und Rechnungsbetrag nur mit Beleg oder als „manuell“ gekennzeichnet; CSV-Export | freigegeben (Rafael, 24.11.2026) | M | niedrig |
+| NX-037 | End-to-End-Abnahmetest je Versprechensteil (Mail-Stub, zweiter Mandant als Gegenprobe, Rollback), täglich | freigegeben (Rafael, 24.11.2026) | M | niedrig |
 
 ## Fahrplan (Analyse 17.10.2026)
 
