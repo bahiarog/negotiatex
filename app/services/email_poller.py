@@ -134,6 +134,20 @@ async def _handle_bounce(db, m: dict) -> dict:
     return {"matched": bool(hit), "kind": "bounce", "failed": sorted(failed)}
 
 
+def _is_own_system_mail(m: dict) -> bool:
+    """NX-002: Mail, die NegotiateX selbst verschickt hat und die im eigenen Posteingang landet (z. B.
+    Team-Benachrichtigung an ein Konto mit der Adresse des Systempostfachs). Beide Merkmale muessen
+    zutreffen: Absender = eigene Versandadresse UND Message-ID aus der eigenen Domain (auch die vom
+    Strato-Relay umgeschriebene ID endet auf @<eigene Domain>). Antworten Dritter tragen deren Absender."""
+    from services.email_sender import SMTP_FROM, MESSAGE_ID_DOMAIN
+    own_addr = (SMTP_FROM or "").strip().lower()
+    sender = (m.get("from_addr") or "").strip().lower()
+    mid = (m.get("message_id") or "").strip().strip("<>").lower()
+    if not own_addr or sender != own_addr or "@" not in mid:
+        return False
+    return mid.rsplit("@", 1)[1] == (MESSAGE_ID_DOMAIN or "").strip().lower()
+
+
 def _describe_result(result: dict, m: dict) -> str:
     sender = m.get("from_addr") or "unbekannt"
     if not result or not result.get("matched"):
@@ -281,6 +295,12 @@ async def _poll_inbox():
 
     if not messages:
         return
+
+    own = [m for m in messages if _is_own_system_mail(m)]
+    if own:
+        # Nur zaehlen: kein Zuordnungsversuch, kein Eintrag im Agentenprotokoll (NX-002).
+        logger.info(f"poll_inbox_job: {len(own)} eigene Systemmail(s) im Posteingang uebersprungen.")
+        messages = [m for m in messages if not _is_own_system_mail(m)]
 
     for m in messages:
         # Eigene Session je Nachricht: ein Fehler (z.B. abgebrochene
