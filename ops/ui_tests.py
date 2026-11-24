@@ -13,8 +13,9 @@ Ablauf:
 4. Die Tokens werden danach geloescht.
 
 Die Adressen der Testkonten stehen NICHT im Repository, sondern in ops/ui_tests.local.json:
-    {"kunde": "...", "experte": "...", "admin": "...", "angebot_pdf": "C:/pfad/zum/test-angebot.pdf"}
-"angebot_pdf" wird nur fuer --mit-anlage gebraucht.
+    {"kunde": "...", "experte": "...", "admin": "...",
+     "angebot_pdf": "C:/pfad/zum/test-angebot.pdf", "angebot_anbieter": "Name des Anbieters im PDF"}
+"angebot_pdf" und "angebot_anbieter" werden nur fuer --mit-anlage gebraucht.
 
 Exit-Code 0 = alle Tests bestanden. ops/deploy.py ruft dieses Skript vor und nach jedem Deploy auf.
 """
@@ -97,8 +98,12 @@ def ensure_playwright():
         raise SystemExit("Node.js/npm nicht gefunden -- bitte Node.js installieren.")
     if not os.path.isdir(os.path.join(UI_DIR, "node_modules", "playwright")):
         print("Installiere Playwright fuer tests/ui ...")
-        subprocess.run([npm, "install", "--no-audit", "--no-fund"], cwd=UI_DIR, check=True)
-        subprocess.run([shutil.which("npx"), "playwright", "install", "chromium"], cwd=UI_DIR, check=True)
+        subprocess.run([npm, "ci" if os.path.exists(os.path.join(UI_DIR, "package-lock.json")) else "install",
+                        "--no-audit", "--no-fund"], cwd=UI_DIR, check=True)
+        npx = shutil.which("npx")
+        if not npx:
+            raise SystemExit("npx nicht gefunden -- bitte Node.js vollstaendig installieren.")
+        subprocess.run([npx, "playwright", "install", "chromium"], cwd=UI_DIR, check=True)
 
 
 def run(write: bool = False, label: str = "") -> bool:
@@ -118,18 +123,35 @@ def run(write: bool = False, label: str = "") -> bool:
         env = dict(os.environ, NX_UI_TOKENS=tdir, NX_UI_OUT=os.path.join(RESULTS, stamp))
         if cfg.get("angebot_pdf"):
             env["NX_UI_ANGEBOT_PDF"] = cfg["angebot_pdf"]
+        if cfg.get("angebot_anbieter"):
+            env["NX_UI_ANGEBOT_ANBIETER"] = cfg["angebot_anbieter"]
         if cfg.get("base"):
             env["NX_UI_BASE"] = cfg["base"]
         args = [shutil.which("node"), "run_all.js"] + (["--mit-anlage"] if write else [])
+        start = datetime.now()
+        code = None
         with open(log_path, "w", encoding="utf-8") as log:
-            log.write(f"Browser-Tests {datetime.now():%d.%m.%Y %H:%M:%S}{' (' + label + ')' if label else ''}\n")
+            log.write(f"Browser-Tests {start:%d.%m.%Y %H:%M:%S}{' (' + label + ')' if label else ''}\n")
             proc = subprocess.Popen(args, cwd=UI_DIR, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            for raw in proc.stdout:
-                line = raw.decode("utf-8", errors="replace")
-                sys.stdout.write("  " + line)
-                log.write(line)
-            code = proc.wait()
-            log.write(f"\nExit-Code {code}\n")
+            try:
+                for raw in proc.stdout:
+                    log.write(raw.decode("utf-8", errors="replace"))
+                    # Bytes direkt ausgeben: ohne Konsolenfenster (Umleitung, cp1252) wuerden Zeichen wie
+                    # "→" sonst einen UnicodeEncodeError ausloesen (QA NX-004).
+                    out = getattr(sys.stdout, "buffer", None)
+                    if out is not None:
+                        out.write(b"  " + raw)
+                        out.flush()
+                    else:
+                        sys.stdout.write("  " + raw.decode("utf-8", errors="replace"))
+                code = proc.wait()
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    proc.wait()
+                end = datetime.now()
+                log.write(f"\nEnde {end:%d.%m.%Y %H:%M:%S}, Dauer {int((end - start).total_seconds())} s, "
+                          f"Exit-Code {code if code is not None else 'Abbruch'}\n")
     finally:
         shutil.rmtree(tdir, ignore_errors=True)
     print(f"Protokoll: {log_path}")

@@ -43,6 +43,7 @@ async function main() {
     await p.click('.crumbs a'); await p.waitForTimeout(1200);
     ok(p.url().endsWith(listPath), 'Rückweg erhält Filter: ' + p.url());
     if (waiting) ok((await p.getAttribute('[data-st="waiting_for_you"]', 'aria-pressed')) === 'true', 'Filter-Schaltfläche weiterhin aktiv');
+    else console.log('HINWEIS Filterprüfung übersprungen: kein Vorhaben des Testkunden wartet auf ihn');
     await p.goBack(); await p.waitForTimeout(1000);
     ok(p.url().endsWith('/vorhaben/' + PID), 'Browser-Zurück funktioniert ebenfalls');
 
@@ -50,6 +51,7 @@ async function main() {
     ok(!(await p.$('.tabs a[href$="/bearbeitung"]')), 'Kein Bearbeitungs-Tab für Kunden');
     await visit('/entscheidungen', 'k-entscheidungen-global');
     await visit('/einsparungen', 'k-einsparungen');
+    ok((await p.content()).includes('noch nicht ermittelt'), 'Fehlende Ergebnisse als „noch nicht ermittelt“');
     await visit('/hilfe', 'k-hilfe');
 
     // Wizard: Eingabe, Reload -> wiederhergestellt; Feldfehler. Es wird nichts abgeschickt.

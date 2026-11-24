@@ -42,6 +42,9 @@ async function main() {
     await p.waitForURL(/\/entscheidungen$/, { timeout: 120000 }); await p.waitForTimeout(1500);
     const drafts = await p.$$eval('.draft', d => d.map(x => x.innerText.split('\n').slice(0, 2).join(' ')));
     ok(drafts.length >= 1, `${drafts.length} Anfrage-Entwürfe zur Freigabe`);
+    const own = process.env.NX_UI_ANGEBOT_ANBIETER;  // Anbieter des Test-PDFs (angebot_anbieter)
+    if (own) ok(!drafts.some(d => d.toLowerCase().includes(own.toLowerCase())), `Anbieter des vorliegenden Angebots (${own}) wird nicht angefragt`);
+    else console.log('HINWEIS angebot_anbieter nicht konfiguriert -- Prüfung „Anbieter nicht erneut anfragen“ übersprungen');
     await p.goto(B + `/vorhaben/${pid}/angebote`, { waitUntil: 'networkidle' }); await p.waitForTimeout(800);
     ok((await p.content()).includes('Ihr vorliegendes Angebot'), 'Angebote-Ansicht zeigt Referenzpreis');
     ok(errs.length === 0, 'keine JS-Fehler ' + (errs.length ? JSON.stringify(errs) : ''));

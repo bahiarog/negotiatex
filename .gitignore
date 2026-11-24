@@ -1,4 +1,4 @@
-.env
+﻿.env
 __pycache__/
 *.pyc
 *.pyo
@@ -12,4 +12,3 @@ ops/ui_tests.local.json
 ops/ui-results/
 tests/ui/node_modules/
 tests/ui/out/
-tests/ui/package-lock.json

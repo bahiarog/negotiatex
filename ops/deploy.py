@@ -184,8 +184,8 @@ done""", stdin=(paths + "\n").encode())
         print("6. Browser-Tests nach dem Deploy")
         try:
             ok = ui_run(label="nach-deploy")
-        except (SystemExit, Exception) as e:  # auch Abbruch der Tests fuehrt zum Ruecksprung
-            print(f"  Browser-Tests abgebrochen: {e}")
+        except BaseException as e:  # auch Abbruch (Fehler, Strg+C) fuehrt zum Ruecksprung (QA NX-004)
+            print(f"  Browser-Tests abgebrochen: {type(e).__name__} {e}")
             ok = False
 
     if ok:
