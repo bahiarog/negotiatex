@@ -139,6 +139,7 @@ def fetch_unseen_messages() -> list[dict]:
                 "body_text": _get_body_text(msg),
                 "raw_source": raw_bytes.decode("utf-8", errors="replace")[:RAW_SOURCE_LIMIT],
                 "attachments": _get_attachments(msg),
+                "system_header": (msg.get("X-NegotiateX-System") or "").strip(),
             })
             # Als gelesen markieren -> verhindert, dass derselbe Poll-Zyklus
             # (oder ein spaeterer) dieselbe UNSEEN-Nachricht erneut liefert.

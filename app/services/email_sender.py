@@ -26,6 +26,8 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 SMTP_FROM = os.getenv("SMTP_FROM", "noreply@negotiatex.ai")
 MESSAGE_ID_DOMAIN = (SMTP_FROM.split("@", 1)[1] if "@" in SMTP_FROM else "negotiatex.ai")
+# Kennzeichnet von NegotiateX selbst erzeugte Mails. Webmail und Mailprogramme setzen ihn nie.
+SYSTEM_HEADER = "X-NegotiateX-System"
 
 
 def new_message_id() -> str:
@@ -63,6 +65,7 @@ def send_negotiation_email(to_email: str, subject: str, body: str, from_name: st
         msg["From"] = f"{from_name} <{SMTP_FROM}>"
         msg["To"] = to_email
         msg["Message-ID"] = message_id
+        msg[SYSTEM_HEADER] = "1"  # NX-002: eigene Mails im eigenen Posteingang erkennen
         if in_reply_to:
             msg["In-Reply-To"] = in_reply_to
             msg["References"] = references or in_reply_to

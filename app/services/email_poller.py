@@ -134,6 +134,25 @@ async def _handle_bounce(db, m: dict) -> dict:
     return {"matched": bool(hit), "kind": "bounce", "failed": sorted(failed)}
 
 
+def _is_own_system_mail(m: dict) -> bool:
+    """NX-002: Mail, die NegotiateX selbst verschickt hat und die im eigenen Posteingang landet (z. B.
+    Team-Benachrichtigung an ein Konto mit der Adresse des Systempostfachs). Alle Merkmale muessen
+    zutreffen: Kennzeichnungs-Header von email_sender, Absender = eigene Versandadresse, Message-ID aus
+    der eigenen Domain, und KEIN Antwortbezug. Eine Testantwort, die jemand per Webmail aus dem
+    Systempostfach schreibt, traegt den Header nicht und wird weiter normal zugeordnet (QA NX-002)."""
+    from services.email_sender import SMTP_FROM, MESSAGE_ID_DOMAIN
+    if (m.get("system_header") or "").strip() != "1":
+        return False
+    if m.get("in_reply_to") or (m.get("references_header") or "").strip():
+        return False
+    own_addr = (SMTP_FROM or "").strip().lower()
+    sender = (m.get("from_addr") or "").strip().lower()
+    mid = (m.get("message_id") or "").strip().strip("<>").lower()
+    if not own_addr or sender != own_addr or "@" not in mid:
+        return False
+    return mid.rsplit("@", 1)[1] == (MESSAGE_ID_DOMAIN or "").strip().lower()
+
+
 def _describe_result(result: dict, m: dict) -> str:
     sender = m.get("from_addr") or "unbekannt"
     if not result or not result.get("matched"):
@@ -281,6 +300,15 @@ async def _poll_inbox():
 
     if not messages:
         return
+
+    own = [m for m in messages if _is_own_system_mail(m)]
+    if own:
+        # Nur zaehlen: kein Zuordnungsversuch, kein Eintrag im Agentenprotokoll (NX-002). Betreff und
+        # Message-ID im Log, damit eine faelschlich uebersprungene Mail nachvollziehbar bleibt.
+        logger.info(f"poll_inbox_job: {len(own)} eigene Systemmail(s) im Posteingang uebersprungen.")
+        for m in own:
+            logger.info(f"poll_inbox_job: eigene Systemmail uebersprungen: {m.get('message_id')} | {(m.get('subject') or '')[:120]}")
+        messages = [m for m in messages if m not in own]
 
     for m in messages:
         # Eigene Session je Nachricht: ein Fehler (z.B. abgebrochene
