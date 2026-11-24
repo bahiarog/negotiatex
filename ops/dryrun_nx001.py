@@ -137,7 +137,7 @@ async def main() -> None:
                                                      channel="Trockenlauf", draft_receipt=False, preexisting=False)
                 raw = new.raw_extracted_json or {}
                 print(f"NACHHER v{new.version}: Menge {new.quantity} · Einzelpreis {new.unit_price} · "
-                      f"Vergleichspreis {oi.offer_total(new)} · {_v(new.comparability_flag)}")
+                      f"Angebotspreis (Dokument) {oi.offer_total(new)} · {_v(new.comparability_flag)}")
                 print(f"  Notiz: {new.comparability_note}")
                 print(f"  KI: priced_quantity={raw.get('priced_quantity')} quote={raw.get('priced_quantity_quote')!r} "
                       f"total_price={raw.get('total_price')}")

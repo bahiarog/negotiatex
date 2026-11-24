@@ -139,9 +139,36 @@ def verify_priced_quantity(extracted: dict, text: str) -> Optional[dict]:
     quote = (extracted or {}).get("priced_quantity_quote")
     if qty is None or qty <= 0 or not isinstance(quote, str):
         return None
-    if not quote_in_text(quote, text) or not _number_in(quote, qty):
+    if not quote_in_text(quote, text) or not _number_in(quote, qty) or not _is_quantity_quote(quote, qty):
         return None
     return {"quantity": qty, "quote": " ".join(quote.split())[:300]}
+
+
+# Woerter direkt hinter der Zahl, die KEINE Stueckmenge bedeuten (QA NX-001: "Lieferung in 20 Werktagen").
+_NOT_A_QUANTITY = ("werktag", "arbeitstag", "kalendertag", "tag", "woche", "monat", "jahr", "stunde", "std",
+                   "minute", "prozent", "km", "kg", "cm", "mm", "uhr")
+
+
+def _is_quantity_quote(quote: str, qty: Decimal) -> bool:
+    """Das Zitat muss die angebotene Menge beschreiben: mindestens 12 Zeichen, hinter der Zahl ein Wort
+    (Stueck, Tische, x ...), keine Zeitspanne oder Masseinheit, keine Positionsnummer ("Pos. 20") und keine
+    zitierte Anfrage ("Ihre Anfrage ueber 20 ..."). Im Zweifel False -> Angebot bleibt markiert."""
+    import re
+    q = " ".join(str(quote or "").split())
+    low = q.lower()
+    if len(q) < 12 or "anfrage" in low or "angefragt" in low:
+        return False
+    for m in re.finditer(rf"(?<![\d.,]){int(qty)}(?![\d]|[.,]\d)", q):
+        before = low[:m.start()].rstrip()
+        after = low[m.end():].lstrip()
+        if before.endswith(("pos.", "pos", "position", "nr.", "nr")):
+            continue
+        if not after or not (after[0].isalpha() or after[0] in "x×"):
+            continue
+        if after.startswith(_NOT_A_QUANTITY):
+            continue
+        return True
+    return False
 
 
 def lump_sum_from_json(raw) -> Optional[dict]:
