@@ -18,7 +18,7 @@ Aufwand: S = bis 2 h, M = halber bis ganzer Tag, L = mehrere Tage.
 - Optionale Positionen (z. B. „Memory-Bedienteil, abwählbar“) werden nicht in den Vergleichspreis gerechnet, aber als Hinweis gezeigt.
 - Nachweis an den beiden Angeboten im Vorhaben „Schreibtische“ per Trockenlauf.
 
-### NX-002 Eigene Systemmails im Posteingang ignorieren · `vorgeschlagen` · S
+### NX-002 Eigene Systemmails im Posteingang ignorieren · `freigegeben` (Rafael, 24.11.2026) · S
 **Problem:** Mails, die NegotiateX selbst an Konten mit derselben Adresse wie das Systempostfach schickt, landen im eigenen Posteingang und erscheinen als „keinem Vorgang zugeordnet“ (Rauschen im Log und im Tagesbericht).
 **Abnahme:** Mails mit eigener Absenderadresse und eigener Message-ID-Domain werden vor der Zuordnung übersprungen und nur gezählt; Zuordnung echter Antworten unverändert.
 
@@ -26,11 +26,11 @@ Aufwand: S = bis 2 h, M = halber bis ganzer Tag, L = mehrere Tage.
 **Problem:** Der Scout sucht nur im eigenen Bestand. Neue Kunden haben einen leeren Bestand; der Agent kann dann nichts anfragen (Test „Neue Tische“ am 11.11.2026).
 **Abnahme:** Vorschläge aus einer externen Quelle mit Quellenangabe und Kontaktweg, klar als „extern, ungeprüft“ gekennzeichnet; Auswahl und jede Anfrage weiter nur nach Freigabe. Vorher Entscheidung Rafael: Quelle, Kosten, Rechtsrahmen.
 
-### NX-004 Browser-Tests ins Repository und regelmäßig ausführen · `vorgeschlagen` · M
+### NX-004 Browser-Tests ins Repository und regelmäßig ausführen · `freigegeben` (Rafael, 24.11.2026) · M
 **Problem:** Die Playwright-Tests liegen nur auf dem Server (`/root/negotiatex-sim/tests`) und laufen nur von Hand.
 **Abnahme:** Tests im Repo (ohne Zugangsdaten, Token werden kurzlebig erzeugt), ein Befehl führt alle aus, Ergebnis mit Datum protokolliert; Lauf vor jedem Deploy.
 
-### NX-005 Feinschliff Beleg-Regeln aus QA NX-001 · `vorgeschlagen` · S
+### NX-005 Feinschliff Beleg-Regeln aus QA NX-001 · `in Arbeit` (freigegeben Rafael, 24.11.2026) · S
 **Problem (QA 24.11.2026, alle niedrig):** `_dec` liest englische Dezimalzahlen mit drei Nachkommastellen als Tausender („0.125“ = 125), wenn die KI Text statt Zahl liefert; die Options-Schlagworte sind grob („Montage ohne Aufpreis enthalten“ gilt als Option); „ab 20 Stück … Rabatt“ und „20 x 20 cm“ gelten als Mengenbeleg; legitime Belege wie „Gemäß Ihrer Anfrage bieten wir 20 Schreibtische an“, „Menge: 20“, „20 Tagungsstühle“ werden abgelehnt (sichere Richtung). `rerun_review` verliert Options-Hinweise.
 **Abnahme:** Tausender-Regel nur im Optionspfad; Ausschlüsse für „ab/mindestens“ und Maßangaben; die genannten legitimen Belege werden angenommen; Funktionstests für alle genannten Fälle.
 

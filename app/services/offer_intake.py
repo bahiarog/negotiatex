@@ -48,9 +48,6 @@ def _dec(v) -> Optional[Decimal]:
     if isinstance(v, (int, float, Decimal)):
         return Decimal(str(v))
     s = str(v).strip().replace("EUR", "").replace("€", "").replace(" ", "")
-    import re
-    if re.fullmatch(r"-?\d{1,3}(\.\d{3})+", s):  # deutsches Tausenderformat "1.580" = 1580
-        s = s.replace(".", "")
     if "," in s and "." in s:
         s = s.replace(".", "").replace(",", ".") if s.rfind(",") > s.rfind(".") else s.replace(",", "")
     elif "," in s:
@@ -106,12 +103,35 @@ def reconcile_prices(extracted: dict, text: str) -> dict:
     return out
 
 
+def add_extraction_notes(review, extracted) -> None:
+    """Hinweise aus der Preis-/Optionspruefung an die Pruefung haengen. `extracted` ist das Ergebnis von
+    reconcile_prices oder das gespeicherte raw_extracted_json (erneute Pruefung, QA NX-001)."""
+    if not isinstance(extracted, dict):
+        return
+    extra = [{"code": "price_extraction", "source": "regel", "severity": "info", "message": n, "quote": None}
+             for n in extracted.get("price_notes") or [] if isinstance(n, str)]
+    extra += [f for f in extracted.get("optional_notes") or [] if isinstance(f, dict)]
+    if extra:
+        review.findings_json = list(review.findings_json or []) + extra
+
+
+def _dec_de(v) -> Optional[Decimal]:
+    """Wie _dec, liest aber "1.580" als deutsches Tausenderformat (1580). Nur fuer Betraege aus deutschen
+    Angebotszitaten (Optionspfad) -- allgemein wuerde es "0.125" faelschlich als 125 lesen (QA NX-001)."""
+    import re
+    if isinstance(v, str):
+        s = v.strip().replace("EUR", "").replace("€", "").replace(" ", "")
+        if re.fullmatch(r"-?[1-9]\d{0,2}(\.\d{3})+", s):
+            return _dec(s.replace(".", ""))
+    return _dec(v)
+
+
 def _amounts_in(quote: str) -> list[Decimal]:
     """Alle Geldbetraege, die im Zitat als eigene Zahl stehen (deutsches Format: 1.580,00 / 580,00 / 580)."""
     import re
     out = []
     for m in re.finditer(r"(?<![\d.,])\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?(?![\d.,])|(?<![\d.,])\d+(?:,\d{1,2})?(?![\d.,])", quote or ""):
-        v = _dec(m.group(0))
+        v = _dec_de(m.group(0))
         if v is not None:
             out.append(v)
     return out
@@ -123,6 +143,16 @@ def _fmt_eur(v: Decimal) -> str:
 
 _OPTION_WORDS = ("optional", "abwählbar", "abwaehlbar", "auf wunsch", "wahlweise", "upgrade", "alternativ",
                  "nicht enthalten", "zusätzlich", "zuzüglich", "zzgl", "aufpreis", "option")
+# Wendungen, die ein Options-Schlagwort verneinen ("Montage ohne Aufpreis enthalten" ist keine Option).
+_NOT_OPTION_PHRASES = ("ohne aufpreis", "kein aufpreis", "keinen aufpreis", "ohne zusätzliche kosten",
+                       "ohne zusaetzliche kosten", "ohne zusatzkosten", "keine zusätzlichen kosten",
+                       "keine zusaetzlichen kosten")
+
+
+def _option_key(quote_lower: str) -> str:
+    for p in _NOT_OPTION_PHRASES:
+        quote_lower = quote_lower.replace(p, " ")
+    return quote_lower
 
 
 def _optional_items(items, text: str, tp: Optional[Decimal]) -> tuple[list, list]:
@@ -147,16 +177,17 @@ def _optional_items(items, text: str, tp: Optional[Decimal]) -> tuple[list, list
         if key in seen:
             continue
         seen.add(key)
-        if not any(w in key for w in _OPTION_WORDS):
+        okey = _option_key(key)
+        if not any(w in okey for w in _OPTION_WORDS):
             # Die KI darf eine Position nicht zur Option erklaeren, die das Angebot nicht so nennt.
             findings.append({"code": "optional_item", "source": "regel", "severity": "info", "quote": quote,
                              "message": f"Nicht als optional gekennzeichnet, daher als regulaere Position gewertet: {desc_}."})
             continue
-        price = _dec(it.get("price"))
+        price = _dec_de(it.get("price"))
         price = price if price is not None and price > 0 and price in _amounts_in(quote) else None
         inc = it.get("included_in_total")
         included = inc is True or (isinstance(inc, str) and inc.strip().lower() in ("true", "ja", "yes"))
-        if any(w in key for w in ("nicht enthalten", "nicht im preis", "zusätzlich", "zzgl", "zuzüglich", "aufpreis")):
+        if any(w in okey for w in ("nicht enthalten", "nicht im preis", "zusätzlich", "zzgl", "zuzüglich", "aufpreis")):
             included = False  # der Wortlaut des Angebots schlaegt die KI-Einschaetzung
         if price is not None and _amounts_in(quote) and price != _amounts_in(quote)[-1]:
             price_unclear = True  # z. B. Stueckpreis statt Zeilensumme gemeldet
@@ -433,12 +464,7 @@ async def _intake_offer(db: AsyncSession, rfq: RFQ, cand: SupplierCandidate, off
 
     project = await project_for_rfq(db, rfq)
     review = await run_review(db, offer, project, offer_text, actor)
-    if extracted.get("price_notes"):
-        review.findings_json = list(review.findings_json or []) + [
-            {"code": "price_extraction", "source": "regel", "severity": "info", "message": n, "quote": None}
-            for n in extracted["price_notes"]]
-    if extracted.get("optional_notes"):
-        review.findings_json = list(review.findings_json or []) + list(extracted["optional_notes"])
+    add_extraction_notes(review, extracted)
 
     if project:
         from services.projects import add_event

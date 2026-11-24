@@ -1264,7 +1264,7 @@ async def upload_offer(project_id: str, candidate_id: str = Form(...), file: Upl
 
 @router.post("/{project_id}/offers/{offer_id}/review")
 async def rerun_review(project_id: str, offer_id: str, access: Access = Depends(get_access), db: AsyncSession = Depends(get_db)):
-    from services.offer_intake import run_review
+    from services.offer_intake import run_review, add_extraction_notes
     _require_operator(access)
     p = await _get_project(project_id, access, db)
     offer = await _get_offer(db, p, offer_id)
@@ -1278,6 +1278,7 @@ async def rerun_review(project_id: str, offer_id: str, access: Access = Depends(
         prev = (await db.execute(select(OfferReview).where(OfferReview.offer_id == offer.id).order_by(desc(OfferReview.created_at)))).scalars().first()
         text = prev.offer_text_excerpt if prev else ""
     rv = await run_review(db, offer, p, text, actor=str(access.user.id))
+    add_extraction_notes(rv, offer.raw_extracted_json)  # Preis- und Options-Hinweise bleiben erhalten
     await db.commit()
     return {"status": rv.status, "findings": rv.findings_json}
 

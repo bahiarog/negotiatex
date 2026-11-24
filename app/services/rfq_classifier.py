@@ -144,28 +144,43 @@ def verify_priced_quantity(extracted: dict, text: str) -> Optional[dict]:
     return {"quantity": qty, "quote": " ".join(quote.split())[:300]}
 
 
-# Woerter direkt hinter der Zahl, die KEINE Stueckmenge bedeuten (QA NX-001: "Lieferung in 20 Werktagen").
-_NOT_A_QUANTITY = ("werktag", "arbeitstag", "kalendertag", "tag", "woche", "monat", "jahr", "stunde", "std",
-                   "minute", "prozent", "km", "kg", "cm", "mm", "uhr")
+# Einheiten direkt hinter der Zahl, die KEINE Stueckmenge bedeuten (QA NX-001: "Lieferung in 20 Werktagen").
+# Ganze Woerter mit Pluralformen, damit "20 Tagungsstuehle" nicht als "20 Tag..." verworfen wird (NX-005).
+_NOT_A_QUANTITY_RE = (r"(werktag|arbeitstag|kalendertag|tag|woche|monat|jahr|stunde|minute|sekunde)(e|en|n|s)?"
+                      r"|std\.?|min\.?|prozent|uhr|km|kg|cm|mm|m|m²|m2|qm|meter|liter|l|g|t")
+# Woerter direkt vor der Zahl, nach denen sie eine Schwelle oder Grenze ist ("ab 20 Stueck Rabatt").
+_THRESHOLD_BEFORE_RE = r"(^|[^a-zäöüß])(ab|mindestens|mind\.|min\.|bis|bis zu|höchstens|hoechstens|max\.|maximal)$"
+# Beschriftete Mengenangabe ("Menge: 20").
+_QTY_LABEL_RE = r"(^|[^a-zäöüß])(menge|anzahl|stückzahl|stueckzahl|stück|stueck)\s*:?$"
+_OFFER_VERBS = ("bieten", "biete", "liefern", "liefere", "offerieren", "unser angebot")  # nicht "angebot": "Angebotsanfrage"
 
 
 def _is_quantity_quote(quote: str, qty: Decimal) -> bool:
-    """Das Zitat muss die angebotene Menge beschreiben: mindestens 12 Zeichen, hinter der Zahl ein Wort
-    (Stueck, Tische, x ...), keine Zeitspanne oder Masseinheit, keine Positionsnummer ("Pos. 20") und keine
-    zitierte Anfrage ("Ihre Anfrage ueber 20 ..."). Im Zweifel False -> Angebot bleibt markiert."""
+    """Das Zitat muss die angebotene Menge beschreiben: hinter der Zahl ein Wort (Stueck, Tische, x ...) oder
+    eine beschriftete Angabe ("Menge: 20"); keine Zeitspanne oder Masseinheit, kein Mass ("20 x 20 cm"), keine
+    Schwelle ("ab 20 Stueck"), keine Positionsnummer ("Pos. 20") und keine bloss zitierte Anfrage ("Ihre Anfrage
+    ueber 20 ..."). Ein Verweis auf die Anfrage ist erlaubt, wenn vor der Zahl ein Angebotsverb steht ("Gemaess
+    Ihrer Anfrage bieten wir 20 ... an"). Im Zweifel False -> Angebot bleibt markiert."""
     import re
     q = " ".join(str(quote or "").split())
     low = q.lower()
-    if len(q) < 12 or "anfrage" in low or "angefragt" in low:
-        return False
     for m in re.finditer(rf"(?<![\d.,]){int(qty)}(?![\d]|[.,]\d)", q):
         before = low[:m.start()].rstrip()
         after = low[m.end():].lstrip()
+        clause = re.split(r"[.;:!?]\s", before)[-1]
         if before.endswith(("pos.", "pos", "position", "nr.", "nr")):
             continue
-        if not after or not (after[0].isalpha() or after[0] in "x×"):
+        if re.search(_THRESHOLD_BEFORE_RE, before):
             continue
-        if after.startswith(_NOT_A_QUANTITY):
+        if re.search(r"\d\s*[x×]$", before) or re.match(r"[x×]\s*\d", after):
+            continue  # Massangabe "160 x 20" / "20 x 20 cm"
+        if re.match(rf"({_NOT_A_QUANTITY_RE})(?![a-zäöüß0-9])", after):
+            continue
+        if ("anfrage" in clause or "angefragt" in clause) and not any(v in clause for v in _OFFER_VERBS):
+            continue  # Menge der Anfrage, nicht des Angebots
+        if re.search(_QTY_LABEL_RE, before) and (not after or not after[0].isdigit()):
+            return True  # "Menge: 20" / "Stück: 20"
+        if len(q) < 12 or not after or not (after[0].isalpha() or after[0] in "x×"):
             continue
         return True
     return False
