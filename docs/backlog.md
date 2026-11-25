@@ -59,8 +59,8 @@ Abgleich des Versprechens „kauft ein, prüft AGB und Konditionen, verhandelt, 
 | NX-034 | AGB-Prüfung belastbar: alle Anhänge, sichtbarer Status „nicht geprüft“ bei Fehlschlag/Kürzung, Knopf „erneut prüfen“ | erledigt (deployt b9de08b, 24.11.2026) | M | mittel |
 | NX-035 | Stammdaten nach Zuschlag in den Lieferantenstamm übernehmen; Bankdaten-Prüfung im Vier-Augen-Prinzip mit Protokoll | freigegeben (Rafael, 24.11.2026) | M | mittel |
 | NX-036 | Belegte Einsparungen: Verhandlungsergebnis und Rechnungsbetrag nur mit Beleg oder als „manuell“ gekennzeichnet; CSV-Export | freigegeben (Rafael, 24.11.2026) | M | niedrig |
-| NX-037 | End-to-End-Abnahmetest je Versprechensteil (Mail-Stub, zweiter Mandant als Gegenprobe, Rollback), täglich | QA-FREIGABE 01bfd17, Deploy + Cron offen | M | niedrig |
-| NX-038 | Folgepunkte NX-037: Preis im Verhandlungsentwurf als „8500.0000“ statt „8.500,00 €“ formatiert; Gegenproben des Durchgangstests mit Positivkontrolle (A sieht, B nicht) | vorgeschlagen | S | niedrig |
+| NX-037 | End-to-End-Abnahmetest je Versprechensteil (Mail-Stub, zweiter Mandant als Gegenprobe, Rollback), täglich | erledigt (deployt f9b2fdb, Cron 05:45 UTC, 25.11.2026: 34/34) | M | niedrig |
+| NX-038 | Folgepunkte NX-037: Preis im Verhandlungsentwurf als „8500.0000“ statt „8.500,00 €“ formatiert; Gegenproben des Durchgangstests mit Positivkontrolle (A sieht, B nicht); deploy.py baut das Backend auch bei reinen ops/-Aenderungen neu | vorgeschlagen | S | niedrig |
 
 ## Fahrplan (Analyse 17.10.2026)
 
